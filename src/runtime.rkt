@@ -10,6 +10,7 @@
 
 (provide (struct-out ok-value)
          (struct-out err-value)
+         (struct-out capability-primitive)
          load-program-source
          load-program-file
          execute-export
@@ -22,6 +23,8 @@
 (struct execution-context (fuel maximum-depth logger) #:mutable #:transparent)
 (struct ok-value (value) #:transparent)
 (struct err-value (value) #:transparent)
+(struct capability-primitive (minimum-arity maximum-arity implementation)
+  #:transparent)
 
 (define (load-program-source source)
   (parse-program (read-source source) source))
@@ -32,7 +35,8 @@
 (define (execute-export program export-name arguments
                         #:fuel [fuel 10000]
                         #:max-depth [maximum-depth 256]
-                        #:logger [logger default-logger])
+                        #:logger [logger default-logger]
+                        #:capability-bindings [capability-bindings (hasheq)])
   (unless (and (exact-integer? fuel) (positive? fuel))
     (raise-argument-error 'execute-export "exact-positive-integer?" fuel))
   (unless (and (exact-integer? maximum-depth) (positive? maximum-depth))
@@ -49,7 +53,8 @@
     (environment (make-hasheq) base-environment))
   (install-capabilities! module-environment
                          (ail-program-capabilities program)
-                         context)
+                         context
+                         capability-bindings)
   (for ([definition (in-list (ail-program-definitions program))])
     (environment-define!
      module-environment
@@ -207,6 +212,24 @@
                           (expect-integer name (cadr arguments))))))
   (install 'not 1 1
            (lambda (arguments _context) (eq? #f (car arguments))))
+  (install 'integer? 1 1
+           (lambda (arguments _context) (exact-integer? (car arguments))))
+  (install 'boolean? 1 1
+           (lambda (arguments _context) (boolean? (car arguments))))
+  (install 'string? 1 1
+           (lambda (arguments _context) (string? (car arguments))))
+  (install 'list? 1 1
+           (lambda (arguments _context) (list? (car arguments))))
+  (install 'map? 1 1
+           (lambda (arguments _context) (hash? (car arguments))))
+  (install 'string-append 0 #f
+           (lambda (arguments _context)
+             (apply string-append
+                    (map (lambda (value)
+                           (unless (string? value)
+                             (raise-type-error 'string-append "String" value))
+                           value)
+                         arguments))))
 
   (install 'list 0 #f (lambda (arguments _context) arguments))
   (install 'empty? 1 1
@@ -248,6 +271,14 @@
                           "map does not contain the requested key"
                           (hasheq 'key (format "~s" key))))
              (hash-ref mapping key)))
+  (install 'get-or 3 3
+           (lambda (arguments _context)
+             (define mapping (expect-map 'get-or (car arguments)))
+             (hash-ref mapping (cadr arguments) (lambda () (caddr arguments)))))
+  (install 'has-key? 2 2
+           (lambda (arguments _context)
+             (define mapping (expect-map 'has-key? (car arguments)))
+             (hash-has-key? mapping (cadr arguments))))
   (install 'assoc 3 3
            (lambda (arguments _context)
              (define mapping (expect-map 'assoc (car arguments)))
@@ -277,7 +308,9 @@
                 (raise-type-error 'unwrap "Result" value)])))
   base)
 
-(define (install-capabilities! target capabilities context)
+(define (install-capabilities! target capabilities context bindings)
+  (unless (hash? bindings)
+    (raise-argument-error 'execute-export "hash?" bindings))
   (for ([capability (in-list capabilities)])
     (case capability
       [(log)
@@ -292,9 +325,38 @@
            ((execution-context-logger runtime-context) (car arguments))
            '())))]
       [else
-       (raise-ail "RUNTIME_UNKNOWN_CAPABILITY"
-                  "runtime cannot install the requested capability"
-                  (hasheq 'capability (symbol->string capability)))])))
+       (define primitives (hash-ref bindings capability #f))
+       (unless (hash? primitives)
+         (raise-ail "RUNTIME_CAPABILITY_UNAVAILABLE"
+                    "host did not provide a declared capability"
+                    (hasheq 'capability (symbol->string capability))))
+       (for ([(name specification) (in-hash primitives)])
+         (unless (and (symbol? name) (capability-primitive? specification))
+           (raise-ail "RUNTIME_INVALID_CAPABILITY_BINDING"
+                      "host capability binding is malformed"
+                      (hasheq 'capability (symbol->string capability))))
+         (define minimum (capability-primitive-minimum-arity specification))
+         (define maximum (capability-primitive-maximum-arity specification))
+         (define implementation
+           (capability-primitive-implementation specification))
+         (unless (and (exact-nonnegative-integer? minimum)
+                      (or (not maximum)
+                          (and (exact-nonnegative-integer? maximum)
+                               (>= maximum minimum)))
+                      (procedure? implementation))
+           (raise-ail "RUNTIME_INVALID_CAPABILITY_BINDING"
+                      "host capability primitive is malformed"
+                      (hasheq 'capability (symbol->string capability)
+                              'primitive (symbol->string name))))
+         (environment-define!
+          target
+          name
+          (primitive
+           name
+           minimum
+           maximum
+           (lambda (arguments _runtime-context)
+             (implementation arguments)))))])))
 
 (define (environment-define! target name value)
   (hash-set! (environment-bindings target) name value))
@@ -419,7 +481,14 @@
     [(list? value) (map jsexpr->value value)]
     [(hash? value)
      (for/hash ([(key item) (in-hash value)])
-       (values key (jsexpr->value item)))]
+       (values (cond
+                 [(symbol? key) (symbol->string key)]
+                 [(string? key) key]
+                 [else
+                  (raise-ail "INPUT_UNSUPPORTED_JSON_KEY"
+                             "JSON object key cannot be converted to a guest string"
+                             (hasheq 'key (format "~s" key)))])
+               (jsexpr->value item)))]
     [else
      (raise-ail "INPUT_UNSUPPORTED_JSON"
                 "JSON input cannot be converted to a guest value"

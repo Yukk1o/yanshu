@@ -2,19 +2,29 @@
 
 (require json
          racket/file
+         racket/port
          racket/runtime-path
          racket/string
+         racket/tcp
+         "../src/ast.rkt"
          "../src/error.rkt"
          "../src/evolution-loop.rkt"
          "../src/evolver.rkt"
+         "../src/http-server.rkt"
+         "../src/kv-store.rkt"
          "../src/reader.rkt"
          "../src/runtime.rkt"
+         "../src/service.rkt"
+         "../src/service-deployment.rkt"
+         "../src/service-test-suite.rkt"
          "../src/test-suite.rkt"
          "../src/version-store.rkt")
 
 (define-runtime-path tests-directory ".")
 (define project-root (simplify-path (build-path tests-directory 'up)))
 (define example-root (build-path project-root "examples" "discount"))
+(define task-example-path
+  (build-path project-root "examples" "tasks" "service.ail"))
 
 (define total 0)
 (define failed 0)
@@ -116,6 +126,586 @@
           #:logger (lambda (value) (set! observed (cons value observed))))
          "hello")
         (check-equal observed '("hello"))))
+
+(test "web routes are parsed into explicit program metadata"
+      (lambda ()
+        (define program
+          (load-program-source
+           (string-append
+            "(program (name tasks) (version 1) (capabilities kv) "
+            "(route GET \"/tasks/:id\" get-task) "
+            "(def get-task (fn (request) (kv-get (get (get request \"params\") \"id\") #f))) "
+            "(export get-task))")))
+        (check-equal (length (ail-program-routes program)) 1)
+        (define route (car (ail-program-routes program)))
+        (check-equal (ail-route-method route) "GET")
+        (check-equal (ail-route-path route) "/tasks/:id")
+        (check-equal (ail-route-handler route) 'get-task)))
+
+(test "ambiguous routes are rejected at parse time"
+      (lambda ()
+        (check-ail-code
+         "PROGRAM_AMBIGUOUS_ROUTE"
+         (lambda ()
+           (load-program-source
+            (string-append
+             "(program (name bad-routes) (version 1) (capabilities) "
+             "(route GET \"/items/:id\" first-handler) "
+             "(route GET \"/items/:name\" second-handler) "
+             "(def first-handler (fn (request) request)) "
+             "(def second-handler (fn (request) request)) "
+             "(export first-handler second-handler))"))))))
+
+(test "declared host capabilities are injected without ambient authority"
+      (lambda ()
+        (define program
+          (load-program-source
+           (string-append
+            "(program (name kv-reader) (version 1) (capabilities kv) "
+            "(def read-value (fn (key) (kv-get key \"missing\"))) "
+            "(export read-value))")))
+        (check-ail-code
+         "RUNTIME_CAPABILITY_UNAVAILABLE"
+         (lambda () (execute-export program 'read-value (list "x"))))
+        (define bindings
+          (hasheq
+           'kv
+           (hasheq
+            'kv-get
+            (capability-primitive
+             2
+             2
+             (lambda (arguments)
+               (if (string=? (car arguments) "x")
+                   42
+                   (cadr arguments)))))))
+        (check-equal
+         (execute-export program
+                         'read-value
+                         (list "x")
+                         #:capability-bindings bindings)
+         42)))
+
+(define task-service-source
+  (string-append
+   "(program (name task-service) (version 1) (capabilities kv clock) "
+   "(route POST \"/tasks\" create-task) "
+   "(route GET \"/tasks/:id\" get-task) "
+   "(route POST \"/fail\" failing-write) "
+   "(def response (fn (status body) "
+   "  (map \"status\" status \"headers\" (map) \"body\" body))) "
+   "(def create-task (fn (request) "
+   "  (let ((body (get request \"body\")) "
+   "        (id (get body \"id\")) "
+   "        (task (assoc body \"createdAt\" (now-ms)))) "
+   "    (do (kv-put (string-append \"task/\" id) task) "
+   "        (response 201 task))))) "
+   "(def get-task (fn (request) "
+   "  (let ((id (get (get request \"params\") \"id\")) "
+   "        (task (kv-get (string-append \"task/\" id) #f))) "
+   "    (if task (response 200 task) "
+   "        (response 404 (map \"error\" \"not-found\")))))) "
+   "(def failing-write (fn (request) "
+   "  (do (kv-put \"task/should-rollback\" (map \"id\" \"bad\")) "
+   "      (map \"status\" 200)))) "
+   "(export create-task get-task failing-write))"))
+
+(test "service dispatch matches path parameters and commits valid KV writes"
+      (lambda ()
+        (define program (load-program-source task-service-source))
+        (define store (make-memory-kv-store))
+        (define create-result
+          (handle-service-request
+           program
+           (service-request "POST"
+                            "/tasks"
+                            (hash)
+                            (hash)
+                            (hash "id" "42" "title" "ship"))
+           #:store store
+           #:clock (lambda () 123456)))
+        (check-false (dispatch-result-diagnostic create-result))
+        (check-equal
+         (service-response-status (dispatch-result-response create-result))
+         201)
+        (check-equal
+         (hash-ref (service-response-body
+                    (dispatch-result-response create-result))
+                   'createdAt)
+         123456)
+        (define get-result
+          (handle-service-request
+           program
+           (service-request "GET" "/tasks/42" (hash) (hash) '())
+           #:store store
+           #:clock (lambda () 999999)))
+        (check-equal
+         (service-response-status (dispatch-result-response get-result))
+         200)
+        (check-equal
+         (hash-ref (service-response-body
+                    (dispatch-result-response get-result))
+                   'title)
+         "ship")))
+
+(test "invalid handler responses roll back transactional KV writes"
+      (lambda ()
+        (define program (load-program-source task-service-source))
+        (define store (make-memory-kv-store))
+        (define result
+          (handle-service-request
+           program
+           (service-request "POST" "/fail" (hash) (hash) (hash))
+           #:store store))
+        (check-equal
+         (service-response-status (dispatch-result-response result))
+         500)
+        (check-true (dispatch-result-diagnostic result))
+        (check-false
+         (hash-has-key? (kv-store-snapshot store) "task/should-rollback"))))
+
+(test "guest response headers cannot inject additional HTTP fields"
+      (lambda ()
+        (define program
+          (load-program-source
+           (string-append
+            "(program (name unsafe-header) (version 1) (capabilities) "
+            "(route GET \"/\" handler) "
+            "(def handler (fn (request) "
+            "  (map \"status\" 200 "
+            "       \"headers\" (map \"x-note\" \"safe\\r\\nInjected: true\") "
+            "       \"body\" (map)))) "
+            "(export handler))")))
+        (define result
+          (handle-service-request
+           program
+           (service-request "GET" "/" (hash) (hash) '())))
+        (check-equal
+         (service-response-status (dispatch-result-response result))
+         500)
+        (check-equal
+         (hash-ref (hash-ref (dispatch-result-diagnostic result) 'error) 'code)
+         "SERVICE_INVALID_RESPONSE_HEADERS")))
+
+(test "file KV adapter survives reopen with JSON business values"
+      (lambda ()
+        (define directory (make-temporary-file "ai-evolve-kv-~a" 'directory))
+        (define path (build-path directory "tasks.json"))
+        (dynamic-wind
+          void
+          (lambda ()
+            (define program (load-program-source task-service-source))
+            (define first-store (open-file-kv-store path))
+            (define result
+              (handle-service-request
+               program
+               (service-request "POST"
+                                "/tasks"
+                                (hash)
+                                (hash)
+                                (hash "id" "7" "title" "persist"))
+               #:store first-store
+               #:clock (lambda () 7)))
+            (check-equal
+             (service-response-status (dispatch-result-response result))
+             201)
+            (define reopened (open-file-kv-store path))
+            (check-equal
+             (hash-ref (hash-ref (kv-store-snapshot reopened) "task/7") "title")
+             "persist"))
+          (lambda () (delete-directory/files directory)))))
+
+(define (send-http-request port method path [body #f] [content-type "application/json"])
+  (define-values (input output) (tcp-connect "127.0.0.1" port))
+  (define body-text
+    (cond
+      [(not body) ""]
+      [(string? body) body]
+      [else (jsexpr->string body)]))
+  (display (format "~a ~a HTTP/1.1\r\n" method path) output)
+  (display "Host: 127.0.0.1\r\n" output)
+  (when body
+    (display (format "Content-Type: ~a\r\n" content-type) output)
+    (display (format "Content-Length: ~a\r\n"
+                     (bytes-length (string->bytes/utf-8 body-text)))
+             output))
+  (display "Connection: close\r\n\r\n" output)
+  (when body (display body-text output))
+  (flush-output output)
+  (define response-text (bytes->string/utf-8 (port->bytes input)))
+  (close-input-port input)
+  (close-output-port output)
+  (define parts (regexp-split #px"\r\n\r\n" response-text))
+  (unless (>= (length parts) 2)
+    (error 'send-http-request "server returned a malformed HTTP response"))
+  (define status-match
+    (regexp-match #px"^HTTP/1[.]1 ([0-9]{3})" (car parts)))
+  (unless status-match
+    (error 'send-http-request "server returned a malformed status line"))
+  (values (string->number (cadr status-match))
+          (string->jsexpr (string-join (cdr parts) "\r\n\r\n"))))
+
+(define (send-http-text port path)
+  (define-values (input output) (tcp-connect "127.0.0.1" port))
+  (display (format "GET ~a HTTP/1.1\r\n" path) output)
+  (display "Host: 127.0.0.1\r\nConnection: close\r\n\r\n" output)
+  (flush-output output)
+  (define response-text (bytes->string/utf-8 (port->bytes input)))
+  (close-input-port input)
+  (close-output-port output)
+  (define parts (regexp-split #px"\r\n\r\n" response-text))
+  (define status-match
+    (and (pair? parts)
+         (regexp-match #px"^HTTP/1[.]1 ([0-9]{3})" (car parts))))
+  (unless (and status-match (>= (length parts) 2))
+    (error 'send-http-text "server returned a malformed HTTP response"))
+  (values (string->number (cadr status-match))
+          (string-join (cdr parts) "\r\n\r\n")))
+
+(test "real TCP server accepts JSON requests and returns persisted service data"
+      (lambda ()
+        (define program (load-program-source task-service-source))
+        (define store (make-memory-kv-store))
+        (define observations '())
+        (define server
+          (start-http-server
+           (lambda () program)
+           #:store store
+           #:port 0
+           #:observer
+           (lambda (observation)
+             (set! observations (cons observation observations)))))
+        (dynamic-wind
+          void
+          (lambda ()
+            (define-values (create-status create-body)
+              (send-http-request
+               (running-http-server-port server)
+               "POST"
+               "/tasks"
+               (hasheq 'id "tcp-1" 'title "over tcp")))
+            (check-equal create-status 201)
+            (check-equal (hash-ref create-body 'title) "over tcp")
+            (define-values (get-status get-body)
+              (send-http-request
+               (running-http-server-port server)
+               "GET"
+               "/tasks/tcp-1"))
+            (check-equal get-status 200)
+            (check-equal (hash-ref get-body 'id) "tcp-1")
+            (check-equal (length observations) 2)
+            (check-equal (hash-ref (car observations) 'status) 200))
+          (lambda () (stop-http-server! server)))))
+
+(test "HTTP boundary rejects malformed JSON before guest execution"
+      (lambda ()
+        (define program (load-program-source task-service-source))
+        (define store (make-memory-kv-store))
+        (define server
+          (start-http-server (lambda () program) #:store store #:port 0))
+        (dynamic-wind
+          void
+          (lambda ()
+            (define-values (status body)
+              (send-http-request
+               (running-http-server-port server)
+               "POST"
+               "/tasks"
+               "{broken"))
+            (check-equal status 400)
+            (check-equal
+             (hash-ref (hash-ref body 'error) 'code)
+             "HTTP_INVALID_JSON")
+            (check-equal (hash-count (kv-store-snapshot store)) 0))
+          (lambda () (stop-http-server! server)))))
+
+(test "HTTP host serves the responsive task UI from an explicit asset allowlist"
+      (lambda ()
+        (define program (load-program-file task-example-path))
+        (define server
+          (start-http-server
+           (lambda () program)
+           #:store (make-memory-kv-store)
+           #:port 0
+           #:static-root (build-path project-root "web" "tasks")))
+        (dynamic-wind
+          void
+          (lambda ()
+            (define-values (page-status page)
+              (send-http-text (running-http-server-port server) "/"))
+            (check-equal page-status 200)
+            (check-true (string-contains? page "Task Ledger"))
+            (check-true (string-contains? page "viewport"))
+            (define-values (script-status script)
+              (send-http-text (running-http-server-port server) "/app.js"))
+            (check-equal script-status 200)
+            (check-true (string-contains? script "async function api")))
+          (lambda () (stop-http-server! server)))))
+
+(test "task backend completes CRUD over HTTP and survives server restart"
+      (lambda ()
+        (define directory
+          (make-temporary-file "ai-evolve-http-crud-~a" 'directory))
+        (define store-path (build-path directory "store.json"))
+        (define program (load-program-file task-example-path))
+        (define (start)
+          (start-http-server
+           (lambda () program)
+           #:store (open-file-kv-store store-path)
+           #:port 0))
+        (dynamic-wind
+          void
+          (lambda ()
+            (define first-server (start))
+            (dynamic-wind
+              void
+              (lambda ()
+                (define port (running-http-server-port first-server))
+                (define-values (invalid-status invalid-body)
+                  (send-http-request port "POST" "/tasks" "\"not-an-object\""))
+                (check-equal invalid-status 400)
+                (check-equal
+                 (hash-ref (hash-ref invalid-body 'error) 'code)
+                 "INVALID_BODY")
+                (define-values (created-status created)
+                  (send-http-request
+                   port
+                   "POST"
+                   "/tasks"
+                   (hasheq 'id "business-1"
+                           'title "first title"
+                           'completed #f)))
+                (check-equal created-status 201)
+                (check-equal (hash-ref created 'completed) #f)
+                (define-values (duplicate-status _duplicate)
+                  (send-http-request
+                   port
+                   "POST"
+                   "/tasks"
+                   (hasheq 'id "business-1" 'title "duplicate")))
+                (check-equal duplicate-status 409)
+                (define-values (list-status tasks)
+                  (send-http-request port "GET" "/tasks"))
+                (check-equal list-status 200)
+                (check-equal (length tasks) 1)
+                (define-values (update-status updated)
+                  (send-http-request
+                   port
+                   "PUT"
+                   "/tasks/business-1"
+                   (hasheq 'title "updated title" 'completed #t)))
+                (check-equal update-status 200)
+                (check-equal (hash-ref updated 'title) "updated title")
+                (check-true (hash-ref updated 'completed)))
+              (lambda () (stop-http-server! first-server)))
+            (define second-server (start))
+            (dynamic-wind
+              void
+              (lambda ()
+                (define port (running-http-server-port second-server))
+                (define-values (get-status persisted)
+                  (send-http-request port "GET" "/tasks/business-1"))
+                (check-equal get-status 200)
+                (check-equal (hash-ref persisted 'title) "updated title")
+                (define-values (method-status method-body)
+                  (send-http-request port "PATCH" "/tasks/business-1" (hasheq)))
+                (check-equal method-status 405)
+                (check-equal
+                 (hash-ref (hash-ref method-body 'error) 'code)
+                 "METHOD_NOT_ALLOWED")
+                (define-values (delete-status deleted)
+                  (send-http-request port "DELETE" "/tasks/business-1"))
+                (check-equal delete-status 200)
+                (check-equal (hash-ref deleted 'id) "business-1")
+                (define-values (missing-status missing)
+                  (send-http-request port "GET" "/tasks/business-1"))
+                (check-equal missing-status 404)
+                (check-equal
+                 (hash-ref (hash-ref missing 'error) 'code)
+                 "TASK_NOT_FOUND"))
+              (lambda () (stop-http-server! second-server))))
+          (lambda () (delete-directory/files directory)))))
+
+(test "stateful service scenario suite gates web backend candidates"
+      (lambda ()
+        (define source (file->string task-example-path))
+        (define suite
+          (load-service-test-suite
+           (build-path project-root "examples" "tasks" "scenarios.json")))
+        (define passing-report
+          (run-service-test-suite (load-program-source source) suite))
+        (check-true (hash-ref passing-report 'passed))
+        (check-equal (hash-ref passing-report 'total) 8)
+        (define broken-source
+          (string-replace source
+                          "(response 201 task)"
+                          "(response 200 task)"))
+        (define failing-report
+          (run-service-test-suite (load-program-source broken-source) suite))
+        (check-false (hash-ref failing-report 'passed))
+        (check-true (positive? (hash-ref failing-report 'failedCount)))))
+
+(test "service deployment promotes only a scenario-tested active version"
+      (lambda ()
+        (define directory
+          (make-temporary-file "ai-evolve-service-deploy-~a" 'directory))
+        (dynamic-wind
+          void
+          (lambda ()
+            (define source (file->string task-example-path))
+            (define suite
+              (load-service-test-suite
+               (build-path project-root "examples" "tasks" "scenarios.json")))
+            (define deployed (deploy-service! source suite directory))
+            (check-true (hash-ref deployed 'ok))
+            (check-true (hash-ref deployed 'promoted))
+            (check-equal (active-hash directory) (source-hash source))
+            (define loader (make-active-program-loader directory))
+            (check-equal (ail-program-name (loader)) 'task-service)
+            (define upgraded-source
+              (string-replace source "(version 1)" "(version 2)"))
+            (define upgraded (deploy-service! upgraded-source suite directory))
+            (check-true (hash-ref upgraded 'promoted))
+            (check-equal (ail-program-version (loader)) 2)
+            (define broken-source
+              (string-replace upgraded-source
+                              "(response 201 task)"
+                              "(response 200 task)"))
+            (define rejected (deploy-service! broken-source suite directory))
+            (check-false (hash-ref rejected 'ok))
+            (check-false (hash-ref rejected 'promoted))
+            (check-equal (active-hash directory) (source-hash upgraded-source)))
+          (lambda () (delete-directory/files directory)))))
+
+(test "service evolution uses stateful scenarios before promotion"
+      (lambda ()
+        (define directory
+          (make-temporary-file "ai-evolve-service-evolve-~a" 'directory))
+        (dynamic-wind
+          void
+          (lambda ()
+            (define source (file->string task-example-path))
+            (define broken-source
+              (string-replace source
+                              "(response 201 task)"
+                              "(response 200 task)"))
+            (define broken-hash
+              (register-candidate! directory
+                                   broken-source
+                                   #:provider "test-bootstrap"
+                                   #:report (hasheq 'passed #t)))
+            (promote! directory broken-hash)
+            (define suite
+              (load-service-test-suite
+               (build-path project-root "examples" "tasks" "scenarios.json")))
+            (define result
+              (evolve-active-service-once
+               directory
+               suite
+               (make-file-provider task-example-path)
+               #:promote? #t))
+            (check-true (hash-ref result 'ok))
+            (check-true (hash-ref result 'promoted))
+            (check-equal (active-hash directory) (source-hash source))
+            (check-equal
+             (hash-ref (hash-ref (hash-ref result 'candidate) 'report) 'total)
+             8))
+          (lambda () (delete-directory/files directory)))))
+
+(test "concurrent HTTP writes preserve every committed task"
+      (lambda ()
+        (define program (load-program-file task-example-path))
+        (define store (make-memory-kv-store))
+        (define server
+          (start-http-server
+           (lambda () program)
+           #:store store
+           #:port 0
+           #:max-workers 16))
+        (dynamic-wind
+          void
+          (lambda ()
+            (define result-channel (make-channel))
+            (for ([index (in-range 12)])
+              (thread
+               (lambda ()
+                 (with-handlers ([exn:fail?
+                                  (lambda (error)
+                                    (channel-put result-channel error))])
+                   (define-values (status body)
+                     (send-http-request
+                      (running-http-server-port server)
+                      "POST"
+                      "/tasks"
+                      (hasheq 'id (format "concurrent-~a" index)
+                              'title (format "task ~a" index))))
+                   (channel-put result-channel (cons status body))))))
+            (for ([_index (in-range 12)])
+              (define result (channel-get result-channel))
+              (when (exn:fail? result) (raise result))
+              (check-equal (car result) 201))
+            (define-values (status tasks)
+              (send-http-request
+               (running-http-server-port server)
+               "GET"
+               "/tasks"))
+            (check-equal status 200)
+            (check-equal (length tasks) 12)
+            (check-equal (hash-count (kv-store-snapshot store)) 12))
+          (lambda () (stop-http-server! server)))))
+
+(test "HTTP request remains pinned to the program selected at request start"
+      (lambda ()
+        (define (version-program version text)
+          (load-program-source
+           (format
+            (string-append
+             "(program (name pinned) (version ~a) (capabilities) "
+             "(route GET \"/version\" version-handler) "
+             "(def version-handler (fn (request) "
+             "  (map \"status\" 200 \"headers\" (map) \"body\" \"~a\"))) "
+             "(export version-handler))")
+            version text)))
+        (define first-program (version-program 1 "v1"))
+        (define second-program (version-program 2 "v2"))
+        (define active-program (box first-program))
+        (define selected-channel (make-channel))
+        (define continue-semaphore (make-semaphore 0))
+        (define first-load? #t)
+        (define (loader)
+          (define selected (unbox active-program))
+          (when first-load?
+            (set! first-load? #f)
+            (channel-put selected-channel #t)
+            (semaphore-wait continue-semaphore))
+          selected)
+        (define server (start-http-server loader #:port 0))
+        (dynamic-wind
+          void
+          (lambda ()
+            (define response-channel (make-channel))
+            (thread
+             (lambda ()
+               (define-values (status body)
+                 (send-http-request
+                  (running-http-server-port server)
+                  "GET"
+                  "/version"))
+               (channel-put response-channel (cons status body))))
+            (channel-get selected-channel)
+            (set-box! active-program second-program)
+            (semaphore-post continue-semaphore)
+            (define first-response (channel-get response-channel))
+            (check-equal (car first-response) 200)
+            (check-equal (cdr first-response) "v1")
+            (define-values (second-status second-body)
+              (send-http-request
+               (running-http-server-port server)
+               "GET"
+               "/version"))
+            (check-equal second-status 200)
+            (check-equal second-body "v2"))
+          (lambda () (stop-http-server! server)))))
 
 (test "fuel stops infinite recursion"
       (lambda ()

@@ -1,6 +1,7 @@
 #lang racket/base
 
 (provide (struct-out ail-program)
+         (struct-out ail-route)
          (struct-out ail-definition)
          (struct-out ast-binding)
          (struct-out expr-lit)
@@ -15,8 +16,9 @@
          ast->jsexpr
          program->jsexpr)
 
-(struct ail-program (name version capabilities definitions exports source)
+(struct ail-program (name version capabilities routes definitions exports source)
   #:transparent)
+(struct ail-route (method path handler) #:transparent)
 (struct ail-definition (name expression) #:transparent)
 (struct ast-binding (name expression) #:transparent)
 
@@ -81,10 +83,14 @@
    'name (symbol->string (ail-program-name program))
    'version (ail-program-version program)
    'capabilities (map symbol->string (ail-program-capabilities program))
+   'routes
+   (for/list ([route (in-list (ail-program-routes program))])
+     (hasheq 'method (ail-route-method route)
+             'path (ail-route-path route)
+             'handler (symbol->string (ail-route-handler route))))
    'definitions
    (for/list ([definition (in-list (ail-program-definitions program))])
      (hasheq 'name (symbol->string (ail-definition-name definition))
              'expression
              (ast->jsexpr (ail-definition-expression definition))))
    'exports (map symbol->string (ail-program-exports program))))
-
