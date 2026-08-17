@@ -8,8 +8,10 @@
          "../src/error.rkt"
          "../src/evolution-loop.rkt"
          "../src/evolver.rkt"
+         "../src/kv-store.rkt"
          "../src/reader.rkt"
          "../src/runtime.rkt"
+         "../src/service.rkt"
          "../src/test-suite.rkt"
          "../src/version-store.rkt")
 
@@ -176,6 +178,112 @@
                          (list "x")
                          #:capability-bindings bindings)
          42)))
+
+(define task-service-source
+  (string-append
+   "(program (name task-service) (version 1) (capabilities kv clock) "
+   "(route POST \"/tasks\" create-task) "
+   "(route GET \"/tasks/:id\" get-task) "
+   "(route POST \"/fail\" failing-write) "
+   "(def response (fn (status body) "
+   "  (map \"status\" status \"headers\" (map) \"body\" body))) "
+   "(def create-task (fn (request) "
+   "  (let ((body (get request \"body\")) "
+   "        (id (get body \"id\")) "
+   "        (task (assoc body \"createdAt\" (now-ms)))) "
+   "    (do (kv-put (string-append \"task/\" id) task) "
+   "        (response 201 task))))) "
+   "(def get-task (fn (request) "
+   "  (let ((id (get (get request \"params\") \"id\")) "
+   "        (task (kv-get (string-append \"task/\" id) #f))) "
+   "    (if task (response 200 task) "
+   "        (response 404 (map \"error\" \"not-found\")))))) "
+   "(def failing-write (fn (request) "
+   "  (do (kv-put \"task/should-rollback\" (map \"id\" \"bad\")) "
+   "      (map \"status\" 200)))) "
+   "(export create-task get-task failing-write))"))
+
+(test "service dispatch matches path parameters and commits valid KV writes"
+      (lambda ()
+        (define program (load-program-source task-service-source))
+        (define store (make-memory-kv-store))
+        (define create-result
+          (handle-service-request
+           program
+           (service-request "POST"
+                            "/tasks"
+                            (hash)
+                            (hash)
+                            (hash "id" "42" "title" "ship"))
+           #:store store
+           #:clock (lambda () 123456)))
+        (check-false (dispatch-result-diagnostic create-result))
+        (check-equal
+         (service-response-status (dispatch-result-response create-result))
+         201)
+        (check-equal
+         (hash-ref (service-response-body
+                    (dispatch-result-response create-result))
+                   'createdAt)
+         123456)
+        (define get-result
+          (handle-service-request
+           program
+           (service-request "GET" "/tasks/42" (hash) (hash) '())
+           #:store store
+           #:clock (lambda () 999999)))
+        (check-equal
+         (service-response-status (dispatch-result-response get-result))
+         200)
+        (check-equal
+         (hash-ref (service-response-body
+                    (dispatch-result-response get-result))
+                   'title)
+         "ship")))
+
+(test "invalid handler responses roll back transactional KV writes"
+      (lambda ()
+        (define program (load-program-source task-service-source))
+        (define store (make-memory-kv-store))
+        (define result
+          (handle-service-request
+           program
+           (service-request "POST" "/fail" (hash) (hash) (hash))
+           #:store store))
+        (check-equal
+         (service-response-status (dispatch-result-response result))
+         500)
+        (check-true (dispatch-result-diagnostic result))
+        (check-false
+         (hash-has-key? (kv-store-snapshot store) "task/should-rollback"))))
+
+(test "file KV adapter survives reopen with JSON business values"
+      (lambda ()
+        (define directory (make-temporary-file "ai-evolve-kv-~a" 'directory))
+        (define path (build-path directory "tasks.json"))
+        (dynamic-wind
+          void
+          (lambda ()
+            (define program (load-program-source task-service-source))
+            (define first-store (open-file-kv-store path))
+            (define result
+              (handle-service-request
+               program
+               (service-request "POST"
+                                "/tasks"
+                                (hash)
+                                (hash)
+                                (hash "id" "7" "title" "persist"))
+               #:store first-store
+               #:clock (lambda () 7)))
+            (check-equal
+             (service-response-status (dispatch-result-response result))
+             201)
+            (define reopened (open-file-kv-store path))
+            (check-equal
+             (hash-ref (hash-ref (kv-store-snapshot reopened) "task/7") "title")
+             "persist"))
+          (lambda () (delete-directory/files directory)))))
 
 (test "fuel stops infinite recursion"
       (lambda ()

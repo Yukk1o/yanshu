@@ -481,7 +481,14 @@
     [(list? value) (map jsexpr->value value)]
     [(hash? value)
      (for/hash ([(key item) (in-hash value)])
-       (values key (jsexpr->value item)))]
+       (values (cond
+                 [(symbol? key) (symbol->string key)]
+                 [(string? key) key]
+                 [else
+                  (raise-ail "INPUT_UNSUPPORTED_JSON_KEY"
+                             "JSON object key cannot be converted to a guest string"
+                             (hasheq 'key (format "~s" key)))])
+               (jsexpr->value item)))]
     [else
      (raise-ail "INPUT_UNSUPPORTED_JSON"
                 "JSON input cannot be converted to a guest value"
