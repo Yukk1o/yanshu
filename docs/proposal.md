@@ -1,0 +1,33 @@
+# AI-Evolve v0.1 Proposal
+
+## Why
+
+Validate that an LLM can improve a running program without mutating the active
+version in place. The prototype must treat guest programs as data, execute them
+with explicit resource limits, test a candidate version, promote it, and roll it
+back.
+
+## What
+
+- A small, host-independent Lisp guest language.
+- A Racket prototype containing its own AST and tree-walking interpreter.
+- Structured diagnostics and JSON test reports.
+- Content-addressed candidate versions with promote and rollback operations.
+- A provider boundary for future LLM integrations.
+- A deterministic offline provider for an end-to-end demonstration.
+
+## Out of scope
+
+- Arbitrary Racket evaluation or host-language escape hatches.
+- Automatic production promotion.
+- File, database, or network capabilities for guest programs.
+- Macros, concurrency, static types, JIT compilation, and garbage-collector work.
+- Modifying the interpreter, policy, or verifier through the evolution loop.
+
+## Acceptance
+
+The bundled demonstration starts with a faulty discount function, observes a
+failing regression case, obtains a candidate program from a provider, verifies
+all cases, promotes the candidate, serves the corrected result, and rolls back
+to the parent version when requested.
+
