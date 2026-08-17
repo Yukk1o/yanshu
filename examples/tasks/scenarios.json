@@ -1,0 +1,97 @@
+{
+  "clockMs": 1700000000000,
+  "cases": [
+    {
+      "name": "reject-non-object-body",
+      "method": "POST",
+      "path": "/tasks",
+      "body": "not-an-object",
+      "expectStatus": 400,
+      "expectBodyContains": {
+        "error": {"code": "INVALID_BODY"}
+      }
+    },
+    {
+      "name": "create-task",
+      "method": "POST",
+      "path": "/tasks",
+      "body": {"id": "business-1", "title": "first title", "completed": false},
+      "expectStatus": 201,
+      "expectBody": {
+        "id": "business-1",
+        "title": "first title",
+        "completed": false,
+        "createdAt": 1700000000000,
+        "updatedAt": 1700000000000
+      }
+    },
+    {
+      "name": "reject-duplicate-id",
+      "method": "POST",
+      "path": "/tasks",
+      "body": {"id": "business-1", "title": "duplicate"},
+      "expectStatus": 409,
+      "expectBodyContains": {
+        "error": {"code": "TASK_EXISTS"}
+      }
+    },
+    {
+      "name": "list-created-task",
+      "method": "GET",
+      "path": "/tasks",
+      "expectStatus": 200,
+      "expectBody": [
+        {
+          "id": "business-1",
+          "title": "first title",
+          "completed": false,
+          "createdAt": 1700000000000,
+          "updatedAt": 1700000000000
+        }
+      ]
+    },
+    {
+      "name": "read-created-task",
+      "method": "GET",
+      "path": "/tasks/business-1",
+      "expectStatus": 200,
+      "expectBodyContains": {
+        "id": "business-1",
+        "title": "first title"
+      }
+    },
+    {
+      "name": "update-task",
+      "method": "PUT",
+      "path": "/tasks/business-1",
+      "body": {"title": "updated title", "completed": true},
+      "expectStatus": 200,
+      "expectBody": {
+        "id": "business-1",
+        "title": "updated title",
+        "completed": true,
+        "createdAt": 1700000000000,
+        "updatedAt": 1700000000000
+      }
+    },
+    {
+      "name": "delete-task",
+      "method": "DELETE",
+      "path": "/tasks/business-1",
+      "expectStatus": 200,
+      "expectBodyContains": {
+        "id": "business-1",
+        "completed": true
+      }
+    },
+    {
+      "name": "deleted-task-is-missing",
+      "method": "GET",
+      "path": "/tasks/business-1",
+      "expectStatus": 404,
+      "expectBodyContains": {
+        "error": {"code": "TASK_NOT_FOUND"}
+      }
+    }
+  ]
+}

@@ -10,9 +10,10 @@
 (provide evolve-once)
 
 (define (evolve-once current-source suite provider store-root
-                     #:promote? [promote? #f])
+                     #:promote? [promote? #f]
+                     #:run-suite [run-suite run-test-suite])
   (define current-program (load-program-source current-source))
-  (define current-report (run-test-suite current-program suite))
+  (define current-report (run-suite current-program suite))
   (define source-current-hash (source-hash current-source))
   (define stored-active-hash (active-hash store-root))
   (cond
@@ -35,7 +36,7 @@
   (define proposal (request-proposal provider request))
   (define candidate-source (evolution-proposal-source proposal))
   (define candidate-program (load-program-source candidate-source))
-  (define candidate-report (run-test-suite candidate-program suite))
+  (define candidate-report (run-suite candidate-program suite))
   (define candidate-hash
     (register-candidate!
      store-root

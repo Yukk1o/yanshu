@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'"
+    >
+    <title>Task Ledger · AI-Evolve</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="paper-grid" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <a class="wordmark" href="/" aria-label="Task Ledger 首页">
+        <span class="wordmark-mark">A/E</span>
+        <span>Task Ledger</span>
+      </a>
+      <div class="runtime-status" id="runtime-status" role="status">
+        <span class="status-dot"></span>
+        <span id="runtime-status-text">正在连接运行时</span>
+      </div>
+    </header>
+
+    <main class="page-shell">
+      <section class="intro" aria-labelledby="page-title">
+        <p class="eyebrow">AI-EVOLVE / WEB BACKEND PROOF 01</p>
+        <div class="intro-copy">
+          <h1 id="page-title">把计划写进<br><em>运行中的语言。</em></h1>
+          <p>
+            这不是静态原型。你在这里创建、修改和删除的每一项任务，
+            都会经过 AI-Evolve 解释器、事务 KV 和真实 HTTP 路由。
+          </p>
+        </div>
+        <div class="hero-index" aria-hidden="true">01</div>
+      </section>
+
+      <section class="workspace" aria-label="任务工作区">
+        <div class="primary-column">
+          <section class="composer-panel" aria-labelledby="composer-title">
+            <div class="section-heading">
+              <span class="section-number">01</span>
+              <div>
+                <p class="section-kicker">NEW ENTRY</p>
+                <h2 id="composer-title">添加一项真实任务</h2>
+              </div>
+            </div>
+
+            <form id="task-form" class="task-form" autocomplete="off">
+              <label for="task-title">任务内容</label>
+              <div class="input-row">
+                <input
+                  id="task-title"
+                  name="title"
+                  type="text"
+                  maxlength="120"
+                  required
+                  placeholder="例如：给订单接口补充幂等校验"
+                >
+                <button class="primary-button" type="submit">
+                  <span>写入台账</span>
+                  <span aria-hidden="true">↗</span>
+                </button>
+              </div>
+              <p class="form-hint">回车即可创建；数据会持久化到本地 JSON KV。</p>
+            </form>
+          </section>
+
+          <section class="ledger-panel" aria-labelledby="ledger-title">
+            <div class="ledger-toolbar">
+              <div class="section-heading compact">
+                <span class="section-number">02</span>
+                <div>
+                  <p class="section-kicker">LIVE RECORDS</p>
+                  <h2 id="ledger-title">当前任务</h2>
+                </div>
+              </div>
+
+              <button class="refresh-button" id="refresh-button" type="button">
+                <span aria-hidden="true">↻</span>
+                刷新
+              </button>
+            </div>
+
+            <div class="filter-row" role="group" aria-label="筛选任务">
+              <button class="filter-button active" type="button" data-filter="all">全部</button>
+              <button class="filter-button" type="button" data-filter="open">进行中</button>
+              <button class="filter-button" type="button" data-filter="done">已完成</button>
+            </div>
+
+            <div id="task-list" class="task-list" aria-live="polite" aria-busy="true">
+              <div class="loading-card"></div>
+              <div class="loading-card short"></div>
+            </div>
+          </section>
+        </div>
+
+        <aside class="side-rail" aria-label="运行状态">
+          <section class="stats-card">
+            <p class="section-kicker">LEDGER STATUS</p>
+            <div class="stats-grid">
+              <div>
+                <strong id="total-count">—</strong>
+                <span>总任务</span>
+              </div>
+              <div>
+                <strong id="open-count">—</strong>
+                <span>进行中</span>
+              </div>
+              <div>
+                <strong id="done-count">—</strong>
+                <span>已完成</span>
+              </div>
+            </div>
+            <div class="progress-track" aria-hidden="true">
+              <span id="progress-bar"></span>
+            </div>
+            <p class="progress-copy" id="progress-copy">等待第一条运行数据。</p>
+          </section>
+
+          <section class="runtime-card">
+            <div class="runtime-card-top">
+              <span class="code-bracket">(</span>
+              <span class="runtime-label">runtime</span>
+              <span class="code-bracket">)</span>
+            </div>
+            <dl>
+              <div><dt>语言</dt><dd>AI-Evolve Lisp</dd></div>
+              <div><dt>接口</dt><dd>JSON / HTTP 1.1</dd></div>
+              <div><dt>状态</dt><dd>Transactional KV</dd></div>
+              <div><dt>版本</dt><dd>Request-pinned</dd></div>
+            </dl>
+            <p>业务函数保持纯净；数据库、时间与日志均由宿主能力显式注入。</p>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

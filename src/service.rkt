@@ -183,9 +183,17 @@
           [else
            (raise-ail "SERVICE_INVALID_RESPONSE_HEADERS"
                       "response header names must be strings")]))
+      (unless (regexp-match? #px"^[A-Za-z0-9-]+$" key-string)
+        (raise-ail "SERVICE_INVALID_RESPONSE_HEADERS"
+                   "response header name contains invalid characters"))
       (unless (string? item)
         (raise-ail "SERVICE_INVALID_RESPONSE_HEADERS"
                    "response header values must be strings"
+                   (hasheq 'header key-string)))
+      (when (or (string-contains? item "\r")
+                (string-contains? item "\n"))
+        (raise-ail "SERVICE_INVALID_RESPONSE_HEADERS"
+                   "response header value contains a line break"
                    (hasheq 'header key-string)))
       (values (string->symbol (string-downcase key-string)) item)))
   (service-response
