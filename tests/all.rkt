@@ -4,6 +4,7 @@
          racket/file
          racket/runtime-path
          racket/string
+         "../src/ast.rkt"
          "../src/error.rkt"
          "../src/evolution-loop.rkt"
          "../src/evolver.rkt"
@@ -116,6 +117,65 @@
           #:logger (lambda (value) (set! observed (cons value observed))))
          "hello")
         (check-equal observed '("hello"))))
+
+(test "web routes are parsed into explicit program metadata"
+      (lambda ()
+        (define program
+          (load-program-source
+           (string-append
+            "(program (name tasks) (version 1) (capabilities kv) "
+            "(route GET \"/tasks/:id\" get-task) "
+            "(def get-task (fn (request) (kv-get (get (get request \"params\") \"id\") #f))) "
+            "(export get-task))")))
+        (check-equal (length (ail-program-routes program)) 1)
+        (define route (car (ail-program-routes program)))
+        (check-equal (ail-route-method route) "GET")
+        (check-equal (ail-route-path route) "/tasks/:id")
+        (check-equal (ail-route-handler route) 'get-task)))
+
+(test "ambiguous routes are rejected at parse time"
+      (lambda ()
+        (check-ail-code
+         "PROGRAM_AMBIGUOUS_ROUTE"
+         (lambda ()
+           (load-program-source
+            (string-append
+             "(program (name bad-routes) (version 1) (capabilities) "
+             "(route GET \"/items/:id\" first-handler) "
+             "(route GET \"/items/:name\" second-handler) "
+             "(def first-handler (fn (request) request)) "
+             "(def second-handler (fn (request) request)) "
+             "(export first-handler second-handler))"))))))
+
+(test "declared host capabilities are injected without ambient authority"
+      (lambda ()
+        (define program
+          (load-program-source
+           (string-append
+            "(program (name kv-reader) (version 1) (capabilities kv) "
+            "(def read-value (fn (key) (kv-get key \"missing\"))) "
+            "(export read-value))")))
+        (check-ail-code
+         "RUNTIME_CAPABILITY_UNAVAILABLE"
+         (lambda () (execute-export program 'read-value (list "x"))))
+        (define bindings
+          (hasheq
+           'kv
+           (hasheq
+            'kv-get
+            (capability-primitive
+             2
+             2
+             (lambda (arguments)
+               (if (string=? (car arguments) "x")
+                   42
+                   (cadr arguments)))))))
+        (check-equal
+         (execute-export program
+                         'read-value
+                         (list "x")
+                         #:capability-bindings bindings)
+         42)))
 
 (test "fuel stops infinite recursion"
       (lambda ()

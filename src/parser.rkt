@@ -1,13 +1,15 @@
 #lang racket/base
 
 (require racket/list
+         racket/string
          "ast.rkt"
          "error.rkt")
 
 (provide parse-program
          parse-expression)
 
-(define supported-capabilities '(log))
+(define supported-capabilities '(log kv clock))
+(define supported-methods '("GET" "POST" "PUT" "PATCH" "DELETE"))
 (define expression-keywords '(quote if let fn do))
 
 (define (parse-program datum source)
@@ -20,6 +22,7 @@
   (define version #f)
   (define capabilities #f)
   (define exports #f)
+  (define routes '())
   (define definitions '())
   (define definition-names (make-hasheq))
   (for ([form (in-list (cdr datum))])
@@ -60,6 +63,30 @@
                       "program declares an unsupported capability"
                       (hasheq 'capability (symbol->string capability)))))
        (set! capabilities values)]
+      [(route)
+       (unless (and (= (length form) 4)
+                    (symbol? (cadr form))
+                    (string? (caddr form))
+                    (symbol? (cadddr form)))
+         (raise-ail "PROGRAM_INVALID_ROUTE"
+                    "route must be (route METHOD \"/path\" handler)"))
+       (define method (string-upcase (symbol->string (cadr form))))
+       (define path (caddr form))
+       (define handler (cadddr form))
+       (unless (member method supported-methods)
+         (raise-ail "PROGRAM_UNSUPPORTED_METHOD"
+                    "route uses an unsupported HTTP method"
+                    (hasheq 'method method)))
+       (validate-route-path path)
+       (for ([existing (in-list routes)])
+         (when (and (string=? method (ail-route-method existing))
+                    (route-patterns-overlap? path (ail-route-path existing)))
+           (raise-ail "PROGRAM_AMBIGUOUS_ROUTE"
+                      "route overlaps an earlier route for the same method"
+                      (hasheq 'method method
+                              'path path
+                              'existingPath (ail-route-path existing)))))
+       (set! routes (cons (ail-route method path handler) routes))]
       [(def)
        (unless (and (= (length form) 3) (symbol? (cadr form)))
          (raise-ail "PROGRAM_INVALID_DEFINITION"
@@ -101,9 +128,21 @@
       (raise-ail "PROGRAM_UNKNOWN_EXPORT"
                  "export does not name a program definition"
                  (hasheq 'name (symbol->string export-name)))))
+  (for ([route (in-list routes)])
+    (unless (hash-has-key? definition-names (ail-route-handler route))
+      (raise-ail "PROGRAM_UNKNOWN_ROUTE_HANDLER"
+                 "route handler does not name a program definition"
+                 (hasheq 'handler
+                         (symbol->string (ail-route-handler route)))))
+    (unless (memq (ail-route-handler route) exports)
+      (raise-ail "PROGRAM_ROUTE_HANDLER_NOT_EXPORTED"
+                 "route handler must be exported"
+                 (hasheq 'handler
+                         (symbol->string (ail-route-handler route))))))
   (ail-program name
                version
                (or capabilities '())
+               (reverse routes)
                (reverse definitions)
                exports
                source))
@@ -188,3 +227,51 @@
              (hasheq 'form (symbol->string name)
                      'datum (format "~s" datum))))
 
+(define (validate-route-path path)
+  (unless (and (positive? (string-length path))
+               (<= (string-length path) 2048)
+               (char=? (string-ref path 0) #\/)
+               (not (string-contains? path "?"))
+               (not (string-contains? path "#"))
+               (not (for/or ([character (in-string path)])
+                      (char-whitespace? character))))
+    (raise-ail "PROGRAM_INVALID_ROUTE_PATH"
+               "route path must be an absolute path without query or fragment"
+               (hasheq 'path path)))
+  (define segments (route-segments path))
+  (when (member "" segments)
+    (raise-ail "PROGRAM_INVALID_ROUTE_PATH"
+               "route path cannot contain empty segments or a trailing slash"
+               (hasheq 'path path)))
+  (define parameter-names '())
+  (for ([segment (in-list segments)])
+    (when (string-prefix? segment ":")
+      (unless (regexp-match? #px"^:[A-Za-z_][A-Za-z0-9_-]*$" segment)
+        (raise-ail "PROGRAM_INVALID_ROUTE_PARAMETER"
+                   "route parameter has an invalid name"
+                   (hasheq 'path path 'segment segment)))
+      (define parameter-name (substring segment 1))
+      (when (member parameter-name parameter-names)
+        (raise-ail "PROGRAM_DUPLICATE_ROUTE_PARAMETER"
+                   "route parameter name is repeated"
+                   (hasheq 'path path 'parameter parameter-name)))
+      (set! parameter-names (cons parameter-name parameter-names)))))
+
+(define (route-segments path)
+  (if (string=? path "/")
+      '()
+      (string-split (substring path 1) "/" #:trim? #f)))
+
+(define (route-parameter-segment? segment)
+  (and (positive? (string-length segment))
+       (char=? (string-ref segment 0) #\:)))
+
+(define (route-patterns-overlap? left right)
+  (define left-segments (route-segments left))
+  (define right-segments (route-segments right))
+  (and (= (length left-segments) (length right-segments))
+       (for/and ([left-segment (in-list left-segments)]
+                 [right-segment (in-list right-segments)])
+         (or (route-parameter-segment? left-segment)
+             (route-parameter-segment? right-segment)
+             (string=? left-segment right-segment)))))
