@@ -14,6 +14,21 @@ Racket `eval`。
 这里的 AI 是候选代码开发者，不是测试裁判。测试集和解释器由宿主持有；AI
 不能修改测试、绕过解释器、给自己判定通过，或直接改变活动版本。
 
+## 直接测试 Web 后端
+
+```powershell
+.\scripts\serve-tasks.ps1
+```
+
+看到 `"event":"listening"` 后打开 <http://127.0.0.1:8080/>。页面不是静态
+演示：新增、编辑、完成和删除任务都会经过 `.ail` 路由、受限解释器和事务
+JSON KV；关闭后再次启动，任务仍然存在。端口可在启动前通过
+`$env:AI_EVOLVE_HTTP_PORT="9000"` 修改。
+
+启动脚本会先运行 [8 个有状态业务场景](examples/tasks/scenarios.json)，通过后
+才把 [任务服务](examples/tasks/service.ail) 提升为活动版本。HTTP 请求在开始时
+固定源码版本，因此运行中提升新版本不会改变正在处理的请求。
+
 ## 快速开始
 
 项目使用私有 Minimal Racket 工具链，不修改系统 PATH。
@@ -43,6 +58,9 @@ Racket `eval`。
 .\.toolchains\racket\Racket.exe src\cli.rkt inspect examples\discount\v2.ail
 .\.toolchains\racket\Racket.exe src\cli.rkt test examples\discount\v2.ail examples\discount\tests.json
 .\.toolchains\racket\Racket.exe src\cli.rkt run examples\discount\v2.ail calculate-discount examples\discount\vip-args.json
+.\.toolchains\racket\Racket.exe src\cli.rkt test-service examples\tasks\service.ail examples\tasks\scenarios.json
+.\.toolchains\racket\Racket.exe src\cli.rkt deploy-service examples\tasks\service.ail examples\tasks\scenarios.json .runtime\tasks\code
+.\.toolchains\racket\Racket.exe src\cli.rkt serve-active .runtime\tasks\code 8080 .runtime\tasks\store.json
 ```
 
 `run` 的最后一个参数既可以是 JSON 文本，也可以是 JSON 文件路径；Windows
@@ -90,10 +108,11 @@ Responses API 的请求结构参见
 ```
 
 目前支持 `quote`、`if`、顺序 `let`、`fn`、`do` 和函数调用，以及整数、
-字符串、布尔、符号、列表、Map、`Ok`/`Err`。只有 `#f` 为假。
+字符串、布尔、符号、列表、Map、`Ok`/`Err`。Web 程序可声明静态
+`route`，处理器接收请求 Map 并返回结构化响应 Map。只有 `#f` 为假。
 
 解释执行具有 fuel 和调用深度限制。客体默认没有文件、网络或数据库访问；
-唯一的演示能力 `log` 也必须在程序中显式声明。
+`log`、事务 `kv` 和 `clock` 都必须显式声明并由宿主注入。
 
 ## 目录
 
@@ -103,12 +122,19 @@ src/reader.rkt           安全读取和源码规模限制
 src/parser.rkt           S 表达式到独立 AST
 src/runtime.rkt          受限树遍历解释器
 src/test-suite.rkt       JSON 回归测试协议
+src/service.rkt          路由匹配、响应契约和能力注入
+src/kv-store.rkt         内存/文件事务 JSON KV
+src/http-server.rkt      有边界的本地 HTTP/1.1 JSON 服务
+src/service-test-suite.rkt  有状态 Web 业务场景测试
+src/service-deployment.rkt  测试门禁、活动版本加载与演化
 src/version-store.rkt    SHA-256 版本、晋升、回滚、审计事件
 src/http-json.rkt        有超时、大小限制和结构化错误的 HTTPS JSON 传输
 src/evolver.rkt          离线、Responses API 与 DeepSeek Chat provider
 src/evolution-loop.rkt   生成、验证、注册和可选提升的一步闭环
 src/cli.rkt              JSON CLI 和端到端演示
 examples/discount/       初始版本、候选版本和测试案例
+examples/tasks/          完整任务 CRUD 服务与业务场景
+web/tasks/               同源响应式测试控制台
 tests/all.rkt             宿主无关语义的起始一致性测试
 ```
 
@@ -120,6 +146,7 @@ Rust 版本必须复用 `.ail` 源码、JSON 测试、诊断代码、版本文�
 
 ## 当前安全边界
 
-这是概念验证，不是生产沙箱。HTTP 已有限时和响应大小限制，解释器已有 fuel
-和调用深度限制；生产版仍需把候选执行放入独立 OS 进程，增加内存和输出限制，
-并通过审批、灰度和运行期指标决定是否提升。
+这是可用于本地业务原型的概念验证，不是公网生产服务器。HTTP 已有连接并发、
+读取、正文、执行时限和响应头校验，解释器已有 fuel 和调用深度限制；生产版
+仍需认证授权、TLS/反向代理、独立 OS 进程、数据库适配器、内存/输出限制、
+备份迁移，以及审批、灰度和运行期指标。

@@ -18,4 +18,16 @@
 - [x] Add a one-step live evolution CLI with explicit promotion.
 - [x] Test request construction, output extraction, refusals, and regression behavior.
 - [x] Add a DeepSeek V4 Chat Completions adapter with JSON Output validation.
-- [ ] Run a live smoke test from a caller-configured process environment; chat secrets are never copied into command logs.
+- [x] Run a live smoke test from a caller-configured process environment; chat secrets are never copied into command logs.
+
+## Change: web-backend-runtime
+
+- [x] Add explicit static route declarations and request/response contracts.
+- [x] Inject `kv`, `clock`, and `log` capabilities without ambient authority.
+- [x] Add transactional in-memory and atomically persisted JSON KV adapters.
+- [x] Add a bounded concurrent HTTP/1.1 JSON host and redacted observations.
+- [x] Build a complete task CRUD service and stateful business scenario suite.
+- [x] Gate deployment and LLM candidates on the service scenario suite.
+- [x] Pin the active program once per request and support explicit rollback.
+- [x] Add a responsive same-origin browser console for end-to-end testing.
+- [x] Verify malformed input, rollback, concurrency, restart persistence, and hot version selection.

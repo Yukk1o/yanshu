@@ -123,3 +123,15 @@ and delete operations. Acceptance requires:
 6. an active version remains pinned for each request;
 7. all existing v0.1 language and evolution tests continue to pass.
 
+## Implemented checkpoint
+
+The v0.2 prototype implements every acceptance item above on
+`feature/web-backend-runtime`. `scripts/serve-tasks.ps1` runs the stateful suite,
+promotes the content-addressed service version, then serves both the JSON API and
+the same-origin browser console on loopback. `deploy-service`, `serve-active`,
+`evolve-service`, and `rollback-service` expose the same lifecycle through the
+JSON CLI.
+
+This checkpoint is intentionally a local backend runtime. Public deployment still
+requires an authenticated reverse proxy, TLS, a production database adapter,
+process isolation, migrations/backups, and operational rollout policy.
