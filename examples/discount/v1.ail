@@ -1,0 +1,9 @@
+(program
+  (name discount)
+  (version 1)
+  (capabilities)
+  (def calculate-discount
+    (fn (price user-type)
+      price))
+  (export calculate-discount))
+

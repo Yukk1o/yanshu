@@ -1,0 +1,11 @@
+(program
+  (name discount)
+  (version 1)
+  (capabilities)
+  (def calculate-discount
+    (fn (price user-type)
+      (if (= user-type "vip")
+          (- price (quotient price 10))
+          price)))
+  (export calculate-discount))
+

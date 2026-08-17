@@ -1,0 +1,21 @@
+# Implementation Tasks
+
+- [x] Define v0.1 scope, semantics, trust boundary, and acceptance scenario.
+- [x] Implement structured errors, reader, AST, and program parser.
+- [x] Implement the bounded evaluator and pure primitive library.
+- [x] Implement JSON test suites and reports.
+- [x] Implement content-addressed versions, promotion, and rollback.
+- [x] Implement provider boundary and deterministic offline provider.
+- [x] Implement CLI, example, and end-to-end demonstration.
+- [x] Add conformance tests and verify the complete workflow.
+
+## Change: add-live-llm-provider
+
+- [x] Define the live provider configuration, prompt, response schema, and safety boundary.
+- [x] Implement bounded HTTPS JSON transport.
+- [x] Implement an OpenAI Responses API provider with Structured Outputs.
+- [x] Record provider model and response metadata in candidate versions.
+- [x] Add a one-step live evolution CLI with explicit promotion.
+- [x] Test request construction, output extraction, refusals, and regression behavior.
+- [x] Add a DeepSeek V4 Chat Completions adapter with JSON Output validation.
+- [ ] Run a live smoke test from a caller-configured process environment; chat secrets are never copied into command logs.

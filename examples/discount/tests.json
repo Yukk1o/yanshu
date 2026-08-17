@@ -1,0 +1,21 @@
+{
+  "entry": "calculate-discount",
+  "cases": [
+    {
+      "name": "normal-price-is-unchanged",
+      "args": [100, "normal"],
+      "expect": 100
+    },
+    {
+      "name": "vip-receives-ten-percent-discount",
+      "args": [100, "vip"],
+      "expect": 90
+    },
+    {
+      "name": "integer-discount-rounds-toward-zero",
+      "args": [99, "vip"],
+      "expect": 90
+    }
+  ]
+}
+
