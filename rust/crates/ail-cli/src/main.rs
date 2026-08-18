@@ -8,6 +8,7 @@ use std::{
 
 use ail_conformance::run_manifest;
 use ail_diagnostic::{AilResult, Diagnostic};
+use ail_ops::{create_backup, restore_backup, verify_backup};
 use ail_provider::{EvolutionProvider, EvolutionRequest, configured_live_provider};
 use ail_service::run_service_suite;
 use ail_store::{CandidateRegistration, VersionStore, run_version_scenario, source_hash};
@@ -84,6 +85,13 @@ fn run(arguments: Vec<String>) -> AilResult<Value> {
             let passed = report.get("passed").and_then(Value::as_bool) == Some(true);
             Ok(json!({ "ok": passed, "report": report }))
         }
+        [command, code_store, data_store, destination] if command == "backup-service" => {
+            create_backup(code_store, data_store, destination)
+        }
+        [command, snapshot] if command == "verify-backup" => verify_backup(snapshot),
+        [command, snapshot, code_store, data_store] if command == "restore-service" => {
+            restore_backup(snapshot, code_store, data_store)
+        }
         _ => Err(Diagnostic::new(
             "CLI_USAGE",
             "arguments do not match a supported Rust host command",
@@ -94,7 +102,10 @@ fn run(arguments: Vec<String>) -> AilResult<Value> {
                 "test-service <program.ail> <scenarios.json>",
                 "deploy-service <program.ail> <scenarios.json> <code-store>",
                 "evolve-service <code-store> <scenarios.json> [--promote]",
-                "version-conformance <initial.ail> <candidate.ail>"
+                "version-conformance <initial.ail> <candidate.ail>",
+                "backup-service <code-store> <data-store.json> <snapshot-dir>",
+                "verify-backup <snapshot-dir>",
+                "restore-service <snapshot-dir> <code-store> <data-store.json>"
             ] }),
         )),
     }
@@ -349,6 +360,59 @@ mod tests {
         assert_eq!(promoted["promoted"], true);
         assert_eq!(promoted["active"], promoted["candidate"]["hash"]);
         assert_ne!(promoted["active"], original);
+    }
+
+    #[test]
+    fn backup_commands_verify_and_restore_a_deployed_service() {
+        let temporary = TestDirectory::new();
+        let project_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let program = project_root.join("examples/tasks/service.ail");
+        let suite = project_root.join("examples/tasks/scenarios.json");
+        let code = temporary.path.join("code");
+        let data = temporary.path.join("data.json");
+        let snapshot = temporary.path.join("snapshot");
+        let restored_code = temporary.path.join("restored-code");
+        let restored_data = temporary.path.join("restored-data.json");
+        run(vec![
+            "deploy-service".to_owned(),
+            program.display().to_string(),
+            suite.display().to_string(),
+            code.display().to_string(),
+        ])
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        fs::write(&data, b"{\"version\":1,\"entries\":[]}\n")
+            .unwrap_or_else(|error| panic!("data fixture failed: {error}"));
+
+        let backup = run(vec![
+            "backup-service".to_owned(),
+            code.display().to_string(),
+            data.display().to_string(),
+            snapshot.display().to_string(),
+        ])
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(backup["ok"], true);
+        let verified = run(vec![
+            "verify-backup".to_owned(),
+            snapshot.display().to_string(),
+        ])
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(verified["activeVersion"], backup["activeVersion"]);
+        let restored = run(vec![
+            "restore-service".to_owned(),
+            snapshot.display().to_string(),
+            restored_code.display().to_string(),
+            restored_data.display().to_string(),
+        ])
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(
+            restored["restored"]["activeVersion"],
+            backup["activeVersion"]
+        );
+        assert_eq!(
+            fs::read(restored_data)
+                .unwrap_or_else(|error| panic!("restored data read failed: {error}")),
+            fs::read(data).unwrap_or_else(|error| panic!("source data read failed: {error}"))
+        );
     }
 
     struct TestDirectory {

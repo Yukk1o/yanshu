@@ -29,8 +29,12 @@ language host. It does not switch production traffic yet.
   DeepSeek Chat request/response validation, bounded Reqwest/Rustls transport,
   HTTPS-only endpoints, redirect refusal, credential zeroization, and stable
   diagnostics;
+- `ail-ops`: offline service leases, bounded snapshots, per-file SHA-256
+  manifests, version/event/KV semantic verification, tamper detection, and
+  no-overwrite restore;
 - `ail-cli`: Rust `check`, `inspect`, `conformance`, `test-service`,
-  `deploy-service`, `evolve-service`, and `version-conformance` commands.
+  `deploy-service`, `evolve-service`, `backup-service`, `verify-backup`,
+  `restore-service`, and `version-conformance` commands.
 
 The runtime represents environments and closures with checked arena indices.
 It does not use pointers, native ABI shims, or unsafe self-referential structs.
@@ -102,6 +106,7 @@ test-gated deployment, an authenticated and observable active-version JSON HTTP 
 adapters. Provider behavior is covered by deterministic simulated transports,
 but a real Rust provider smoke test still requires operator-supplied environment
 credentials. Static browser assets have not migrated, and production still lacks
-fine-grained authorization, metrics aggregation/alerting, database persistence, backups, and canary automation. The
+fine-grained authorization, metrics aggregation/alerting, database persistence/PITR,
+off-site backup automation, and canary automation. The
 cutover sequence remains: CI differential, offline replay, shadow execution,
 canary, then explicit default-host change.

@@ -72,4 +72,5 @@
 - [x] Pass locked dependency advisories, bans, licenses, sources, and unsafe inventory audit.
 - [x] Add host-owned request IDs, optional Bearer authentication, sensitive-header filtering, and loopback-only Rust binding.
 - [x] Add append-only redacted request observations with exact pinned-version identity.
-- [ ] Pass shadow-traffic, rollback, backup, and release gates.
+- [x] Add offline locked backups, semantic/hash verification, and no-overwrite restore.
+- [ ] Pass shadow-traffic, canary, database/PITR, and release gates.

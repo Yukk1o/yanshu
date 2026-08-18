@@ -8,6 +8,7 @@ version = "0.5.0"
 dependencies = [
  "ail-conformance",
  "ail-diagnostic",
+ "ail-ops",
  "ail-provider",
  "ail-service",
  "ail-store",
@@ -54,6 +55,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ail-ops"
+version = "0.5.0"
+dependencies = [
+ "ail-diagnostic",
+ "ail-service",
+ "ail-store",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "ail-provider"
 version = "0.5.0"
 dependencies = [
@@ -80,6 +92,7 @@ version = "0.5.0"
 dependencies = [
  "ail-diagnostic",
  "ail-http",
+ "ail-ops",
  "serde_json",
  "tokio",
 ]

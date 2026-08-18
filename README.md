@@ -86,6 +86,11 @@ Token 不会进入 guest headers、诊断或启动 JSON。每个响应都带独�
 
 cargo run --locked -p ail-cli -- deploy-service examples\tasks\service.ail examples\tasks\scenarios.json .runtime\tasks-rust\code
 cargo run --locked -p ail-server -- .runtime\tasks-rust\code 127.0.0.1:8081 .runtime\tasks-rust\store.json
+
+# 停服后创建、校验并恢复到全新目标（命令不会覆盖已有路径）
+cargo run --locked -p ail-cli -- backup-service .runtime\tasks-rust\code .runtime\tasks-rust\store.json .backups\tasks
+cargo run --locked -p ail-cli -- verify-backup .backups\tasks
+cargo run --locked -p ail-cli -- restore-service .backups\tasks .runtime\tasks-restored\code .runtime\tasks-restored\store.json
 ```
 
 `run` 的最后一个参数既可以是 JSON 文本，也可以是 JSON 文件路径；Windows
@@ -220,7 +225,7 @@ Rust 版本必须复用 `.ail` 源码、JSON 测试、诊断代码、版本文�
 调用和裸 `eval` 都不属于语言语义。
 
 当前 Rust host 已迁移 Reader、Parser、解释器、Schema、Library Backend、服务能力、
-事务/文件 KV、版本库、活动版本 HTTP API、认证/脱敏观测，以及 OpenAI/DeepSeek Provider。运行 `./scripts/check-rust.ps1` 会同时执行第一方 unsafe
+事务/文件 KV、版本库、活动版本 HTTP API、认证/脱敏观测、离线备份恢复，以及 OpenAI/DeepSeek Provider。运行 `./scripts/check-rust.ps1` 会同时执行第一方 unsafe
 门禁、Rust 测试、Clippy，以及语言、任务服务和版本生命周期的 Racket/Rust 精确差分。
 默认网页服务尚未切换到 Rust，Provider 的真实联网烟雾测试需要操作者配置环境凭据。
 
@@ -229,4 +234,5 @@ Rust 版本必须复用 `.ail` 源码、JSON 测试、诊断代码、版本文�
 这是可用于本地业务原型的概念验证，不是公网生产服务器。Rust HTTP 已有 Bearer
 认证、请求身份、脱敏 JSONL 观测、连接并发、读取/正文/响应限制和响应头校验，解释器已有
 fuel 和调用深度限制；生产版仍需细粒度授权、TLS/反向代理、独立 OS 进程、数据库适配器、
-备份迁移、日志轮转/采集、告警，以及审批和灰度门禁。
+正式数据库/PITR、异地备份、日志轮转/采集、告警，以及审批和灰度门禁。文件后端的离线
+快照、逐文件校验与拒绝覆盖恢复已经可用，见 [备份与恢复](docs/backup-restore.md)。

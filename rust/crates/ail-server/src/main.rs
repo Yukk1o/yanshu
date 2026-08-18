@@ -7,6 +7,7 @@ use ail_http::{
     BearerAuth, HttpConfig, JsonlObservationSink, ObservationSink,
     build_active_router_with_controls, serve_with_shutdown,
 };
+use ail_ops::acquire_service_lease;
 use serde_json::json;
 use tokio::{net::TcpListener, runtime, signal};
 
@@ -28,6 +29,7 @@ fn run(arguments: Vec<String>) -> AilResult<()> {
             json!({ "usage": "ail-server <code-store> <bind-address> <data-store.json>" }),
         ));
     };
+    let _service_lease = acquire_service_lease(data_store)?;
     let authentication = configured_authentication()?;
     let authentication_required = authentication.is_some();
     let observation_path = format!("{data_store}.observations.jsonl");

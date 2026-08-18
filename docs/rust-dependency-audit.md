@@ -76,6 +76,11 @@ locked graph. The host instead creates a same-directory file with
 `rename` operation to replace the prior snapshot. This keeps atomic replacement
 inside the supported Rust API without expanding the third-party trust base.
 
+`ail-ops` adds the offline backup/verify/restore boundary without adding any
+external package. It reuses the locked `sha2` implementation, standard-library
+exclusive file locks, `create_new` writes, bounded directory traversal, and the
+existing semantic validators. Restore has no overwrite flag.
+
 The version store uses the ecosystem implementation instead of a handwritten
 SHA-256 primitive. `sha2` is exact-pinned to 0.11.0, its unused `alloc` and
 `oid` defaults are disabled, and `.cargo/config.toml` selects the documented
