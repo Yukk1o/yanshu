@@ -46,6 +46,14 @@
 | [analysis/effects.rs](/source/rust/crates/ail-analysis/src/effects.rs.txt) | export 调用闭包、高阶 callback 与 capability 校验 |
 | [analysis/review.rs](/source/rust/crates/ail-analysis/src/review.rs.txt) | 永久只读的 Rust 风格 semantic projection |
 
+## 内容寻址包与锁文件
+
+| 文件 | 看什么 |
+| --- | --- |
+| [package/model.rs](/source/rust/crates/ail-package/src/model.rs.txt) | source descriptor、artifact manifest 与 lock 数据模型 |
+| [package/parse.rs](/source/rust/crates/ail-package/src/parse.rs.txt) | exact-field、排序、边界、hash 和路径格式解析 |
+| [package/store.rs](/source/rust/crates/ail-package/src/store.rs.txt) | 递归打包、SHA-256 store、闭包重验、链接与 lock 比对 |
+
 Go/Rust 读者最值得先看的类型是 `Program`、`ExpressionKind`、`SchemaKind` 和 `Diagnostic`。它们定义语言可表示什么，比某个 CLI 命令更接近语义核心。
 
 ## 值与执行
@@ -106,9 +114,9 @@ Go/Rust 读者最值得先看的类型是 `Program`、`ExpressionKind`、`Schema
 
 ## Library Backend
 
-当前 `text@1` contract、类型检查、fuel 计费和结果归一化都在 [ail-runtime](/source/rust/crates/ail-runtime/src/lib.rs.txt)。Parser 只允许精确 `(text 1)`，示例在 [text.ail](/source/examples/libraries/text.ail.txt)。
+v0.9 的 `text@1` contract、类型和 fuel 模型在 [library/contract.rs](/source/rust/crates/ail-library/src/contract.rs.txt)，安全 Rust 实现在 [library/text.rs](/source/rust/crates/ail-library/src/text.rs.txt)，注册、形状校验与错误截断在 [library/registry.rs](/source/rust/crates/ail-library/src/registry.rs.txt)。解释器负责在调用前扣除 fuel，并对返回值继续执行 portable 边界校验。
 
-外部 crate provider、稳定 FFI、WASM/sidecar backend 尚未实现；路线见[标准库与 Library Backend](/language/standard-library)和[Rust 宿主与生态路线](/development/rust-roadmap)。
+自定义安全 Rust provider trait 已实现；稳定 FFI、动态加载、WASM/sidecar backend 尚未实现。路线见[标准库与 Library Backend](/language/standard-library)和[Rust 宿主与生态路线](/development/rust-roadmap)。
 
 ## Workspace 与安全策略
 

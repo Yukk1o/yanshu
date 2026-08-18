@@ -11,6 +11,7 @@ use ail_bundle::{load_bundle, seal_bundle_directory};
 use ail_conformance::run_manifest;
 use ail_diagnostic::{AilResult, Diagnostic};
 use ail_ops::{create_backup, restore_backup, verify_backup};
+use ail_package::{load_locked_package, lock_workspace, pack_workspace, verify_package};
 use ail_provider::{EvolutionProvider, EvolutionRequest, configured_live_provider};
 use ail_runtime::{ExecutionOptions, execute_export, json_to_value};
 use ail_service::run_service_suite;
@@ -19,9 +20,35 @@ use ail_syntax::load_program_source;
 use serde_json::{Value, json};
 
 fn main() -> ExitCode {
-    match run(env::args().skip(1).collect()) {
+    let mut arguments = env::args().skip(1).collect::<Vec<_>>();
+    let text_mode = match arguments.as_slice() {
+        [command, _, option]
+            if matches!(command.as_str(), "review" | "review-bundle") && option == "--text" =>
+        {
+            true
+        }
+        [command, _, _, option] if command == "package-review" && option == "--text" => true,
+        _ => false,
+    };
+    if text_mode {
+        arguments.pop();
+    }
+    match run(arguments) {
         Ok(document) => {
-            println!("{document}");
+            if text_mode {
+                if let Some(text) = document
+                    .get("review")
+                    .and_then(|review| review.get("text"))
+                    .and_then(Value::as_str)
+                {
+                    print!("{text}");
+                } else {
+                    println!("{document}");
+                    return ExitCode::FAILURE;
+                }
+            } else {
+                println!("{document}");
+            }
             if document.get("ok").and_then(Value::as_bool) == Some(false) {
                 ExitCode::FAILURE
             } else {
@@ -37,6 +64,71 @@ fn main() -> ExitCode {
 
 fn run(arguments: Vec<String>) -> AilResult<Value> {
     match arguments.as_slice() {
+        [command, workspace, store] if command == "package-pack" => {
+            let root_package = pack_workspace(workspace, store)?;
+            let manifest = verify_package(store, &root_package)?;
+            Ok(json!({
+                "ok": true,
+                "rootPackage": root_package,
+                "manifest": manifest.to_json(),
+            }))
+        }
+        [command, workspace, store, lock_path] if command == "package-lock" => {
+            let lock = lock_workspace(workspace, store, lock_path)?;
+            Ok(json!({
+                "ok": true,
+                "lockHash": lock.content_hash(),
+                "lock": lock.to_json(),
+            }))
+        }
+        [command, store, content_hash] if command == "package-verify" => {
+            let manifest = verify_package(store, content_hash)?;
+            Ok(json!({
+                "ok": true,
+                "contentHash": content_hash,
+                "manifest": manifest.to_json(),
+            }))
+        }
+        [command, store, lock_path] if command == "package-inspect" => {
+            let package = load_locked_package(store, lock_path)?;
+            let mut document = json!({
+                "ok": true,
+                "lockHash": package.lock_hash,
+                "lock": package.lock.to_json(),
+                "program": package.program.inspect_json(),
+            });
+            if package.program.version.to_string() == "4" {
+                let analysis = analyze_program(&package.program)?;
+                document["analysis"] = analysis.to_json();
+                document["review"] = render_rust_review(&package.program, &analysis).to_json();
+            }
+            Ok(document)
+        }
+        [command, store, lock_path] if command == "package-review" => {
+            let package = load_locked_package(store, lock_path)?;
+            let analysis = analyze_program(&package.program)?;
+            Ok(json!({
+                "ok": true,
+                "lockHash": package.lock_hash,
+                "analysis": analysis.to_json(),
+                "review": render_rust_review(&package.program, &analysis).to_json(),
+            }))
+        }
+        [command, store, lock_path, export, arguments_path] if command == "package-run" => {
+            let values = read_arguments_file(arguments_path, "package")?;
+            let package = load_locked_package(store, lock_path)?;
+            let result = execute_export(
+                &package.program,
+                export,
+                values,
+                ExecutionOptions::default(),
+            )?;
+            Ok(json!({
+                "ok": true,
+                "lockHash": package.lock_hash,
+                "result": result.to_json()?,
+            }))
+        }
         [command, root, entry, module_paths @ ..]
             if command == "seal-bundle" && !module_paths.is_empty() =>
         {
@@ -73,30 +165,7 @@ fn run(arguments: Vec<String>) -> AilResult<Value> {
             }))
         }
         [command, root, export, arguments_path] if command == "run-bundle" => {
-            let source = fs::read_to_string(arguments_path).map_err(|error| {
-                Diagnostic::new(
-                    "HOST_FILE_READ",
-                    "host could not read the bundle arguments file",
-                    json!({ "path": arguments_path, "kind": error.kind().to_string() }),
-                )
-            })?;
-            let document: Value = serde_json::from_str(&source).map_err(|error| {
-                Diagnostic::new(
-                    "CLI_ARGUMENTS_JSON",
-                    "bundle arguments file is not valid JSON",
-                    json!({ "line": error.line(), "column": error.column() }),
-                )
-            })?;
-            let arguments = document.as_array().ok_or_else(|| {
-                Diagnostic::simple(
-                    "CLI_ARGUMENTS_SHAPE",
-                    "bundle arguments file must contain one JSON array",
-                )
-            })?;
-            let values = arguments
-                .iter()
-                .map(json_to_value)
-                .collect::<AilResult<Vec<_>>>()?;
+            let values = read_arguments_file(arguments_path, "bundle")?;
             let bundle = load_bundle(root)?;
             let result =
                 execute_export(&bundle.program, export, values, ExecutionOptions::default())?;
@@ -188,13 +257,21 @@ fn run(arguments: Vec<String>) -> AilResult<Value> {
             "CLI_USAGE",
             "arguments do not match a supported Rust host command",
             json!({ "usage": [
+                "package-pack <workspace> <store>",
+                "package-lock <workspace> <store> <ail.lock.json>",
+                "package-verify <store> <content-hash>",
+                "package-inspect <store> <ail.lock.json>",
+                "package-review <store> <ail.lock.json> [--text]",
+                "package-run <store> <ail.lock.json> <export> <arguments.json>",
                 "seal-bundle <directory> <entry> <module.ail>...",
                 "inspect-bundle <directory>",
                 "review-bundle <directory>",
+                "review-bundle <directory> --text",
                 "run-bundle <directory> <export> <arguments.json>",
                 "check <program.ail>",
                 "inspect <program.ail>",
                 "review <program.ail>",
+                "review <program.ail> --text",
                 "conformance <manifest.json>",
                 "test-service <program.ail> <scenarios.json>",
                 "deploy-service <program.ail> <scenarios.json> <code-store>",
@@ -206,6 +283,30 @@ fn run(arguments: Vec<String>) -> AilResult<Value> {
             ] }),
         )),
     }
+}
+
+fn read_arguments_file(path: &str, artifact: &str) -> AilResult<Vec<ail_runtime::Value>> {
+    let source = fs::read_to_string(path).map_err(|error| {
+        Diagnostic::new(
+            "HOST_FILE_READ",
+            format!("host could not read the {artifact} arguments file"),
+            json!({ "path": path, "kind": error.kind().to_string() }),
+        )
+    })?;
+    let document: Value = serde_json::from_str(&source).map_err(|error| {
+        Diagnostic::new(
+            "CLI_ARGUMENTS_JSON",
+            format!("{artifact} arguments file is not valid JSON"),
+            json!({ "line": error.line(), "column": error.column() }),
+        )
+    })?;
+    let arguments = document.as_array().ok_or_else(|| {
+        Diagnostic::simple(
+            "CLI_ARGUMENTS_SHAPE",
+            format!("{artifact} arguments file must contain one JSON array"),
+        )
+    })?;
+    arguments.iter().map(json_to_value).collect()
 }
 
 fn deploy_service(program_path: &str, suite_path: &str, store_path: &str) -> AilResult<Value> {
@@ -380,6 +481,43 @@ mod tests {
         .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
         assert_eq!(executed["result"]["status"], "review");
         assert_eq!(executed["result"]["amount"], 1200);
+    }
+
+    #[test]
+    fn locks_reviews_and_runs_a_content_addressed_package() {
+        let temporary = TestDirectory::new();
+        let project_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let workspace = project_root.join("examples/packages/typed-expense");
+        let store = temporary.path.join("packages");
+        let lock_path = temporary.path.join("ail.lock.json");
+        let locked = run(vec![
+            "package-lock".to_owned(),
+            workspace.display().to_string(),
+            store.display().to_string(),
+            lock_path.display().to_string(),
+        ])
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(locked["lock"]["packages"].as_array().map(Vec::len), Some(2));
+        assert_eq!(locked["lock"]["capabilityClosure"], json!(["log"]));
+
+        let reviewed = run(vec![
+            "package-review".to_owned(),
+            store.display().to_string(),
+            lock_path.display().to_string(),
+        ])
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(reviewed["review"]["editable"], false);
+
+        let executed = run(vec![
+            "package-run".to_owned(),
+            store.display().to_string(),
+            lock_path.display().to_string(),
+            "evaluate".to_owned(),
+            workspace.join("arguments.json").display().to_string(),
+        ])
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(executed["result"]["status"], "review");
+        assert_eq!(executed["lockHash"], locked["lockHash"]);
     }
 
     #[test]

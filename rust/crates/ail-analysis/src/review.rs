@@ -155,19 +155,19 @@ fn render_definition(
             "fn {}({parameters}) -> {} {{\n    {}\n}}",
             rust_value_name(name),
             render_type(result_type),
-            render_expression(body, context)
+            render_expression(body, context, 1)
         )
     } else {
         format!(
             "let {}: {} = {};",
             rust_value_name(name),
             render_type(inferred_type),
-            render_expression(expression, context)
+            render_expression(expression, context, 0)
         )
     }
 }
 
-fn render_expression(expression: &Expression, context: &RenderContext) -> String {
+fn render_expression(expression: &Expression, context: &RenderContext, level: usize) -> String {
     match &expression.kind {
         ExpressionKind::Literal(datum) | ExpressionKind::Quote(datum) => datum.display(),
         ExpressionKind::Variable(name) => context.render_variable(name),
@@ -175,20 +175,15 @@ fn render_expression(expression: &Expression, context: &RenderContext) -> String
             condition,
             consequent,
             alternative,
-        } => format!(
-            "if {} {{ {} }} else {{ {} }}",
-            render_expression(condition, context),
-            render_expression(consequent, context),
-            render_expression(alternative, context)
-        ),
+        } => render_if(condition, consequent, alternative, context, level),
         ExpressionKind::And(items) => items
             .iter()
-            .map(|item| render_expression(item, context))
+            .map(|item| render_expression(item, context, level))
             .collect::<Vec<_>>()
             .join(" && "),
         ExpressionKind::Or(items) => items
             .iter()
-            .map(|item| render_expression(item, context))
+            .map(|item| render_expression(item, context, level))
             .collect::<Vec<_>>()
             .join(" || "),
         ExpressionKind::Cond {
@@ -198,39 +193,50 @@ fn render_expression(expression: &Expression, context: &RenderContext) -> String
             let mut rendered = String::new();
             for (index, clause) in clauses.iter().enumerate() {
                 rendered.push_str(if index == 0 { "if " } else { " else if " });
-                rendered.push_str(&render_expression(&clause.condition, context));
-                rendered.push_str(" { ");
-                rendered.push_str(&render_expression(&clause.expression, context));
-                rendered.push_str(" }");
+                rendered.push_str(&render_expression(&clause.condition, context, level));
+                rendered.push_str(" {\n");
+                rendered.push_str(&indent(level + 1));
+                rendered.push_str(&render_expression(&clause.expression, context, level + 1));
+                rendered.push('\n');
+                rendered.push_str(&indent(level));
+                rendered.push('}');
             }
-            rendered.push_str(" else { ");
-            rendered.push_str(&render_expression(alternative, context));
-            rendered.push_str(" }");
+            rendered.push_str(" else {\n");
+            rendered.push_str(&indent(level + 1));
+            rendered.push_str(&render_expression(alternative, context, level + 1));
+            rendered.push('\n');
+            rendered.push_str(&indent(level));
+            rendered.push('}');
             rendered
         }
-        ExpressionKind::Match { value, arms } => format!(
-            "match {} {{ {} }}",
-            render_expression(value, context),
-            arms.iter()
-                .map(|arm| format!(
-                    "{} => {},",
-                    render_pattern(&arm.pattern, context),
-                    render_expression(&arm.expression, context)
-                ))
-                .collect::<Vec<_>>()
-                .join(" ")
-        ),
+        ExpressionKind::Match { value, arms } => {
+            let mut rendered = format!("match {} {{\n", render_expression(value, context, level));
+            for arm in arms {
+                rendered.push_str(&indent(level + 1));
+                rendered.push_str(&render_pattern(&arm.pattern, context));
+                rendered.push_str(" => ");
+                rendered.push_str(&render_expression(&arm.expression, context, level + 1));
+                rendered.push_str(",\n");
+            }
+            rendered.push_str(&indent(level));
+            rendered.push('}');
+            rendered
+        }
         ExpressionKind::Let { bindings, body } => {
-            let mut rendered = String::from("{ ");
+            let mut rendered = String::from("{\n");
             for binding in bindings {
+                rendered.push_str(&indent(level + 1));
                 rendered.push_str(&format!(
-                    "let {} = {}; ",
+                    "let {} = {};\n",
                     rust_value_name(&binding.name),
-                    render_expression(&binding.expression, context)
+                    render_expression(&binding.expression, context, level + 1)
                 ));
             }
-            rendered.push_str(&render_expression(body, context));
-            rendered.push_str(" }");
+            rendered.push_str(&indent(level + 1));
+            rendered.push_str(&render_expression(body, context, level + 1));
+            rendered.push('\n');
+            rendered.push_str(&indent(level));
+            rendered.push('}');
             rendered
         }
         ExpressionKind::Function { parameters, body } => format!(
@@ -240,16 +246,22 @@ fn render_expression(expression: &Expression, context: &RenderContext) -> String
                 .map(|name| rust_value_name(name))
                 .collect::<Vec<_>>()
                 .join(", "),
-            render_expression(body, context)
+            render_expression(body, context, level)
         ),
-        ExpressionKind::Do(items) => format!(
-            "{{ {} }}",
-            items
-                .iter()
-                .map(|item| render_expression(item, context))
-                .collect::<Vec<_>>()
-                .join("; ")
-        ),
+        ExpressionKind::Do(items) => {
+            let mut rendered = String::from("{\n");
+            for (index, item) in items.iter().enumerate() {
+                rendered.push_str(&indent(level + 1));
+                rendered.push_str(&render_expression(item, context, level + 1));
+                if index + 1 < items.len() {
+                    rendered.push(';');
+                }
+                rendered.push('\n');
+            }
+            rendered.push_str(&indent(level));
+            rendered.push('}');
+            rendered
+        }
         ExpressionKind::Call { callee, arguments } => {
             if let ExpressionKind::Variable(name) = &callee.kind
                 && let Some((data_type, variant, fields)) = context.constructors.get(name)
@@ -264,7 +276,7 @@ fn render_expression(expression: &Expression, context: &RenderContext) -> String
                         .map(|(field, argument)| format!(
                             "{}: {}",
                             rust_value_name(field),
-                            render_expression(argument, context)
+                            render_expression(argument, context, level)
                         ))
                         .collect::<Vec<_>>()
                         .join(", ")
@@ -280,37 +292,66 @@ fn render_expression(expression: &Expression, context: &RenderContext) -> String
                 let operator = if operator == "=" { "==" } else { operator };
                 return format!(
                     "({} {operator} {})",
-                    render_expression(&arguments[0], context),
-                    render_expression(&arguments[1], context)
+                    render_expression(&arguments[0], context, level),
+                    render_expression(&arguments[1], context, level)
                 );
             }
             if callee.kind == ExpressionKind::Variable("map".to_owned())
                 && arguments.len().is_multiple_of(2)
             {
-                return format!(
-                    "map! {{ {} }}",
-                    arguments
-                        .chunks_exact(2)
-                        .map(|pair| format!(
-                            "{} => {}",
-                            render_expression(&pair[0], context),
-                            render_expression(&pair[1], context)
-                        ))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                );
+                let mut rendered = String::from("map! {\n");
+                for pair in arguments.chunks_exact(2) {
+                    rendered.push_str(&indent(level + 1));
+                    rendered.push_str(&render_expression(&pair[0], context, level + 1));
+                    rendered.push_str(" => ");
+                    rendered.push_str(&render_expression(&pair[1], context, level + 1));
+                    rendered.push_str(",\n");
+                }
+                rendered.push_str(&indent(level));
+                rendered.push('}');
+                return rendered;
             }
-            format!(
-                "{}({})",
-                render_expression(callee, context),
-                arguments
-                    .iter()
-                    .map(|argument| render_expression(argument, context))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
+            let rendered_callee = render_expression(callee, context, level);
+            let rendered_arguments = arguments
+                .iter()
+                .map(|argument| render_expression(argument, context, level + 1))
+                .collect::<Vec<_>>();
+            let inline = format!("{rendered_callee}({})", rendered_arguments.join(", "));
+            if inline.len() <= 88 && !inline.contains('\n') {
+                inline
+            } else {
+                format!(
+                    "{rendered_callee}(\n{}{}\n{})",
+                    indent(level + 1),
+                    rendered_arguments.join(&format!(",\n{}", indent(level + 1))),
+                    indent(level)
+                )
+            }
         }
     }
+}
+
+fn render_if(
+    condition: &Expression,
+    consequent: &Expression,
+    alternative: &Expression,
+    context: &RenderContext,
+    level: usize,
+) -> String {
+    format!(
+        "if {} {{\n{}{}\n{}}} else {{\n{}{}\n{}}}",
+        render_expression(condition, context, level),
+        indent(level + 1),
+        render_expression(consequent, context, level + 1),
+        indent(level),
+        indent(level + 1),
+        render_expression(alternative, context, level + 1),
+        indent(level),
+    )
+}
+
+fn indent(level: usize) -> String {
+    "    ".repeat(level)
 }
 
 fn render_pattern(pattern: &Pattern, context: &RenderContext) -> String {

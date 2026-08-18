@@ -40,6 +40,13 @@ pub enum Value {
     },
     Closure(usize),
     Primitive(Primitive),
+    LibraryFunction {
+        name: String,
+        library: String,
+        version: u16,
+        operation: String,
+        arity: usize,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -144,6 +151,7 @@ impl Value {
             Self::Schema { .. } => "Schema",
             Self::Closure(_) => "Function",
             Self::Primitive(_) => "Primitive",
+            Self::LibraryFunction { .. } => "LibraryFunction",
         }
     }
 
@@ -188,6 +196,7 @@ impl Value {
             Self::Schema { name, .. } => format!("#<schema:{name}>"),
             Self::Closure(_) => "#<function>".to_owned(),
             Self::Primitive(primitive) => format!("#<primitive:{}>", primitive.name),
+            Self::LibraryFunction { name, .. } => format!("#<library-function:{name}>"),
         }
     }
 

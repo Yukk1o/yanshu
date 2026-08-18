@@ -1,0 +1,15 @@
+{
+  "formatVersion": 1,
+  "name": "typed-expense-app",
+  "version": "1.0.0",
+  "entry": "typed-expense",
+  "modules": [
+    "app.ail"
+  ],
+  "dependencies": [
+    {
+      "name": "typed-policy-lib",
+      "path": "packages/typed-policy"
+    }
+  ]
+}

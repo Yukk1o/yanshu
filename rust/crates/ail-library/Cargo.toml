@@ -1,5 +1,5 @@
 [package]
-name = "ail-analysis"
+name = "ail-library"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,5 +11,5 @@ workspace = true
 
 [dependencies]
 ail-diagnostic = { path = "../ail-diagnostic", version = "=0.9.0" }
-ail-syntax = { path = "../ail-syntax", version = "=0.9.0" }
+num-bigint.workspace = true
 serde_json.workspace = true

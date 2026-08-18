@@ -4,9 +4,19 @@ mod graph;
 mod linker;
 mod manifest;
 
+use std::collections::BTreeMap;
+
+use ail_diagnostic::AilResult;
+use ail_syntax::Program;
+
 pub use manifest::{
     BundleManifest, LoadedBundle, ModuleManifest, load_bundle, seal_bundle_directory,
 };
+
+pub fn link_program_set(programs: &BTreeMap<String, Program>, entry: &str) -> AilResult<Program> {
+    let order = graph::dependency_order(programs, entry)?;
+    linker::link_programs(programs, &order, entry)
+}
 
 #[cfg(test)]
 mod tests {

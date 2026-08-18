@@ -67,7 +67,7 @@ v4 的 `bundle.json` 把排序后的 `capabilityClosure` 放进内容哈希。�
 
 ```powershell
 cargo run --locked -p ail-cli -- `
-  review-bundle examples\bundles\typed-expense
+  review-bundle examples\bundles\typed-expense --text
 ```
 
 核心输出类似：
@@ -94,6 +94,8 @@ fn typed_policy__decide(amount: Int) -> TypedPolicyDecision {
 - `editable` 永远是 `false`；
 - 文本不能交给 CLI 执行，也没有反向 Parser；
 - `.ail` AST、签名、Bundle 和测试仍是唯一真相。
+
+不加 `--text` 时，CLI 保留包含 analysis、node 与 `text` 字段的单行 JSON，供自动化工具消费；加上 `--text` 才直接打印带缩进的审查文本。两种模式不改变只读边界。
 
 “视图 + 结构化编辑”已明确推迟到 v0.10 之后。当前不会为了省一次 LLM 调用而提前建立不可靠的双向转换。
 

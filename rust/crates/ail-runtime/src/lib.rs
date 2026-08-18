@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 
 use ail_analysis::analyze_program;
 use ail_diagnostic::{AilResult, Diagnostic};
+use ail_library::{LibraryKey, LibraryRegistry, LibraryValue};
 use ail_syntax::{Expression, ExpressionKind, Program, TypeExpression};
 use num_bigint::BigInt;
 use num_traits::{One, Zero};
@@ -43,7 +44,15 @@ pub fn execute_export(
     arguments: Vec<Value>,
     options: ExecutionOptions,
 ) -> AilResult<Value> {
-    execute_export_internal(program, export_name, arguments, options, None)
+    let mut libraries = default_library_registry(options);
+    execute_export_internal(
+        program,
+        export_name,
+        arguments,
+        options,
+        None,
+        &mut libraries,
+    )
 }
 
 pub trait CapabilityHost {
@@ -58,7 +67,43 @@ pub fn execute_export_with_host(
     options: ExecutionOptions,
     host: &mut dyn CapabilityHost,
 ) -> AilResult<Value> {
-    execute_export_internal(program, export_name, arguments, options, Some(host))
+    let mut libraries = default_library_registry(options);
+    execute_export_internal(
+        program,
+        export_name,
+        arguments,
+        options,
+        Some(host),
+        &mut libraries,
+    )
+}
+
+pub fn execute_export_with_libraries(
+    program: &Program,
+    export_name: &str,
+    arguments: Vec<Value>,
+    options: ExecutionOptions,
+    libraries: &mut LibraryRegistry,
+) -> AilResult<Value> {
+    execute_export_internal(program, export_name, arguments, options, None, libraries)
+}
+
+pub fn execute_export_with_host_and_libraries(
+    program: &Program,
+    export_name: &str,
+    arguments: Vec<Value>,
+    options: ExecutionOptions,
+    host: &mut dyn CapabilityHost,
+    libraries: &mut LibraryRegistry,
+) -> AilResult<Value> {
+    execute_export_internal(
+        program,
+        export_name,
+        arguments,
+        options,
+        Some(host),
+        libraries,
+    )
 }
 
 fn execute_export_internal(
@@ -67,6 +112,7 @@ fn execute_export_internal(
     arguments: Vec<Value>,
     options: ExecutionOptions,
     host: Option<&mut dyn CapabilityHost>,
+    libraries: &mut LibraryRegistry,
 ) -> AilResult<Value> {
     if !program.imports.is_empty() {
         return Err(Diagnostic::new(
@@ -86,7 +132,7 @@ fn execute_export_internal(
         analyze_program(program)?;
         validate_export_arguments(program, export_name, &arguments)?;
     }
-    let mut runtime = Runtime::new(options, host);
+    let mut runtime = Runtime::new(options, host, libraries);
     let base_environment = runtime.new_environment(None);
     runtime.install_base_environment(program, base_environment);
     let module_environment = runtime.new_environment(Some(base_environment));
@@ -125,6 +171,14 @@ fn execute_export_internal(
         validate_export_result(program, export_name, &result)?;
     }
     Ok(result)
+}
+
+fn default_library_registry(options: ExecutionOptions) -> LibraryRegistry {
+    if options.reference_libraries {
+        LibraryRegistry::rust_standard()
+    } else {
+        LibraryRegistry::default()
+    }
 }
 
 fn validate_export_arguments(
@@ -221,7 +275,10 @@ fn value_matches_type(value: &Value, expected: &TypeExpression) -> bool {
         },
         TypeExpression::Function { .. } => matches!(
             value,
-            Value::Closure(_) | Value::Primitive(_) | Value::Constructor { .. }
+            Value::Closure(_)
+                | Value::Primitive(_)
+                | Value::Constructor { .. }
+                | Value::LibraryFunction { .. }
         ),
     }
 }
@@ -239,22 +296,26 @@ struct Closure {
     environment: usize,
 }
 
-struct Runtime<'host> {
+struct Runtime<'host, 'libraries> {
     budget: Budget,
-    options: ExecutionOptions,
     environments: Vec<Environment>,
     closures: Vec<Closure>,
     host: Option<&'host mut dyn CapabilityHost>,
+    libraries: &'libraries mut LibraryRegistry,
 }
 
-impl<'host> Runtime<'host> {
-    fn new(options: ExecutionOptions, host: Option<&'host mut dyn CapabilityHost>) -> Self {
+impl<'host, 'libraries> Runtime<'host, 'libraries> {
+    fn new(
+        options: ExecutionOptions,
+        host: Option<&'host mut dyn CapabilityHost>,
+        libraries: &'libraries mut LibraryRegistry,
+    ) -> Self {
         Self {
             budget: Budget::new(options.fuel, options.maximum_depth),
-            options,
             environments: Vec::new(),
             closures: Vec::new(),
             host,
+            libraries,
         }
     }
 
@@ -428,6 +489,18 @@ impl<'host> Runtime<'host> {
                 check_arity(primitive, arguments.len())?;
                 self.apply_primitive(primitive, arguments, depth)
             }
+            Value::LibraryFunction {
+                name,
+                library,
+                version,
+                operation,
+                arity,
+            } => {
+                if arity != arguments.len() {
+                    return Err(arity_error(&name, arity, Some(arity), arguments.len()));
+                }
+                self.apply_library(&library, version, &operation, &arguments)
+            }
             Value::Constructor {
                 type_name,
                 variant,
@@ -511,31 +584,23 @@ impl<'host> Runtime<'host> {
     }
 
     fn install_libraries(&mut self, program: &Program, environment: usize) -> AilResult<()> {
-        use PrimitiveOperation as Operation;
         for requirement in &program.libraries {
-            if !self.options.reference_libraries {
-                return Err(Diagnostic::new(
-                    "RUNTIME_LIBRARY_UNAVAILABLE",
-                    "host did not provide a declared library backend",
-                    json!({ "library": requirement.name, "version": requirement.version }),
-                ));
-            }
-            if requirement.name != "text" || requirement.version != 1 {
-                return Err(Diagnostic::new(
-                    "RUNTIME_LIBRARY_CONTRACT_MISSING",
-                    "parsed program refers to an unknown library contract",
-                    json!({ "library": requirement.name, "version": requirement.version }),
-                ));
-            }
-            let operations = [
-                primitive("text/length", 1, Some(1), Operation::TextLength),
-                primitive("text/starts-with?", 2, Some(2), Operation::TextStartsWith),
-                primitive("text/ends-with?", 2, Some(2), Operation::TextEndsWith),
-                primitive("text/contains?", 2, Some(2), Operation::TextContains),
-                primitive("text/replace", 3, Some(3), Operation::TextReplace),
-            ];
-            for item in operations {
-                self.define(environment, item.name.to_owned(), Value::Primitive(item));
+            let contract = self
+                .libraries
+                .require(&requirement.name, requirement.version)?;
+            for operation in contract.operations {
+                let name = format!("{}/{}", requirement.name, operation.name);
+                self.define(
+                    environment,
+                    name.clone(),
+                    Value::LibraryFunction {
+                        name,
+                        library: requirement.name.clone(),
+                        version: requirement.version,
+                        operation: operation.name.to_owned(),
+                        arity: operation.parameters.len(),
+                    },
+                );
             }
         }
         Ok(())
@@ -883,7 +948,10 @@ impl<'host> Runtime<'host> {
             | Operation::TextStartsWith
             | Operation::TextEndsWith
             | Operation::TextContains
-            | Operation::TextReplace => self.apply_text_primitive(primitive, &arguments),
+            | Operation::TextReplace => Err(Diagnostic::simple(
+                "RUNTIME_LIBRARY_CONTRACT_FAILURE",
+                "library primitive bypassed the registered backend boundary",
+            )),
         }
     }
 
@@ -900,50 +968,26 @@ impl<'host> Runtime<'host> {
         )
     }
 
-    fn apply_text_primitive(
+    fn apply_library(
         &mut self,
-        primitive: Primitive,
+        library: &str,
+        version: u16,
+        operation: &str,
         arguments: &[Value],
     ) -> AilResult<Value> {
-        let strings = arguments
+        let portable = arguments
             .iter()
-            .enumerate()
-            .map(|(index, value)| match value {
-                Value::String(text) => Ok(text.as_str()),
-                _ => Err(Diagnostic::new(
-                    "RUNTIME_TYPE",
-                    "library function received a value of the wrong type",
-                    json!({
-                        "operation": primitive.name,
-                        "index": index,
-                        "expected": "String",
-                        "actual": value.kind(),
-                    }),
-                )),
-            })
+            .map(value_to_library)
             .collect::<AilResult<Vec<_>>>()?;
-        let characters = strings
-            .iter()
-            .map(|value| value.chars().count())
-            .sum::<usize>();
-        let blocks = characters.saturating_add(63) / 64;
-        self.budget
-            .consume(1 + u64::try_from(blocks).unwrap_or(u64::MAX))?;
-        let result = match primitive.operation {
-            PrimitiveOperation::TextLength => Value::Int(strings[0].chars().count().into()),
-            PrimitiveOperation::TextStartsWith => Value::Bool(strings[0].starts_with(strings[1])),
-            PrimitiveOperation::TextEndsWith => Value::Bool(strings[0].ends_with(strings[1])),
-            PrimitiveOperation::TextContains => Value::Bool(strings[0].contains(strings[1])),
-            PrimitiveOperation::TextReplace => {
-                Value::String(strings[0].replace(strings[1], strings[2]))
-            }
-            _ => {
-                return Err(Diagnostic::simple(
-                    "RUNTIME_LIBRARY_CONTRACT_FAILURE",
-                    "library operation is not part of its contract",
-                ));
-            }
-        };
+        let fuel = self
+            .libraries
+            .call_fuel(library, version, operation, &portable)?;
+        self.budget.consume(fuel)?;
+        let invocation = self
+            .libraries
+            .invoke(library, version, operation, &portable)?;
+        debug_assert_eq!(fuel, invocation.fuel);
+        let result = library_to_value(&invocation.value);
         self.normalize_library_result(&result, 0, &mut 0)
     }
 
@@ -1016,6 +1060,89 @@ impl<'host> Runtime<'host> {
                 json!({ "kind": value.kind() }),
             )),
         }
+    }
+}
+
+fn value_to_library(value: &Value) -> AilResult<LibraryValue> {
+    match value {
+        Value::Nil => Ok(LibraryValue::Nil),
+        Value::Bool(value) => Ok(LibraryValue::Bool(*value)),
+        Value::Int(value) => Ok(LibraryValue::Int(value.clone())),
+        Value::String(value) => Ok(LibraryValue::String(value.clone())),
+        Value::Symbol(value) => Ok(LibraryValue::Symbol(value.clone())),
+        Value::List(values) => values
+            .iter()
+            .map(value_to_library)
+            .collect::<AilResult<Vec<_>>>()
+            .map(LibraryValue::List),
+        Value::Map(values) => {
+            let mut portable = BTreeMap::new();
+            for (key, item) in values {
+                portable.insert(
+                    match key {
+                        MapKey::String(value) => LibraryKey::String(value.clone()),
+                        MapKey::Symbol(value) => LibraryKey::Symbol(value.clone()),
+                    },
+                    value_to_library(item)?,
+                );
+            }
+            Ok(LibraryValue::Map(portable))
+        }
+        Value::Ok(value) => Ok(LibraryValue::Ok(Box::new(value_to_library(value)?))),
+        Value::Err(value) => Ok(LibraryValue::Err(Box::new(value_to_library(value)?))),
+        Value::Variant {
+            type_name,
+            variant,
+            fields,
+        } => Ok(LibraryValue::Variant {
+            type_name: type_name.clone(),
+            variant: variant.clone(),
+            fields: fields
+                .iter()
+                .map(value_to_library)
+                .collect::<AilResult<Vec<_>>>()?,
+        }),
+        _ => Err(Diagnostic::new(
+            "RUNTIME_LIBRARY_INVALID_ARGUMENT",
+            "library boundary accepts only immutable portable guest data",
+            json!({ "kind": value.kind() }),
+        )),
+    }
+}
+
+fn library_to_value(value: &LibraryValue) -> Value {
+    match value {
+        LibraryValue::Nil => Value::Nil,
+        LibraryValue::Bool(value) => Value::Bool(*value),
+        LibraryValue::Int(value) => Value::Int(value.clone()),
+        LibraryValue::String(value) => Value::String(value.clone()),
+        LibraryValue::Symbol(value) => Value::Symbol(value.clone()),
+        LibraryValue::List(values) => Value::List(values.iter().map(library_to_value).collect()),
+        LibraryValue::Map(values) => Value::Map(
+            values
+                .iter()
+                .map(|(key, item)| {
+                    (
+                        match key {
+                            LibraryKey::String(value) => MapKey::String(value.clone()),
+                            LibraryKey::Symbol(value) => MapKey::Symbol(value.clone()),
+                        },
+                        library_to_value(item),
+                    )
+                })
+                .collect(),
+        ),
+        LibraryValue::Ok(value) => Value::Ok(Box::new(library_to_value(value))),
+        LibraryValue::Err(value) => Value::Err(Box::new(library_to_value(value))),
+        LibraryValue::Variant {
+            type_name,
+            variant,
+            fields,
+        } => Value::Variant {
+            type_name: type_name.clone(),
+            variant: variant.clone(),
+            fields: fields.iter().map(library_to_value).collect(),
+        },
     }
 }
 
@@ -1228,14 +1355,21 @@ fn string_map<const N: usize>(entries: [(&str, Value); N]) -> Value {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::{
+        collections::BTreeMap,
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+    };
 
     use ail_diagnostic::{AilResult, Diagnostic};
+    use ail_library::{BackendDescriptor, LibraryBackend, LibraryRegistry, LibraryValue};
     use ail_syntax::load_program_source;
     use num_bigint::BigInt;
     use serde_json::json;
 
-    use super::{ExecutionOptions, MapKey, Value, execute_export};
+    use super::{ExecutionOptions, MapKey, Value, execute_export, execute_export_with_libraries};
 
     const CORE: &str = include_str!("../../../../conformance/v1/programs/core.ail");
     const SCHEMA: &str = include_str!("../../../../conformance/v1/programs/schema.ail");
@@ -1394,6 +1528,77 @@ mod tests {
             },
         ));
         assert_eq!(unavailable.code, "RUNTIME_LIBRARY_UNAVAILABLE");
+    }
+
+    struct CountingTextBackend {
+        calls: Arc<AtomicUsize>,
+    }
+
+    impl LibraryBackend for CountingTextBackend {
+        fn descriptor(&self) -> BackendDescriptor {
+            BackendDescriptor {
+                provider: "test-rust".to_owned(),
+                library: "text".to_owned(),
+                version: 1,
+                operations: vec![
+                    "contains?".to_owned(),
+                    "ends-with?".to_owned(),
+                    "length".to_owned(),
+                    "replace".to_owned(),
+                    "starts-with?".to_owned(),
+                ],
+            }
+        }
+
+        fn invoke(
+            &mut self,
+            operation: &str,
+            _arguments: &[LibraryValue],
+        ) -> AilResult<LibraryValue> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            if operation == "length" {
+                Ok(LibraryValue::Int(99.into()))
+            } else {
+                Err(Diagnostic::simple(
+                    "TEST_UNEXPECTED_OPERATION",
+                    "test backend received an unexpected operation",
+                ))
+            }
+        }
+    }
+
+    #[test]
+    fn supports_explicit_rust_backends_and_charges_fuel_before_invocation() {
+        let program = require(load_program_source(LIBRARY));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut registry = LibraryRegistry::default();
+        require(registry.register(Box::new(CountingTextBackend {
+            calls: Arc::clone(&calls),
+        })));
+        assert_eq!(
+            require(execute_export_with_libraries(
+                &program,
+                "measure",
+                vec![Value::String("value".to_owned())],
+                ExecutionOptions::default(),
+                &mut registry,
+            )),
+            Value::Int(99.into())
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        let exhausted = require_error(execute_export_with_libraries(
+            &program,
+            "measure",
+            vec![Value::String("x".repeat(10_000))],
+            ExecutionOptions {
+                fuel: 50,
+                ..ExecutionOptions::default()
+            },
+            &mut registry,
+        ));
+        assert_eq!(exhausted.code, "RUNTIME_FUEL_EXHAUSTED");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
     }
 
     #[test]

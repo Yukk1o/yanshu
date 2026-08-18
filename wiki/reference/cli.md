@@ -23,6 +23,35 @@ check <program.ail>
 inspect <program.ail>
 ```
 
+## 内容寻址包与锁文件
+
+```powershell
+$workspace = "examples\packages\typed-expense"
+$store = ".runtime\v0.9-package-store"
+
+cargo run --quiet --locked -p ail-cli -- `
+  package-lock $workspace $store "$workspace\ail.lock.json"
+
+cargo run --quiet --locked -p ail-cli -- `
+  package-review $store "$workspace\ail.lock.json" --text
+
+cargo run --quiet --locked -p ail-cli -- `
+  package-run $store "$workspace\ail.lock.json" evaluate "$workspace\arguments.json"
+```
+
+完整命令：
+
+```text
+package-pack <workspace> <store>
+package-lock <workspace> <store> <ail.lock.json>
+package-verify <store> <content-hash>
+package-inspect <store> <ail.lock.json>
+package-review <store> <ail.lock.json> [--text]
+package-run <store> <ail.lock.json> <export> <arguments.json>
+```
+
+`package-lock` 递归打包根 workspace 内的源码依赖，将 artifact 写入 `store/sha256/<hash>`，再生成规范 lock。inspect/review/run 只读取 lock 与 store，不读取开发依赖路径。`--text` 只改变审查展示格式；不加时保留 JSON。
+
 ## 密封、检查与运行 Bundle
 
 ```powershell
@@ -50,7 +79,7 @@ run-bundle <directory> <export> <arguments.json>
 
 `seal-bundle` 解析全部模块、验证依赖图，并写入 name-sorted `bundle.json`；返回的 `bundleHash` 是规范 manifest 的 SHA-256。`inspect-bundle` 和 `run-bundle` 都会重新读取并校验每个 module hash，不信任已有 manifest。参数文件必须是 JSON 数组。
 
-`review-bundle` 对完整链接程序运行类型/效果分析，再返回 `rust-readonly-v1` 文本和带 source span 的 machine-readable nodes。它不会写回源码。单文件也可以使用 `review <program.ail>`。
+`review-bundle` 对完整链接程序运行类型/效果分析，再返回 `rust-readonly-v1` 文本和带 source span 的 machine-readable nodes。它不会写回源码。单文件也可以使用 `review <program.ail>`；两者末尾加 `--text` 可直接打印带缩进文本。
 
 ## `conformance`
 

@@ -37,7 +37,7 @@ AI-Evolve 把“语言可调用的 API”与“宿主怎样实现它”分开。
 (text/replace "AI language" "AI" "机器")
 ```
 
-可运行示例见 [examples/libraries/text.ail](/source/examples/libraries/text.ail.txt)，当前契约安装见 [ail-runtime](/source/rust/crates/ail-runtime/src/lib.rs.txt)。
+可运行示例见 [examples/libraries/text.ail](/source/examples/libraries/text.ail.txt)。v0.9 的契约在独立 [ail-library contract](/source/rust/crates/ail-library/src/contract.rs.txt)，Rust 实现在 [text backend](/source/rust/crates/ail-library/src/text.rs.txt)，解释器只负责注册和调用边界。
 
 ## 为什么不直接导入 Cargo crate
 
@@ -67,6 +67,23 @@ contract 固定可见表面；backend 不能增加 guest 可调用函数、改�
 | 是否接触宿主状态 | 不应 | 通过窄接口显式接触 |
 | 测试策略 | 相同输入必须得到 portable 结果 | 使用固定时钟、内存事务等 adapter |
 
+## v0.9 Rust Backend 已实现
+
+宿主可以实现安全 Rust trait，并显式注册：
+
+```rust
+trait LibraryBackend: Send {
+    fn descriptor(&self) -> BackendDescriptor;
+    fn invoke(
+        &mut self,
+        operation: &str,
+        arguments: &[LibraryValue],
+    ) -> AilResult<LibraryValue>;
+}
+```
+
+`RustTextBackend` 已经替代解释器内部的 text 特判。注册时 operation 集合必须与可信 contract 精确相等；provider 名只进入脱敏诊断，guest 看不到也不能选择。
+
 ## backend 的验证责任
 
 宿主调用 backend 前后都要检查：
@@ -74,21 +91,21 @@ contract 固定可见表面；backend 不能增加 guest 可调用函数、改�
 1. 程序确实声明了精确库版本；
 2. 操作属于 contract；
 3. 参数数量和类型正确；
-4. 调用消耗约定 fuel；
+4. 在进入 backend **之前**扣除 contract 计算的 fuel；不足时 backend 一次也不会被调用；
 5. 结果满足节点数、深度、字符串长度和 portable value 限制；
 6. backend 失败转换成稳定诊断，而不是暴露宿主堆栈。
 
 ## crates.io、FFI 与第三方生态路线
 
 ::: warning 当前状态
-当前 Rust workspace 的 crate 设置为 `publish = false`，尚未发布到 crates.io；项目也没有稳定 C ABI、动态库 ABI 或可供任意进程加载的 FFI。不要把路线建议当成现有能力。
+`ail-library` 和可替换 Rust Backend 已落地，但 workspace 仍是 `publish = false`；项目没有稳定 C ABI、动态库 ABI 或让 guest 任意加载 crates.io 的入口。
 :::
 
 合理的生态顺序是：
 
 1. 先稳定 `Program`、portable `Value`、诊断和 Library Contract 的版本语义；
 2. 把可复用 Rust crate 分层发布，明确 MSRV、feature 和安全策略；
-3. 为 Library Backend 定义版本化 provider trait 与 conformance suite；
+3. 扩充 Library Backend conformance suite 与更多确定性 contract；
 4. 如需 FFI，使用显式句柄、长度字段、错误对象和 BigInt 编码，不直接暴露 Rust enum 布局；
 5. 外部 backend 先运行在可终止的进程或 WASM 沙箱，再考虑进程内动态加载；
 6. 所有新库都必须有预算、确定性、portable value 和供应链审查。

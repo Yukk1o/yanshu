@@ -77,6 +77,8 @@ $env:AI_EVOLVE_SHADOW_MAX_CONCURRENCY="4"
 cargo run --locked -p ail-cli -- test-service examples\expenses\service.ail examples\expenses\scenarios.json
 cargo run --locked -p ail-cli -- inspect-bundle examples\bundles\expense-approval
 cargo run --locked -p ail-cli -- run-bundle examples\bundles\expense-approval evaluate examples\bundles\expense-approval\arguments.json
+cargo run --locked -p ail-cli -- package-lock examples\packages\typed-expense .runtime\v0.9-package-store examples\packages\typed-expense\ail.lock.json
+cargo run --locked -p ail-cli -- package-review .runtime\v0.9-package-store examples\packages\typed-expense\ail.lock.json --text
 ```
 
 Rust conformance 固定 v1 兼容语义。需要额外运行冻结旧前端的差分证据时，显式启用；它会按需使用仓库私有工具链，不修改系统 PATH：
@@ -203,6 +205,13 @@ v4 要求导出函数签名和 typed data field，并用独立的 `export-types`
 和 effect 的 Rust 风格只读审查视图。示例见
 [typed-expense Bundle](examples/bundles/typed-expense)，契约见
 [v0.8 规格](docs/spec-v0.8.md)。
+
+v0.9 增加内容寻址 package store 与精确 `ail.lock.json`：开发路径只在打包时使用，锁定加载只读取
+`store/sha256/<hash>` 并重新验证 manifest、源码、依赖、类型和 capability 闭包。`ail-library`
+同时把 `text@1` 迁到可替换 Rust Backend；contract 在进入 backend 前校验类型并扣除 fuel，guest
+不能选择 crate、provider、动态库或任意宿主函数。完整示例见
+[typed-expense package](examples/packages/typed-expense)，契约见
+[v0.9 规格](docs/spec-v0.9.md)。
 
 Web 程序可声明静态 `route`，处理器接收请求 Map 并返回结构化响应 Map。所有版本
 都只有 `#f` 为假。

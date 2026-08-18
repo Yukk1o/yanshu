@@ -1,0 +1,28 @@
+; A package artifact contains source modules and hashes, never an install script.
+(program
+  (name typed-policy)
+  (version 4)
+  (capabilities log)
+
+  (data decision
+    (approved (amount integer))
+    (review (amount integer) (reason string))
+    (rejected (reason string)))
+  (export-types decision)
+
+  (def audit
+    (fn (decision)
+      (do
+        (log decision)
+        decision)))
+
+  (signature decide (fn (integer) decision))
+  (def decide
+    (fn (amount)
+      (audit
+        (cond
+          ((< amount 0) (rejected "negative amount"))
+          ((>= amount 1000) (review amount "manual approval required"))
+          (else (approved amount))))))
+
+  (export decide approved review rejected))

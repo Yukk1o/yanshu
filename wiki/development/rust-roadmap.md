@@ -3,7 +3,7 @@
 这一页只讨论 `.ail` 语言的当前 Rust 实现和后续生态，不定义语言本身。语法、Value、Schema、route、diagnostic 与版本格式应先由语言规格固定，宿主只能实现这些契约。
 
 ::: warning 当前定位
-Rust v0.8 已形成通用语言的安全内核：能独立运行 v1-v4 语言、密封多模块 Bundle、类型/效果门禁、只读审查、业务场景、版本库、provider 和本地 JSON HTTP server，但尚未生产就绪。workspace 的 crate 仍是 `publish = false`，没有稳定 FFI，也没有 crates.io 发布物。
+Rust v0.9 已形成通用语言的安全内核：能独立运行 v1-v4 语言、密封多模块 Bundle、类型/效果门禁、只读审查、内容寻址包/锁文件、Rust Library Backend、业务场景、版本库、provider 和本地 JSON HTTP server，但尚未生产就绪。workspace 的 crate 仍是 `publish = false`，没有稳定 FFI，也没有 crates.io 发布物。
 :::
 
 ## 当前实现快照
@@ -12,24 +12,24 @@ Rust v0.8 已形成通用语言的安全内核：能独立运行 v1-v4 语言、
 | --- | --- | --- |
 | 语言前端 | 有边界 UTF-8 Reader、v1-v4 AST / Parser、imports、typed 封闭数据、模式匹配、signature、版本门控、source span、JSON inspect | 泛型声明、稳定表达式 AST ID、格式化器 |
 | 静态分析 | 内部类型推断、export 输入/输出门禁、传递 effect/capability 闭包、已知高阶 callback、失败关闭未知 callback | effect polymorphism、增量分析、LSP |
-| 模块制品 | 精确 manifest、module/root SHA-256、依赖图、命名空间链接、format v2 capability closure | 签名、远端 registry、lockfile、跨包解析 |
+| 模块/包制品 | Bundle manifest、module/root SHA-256、依赖图、命名空间链接、package store、精确 lock、锁定 capability closure | 签名、远端 registry、离线镜像导入 |
 | 审查 | Rust 风格只读投影、definition ID、模块/span/type/effect nodes | 结构化编辑明确推迟到 v0.10 之后 |
-| 运行时 | BigInt、闭包、递归、短路条件、有界集合、Result、enum/union Schema、校验成本、`text@1` | 独立内存配额、字节码/WASM、可安全取消的进程级 deadline |
+| 运行时 | BigInt、闭包、递归、短路条件、有界集合、Result、enum/union Schema、校验成本、可替换 Rust `text@1` Backend | 独立内存配额、字节码/WASM、可安全取消的进程级 deadline |
 | 业务服务 | route dispatch、response 校验、事务内存/文件 KV、固定时钟与日志、11 个场景 | 正式数据库 adapter、migration、连接池 |
 | 版本库 | SHA-256、不可变校验、metadata、active、events、原子写、跨进程锁、回滚 | 签名、远端 artifact store、生产审批流 |
 | 运维快照 | 离线 service lock、逐文件 SHA-256 manifest、版本/KV 语义校验、拒绝覆盖恢复 | 加密、签名、异地复制、定期恢复演练 |
 | Provider | OpenAI Responses、DeepSeek Chat、HTTPS-only、拒绝 redirect、大小/超时、密钥零化 | 真实凭据 smoke gate、速率/费用治理 |
 | HTTP / rollout | Axum/Tokio、loopback-only、可选 Bearer、宿主 request ID、每请求固定 hash、脱敏 JSONL、隔离影子采样 | TLS、细粒度授权、进程沙箱、指标/trace/告警、canary、静态网页 |
-| 工具 | check/inspect、conformance、test/deploy/evolve service、version lifecycle | 包管理、LSP、formatter、结构化 AST diff、操作型 rollback CLI |
+| 工具 | check/inspect/review、Bundle、package pack/lock/verify/review/run、conformance、test/deploy/evolve service、version lifecycle | LSP、formatter、结构化 AST diff、操作型 rollback CLI |
 
 ## Crate 边界
 
 ```text
 ail-diagnostic
       ▲
-ail-syntax ─► ail-analysis ─┬─► ail-runtime ─► ail-service ─► ail-http ─► ail-server
-      │                     └─► ail-bundle ────────────────► ail-cli
-      └──────────────────────────────▲
+ail-library ─┬─► ail-syntax ─► ail-analysis ─┬─► ail-runtime ─► ail-service ─► ail-http ─► ail-server
+             │                               └─► ail-bundle ─┬─► ail-package ─► ail-cli
+             └───────────────────────────────────────────────┘
                     │              │
                     │              └──────► ail-store
                     │                         ▲
@@ -74,7 +74,7 @@ Rust 实现不能为了方便静默改变：
 
 ## crates.io 发布路线
 
-当前 workspace 使用统一版本 `0.8.0`，但 `publish = false`。发布前至少需要：
+当前 workspace 使用统一版本 `0.9.0`，但 `publish = false`。发布前至少需要：
 
 1. 明确哪些 crate 是公共 API，哪些只服务于 binary；
 2. 把 `Program`、`Value`、`Diagnostic`、Library Contract 的兼容性写入 semver 策略；
@@ -93,7 +93,7 @@ Rust 实现不能为了方便静默改变：
 
 ## Library Backend 路线
 
-当前只有内置 `text@1`。下一步不应让 guest 直接写 Cargo dependency，而应抽出稳定 provider contract：
+v0.9 已把 `text@1` 从解释器硬编码迁到独立 `ail-library` crate，并提供安全 provider contract：
 
 ```rust
 trait LibraryBackend {
@@ -117,7 +117,7 @@ trait LibraryBackend {
 - backend error 到稳定 diagnostic 的映射；
 - conformance fixture 与恶意 backend 测试。
 
-外部 backend 优先使用可终止的 sidecar 或 WASM，进程内动态加载放在安全模型稳定之后。
+自定义安全 Rust backend 可以显式注册；guest 仍不能指定 provider。外部 backend 优先使用可终止的 sidecar 或 WASM，进程内动态加载放在安全模型稳定之后。
 
 ## FFI 路线
 

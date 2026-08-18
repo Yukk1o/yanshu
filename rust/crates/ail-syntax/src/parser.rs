@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 
 use ail_diagnostic::{AilResult, Diagnostic};
+use ail_library::trusted_contract;
 use num_bigint::BigInt;
 use num_traits::{ToPrimitive, Zero};
 use serde_json::json;
@@ -254,7 +255,7 @@ pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
                         )
                         .at(declaration.span));
                     }
-                    if library_name != "text" || library_version != 1 {
+                    if trusted_contract(&library_name, library_version).is_none() {
                         return Err(Diagnostic::new(
                             "PROGRAM_UNKNOWN_LIBRARY",
                             "program declares an unsupported library contract",

@@ -10,14 +10,15 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-ail-analysis = { path = "../ail-analysis", version = "=0.8.0" }
-ail-bundle = { path = "../ail-bundle", version = "=0.8.0" }
-ail-conformance = { path = "../ail-conformance", version = "=0.8.0" }
-ail-diagnostic = { path = "../ail-diagnostic", version = "=0.8.0" }
-ail-ops = { path = "../ail-ops", version = "=0.8.0" }
-ail-provider = { path = "../ail-provider", version = "=0.8.0" }
-ail-runtime = { path = "../ail-runtime", version = "=0.8.0" }
-ail-service = { path = "../ail-service", version = "=0.8.0" }
-ail-store = { path = "../ail-store", version = "=0.8.0" }
-ail-syntax = { path = "../ail-syntax", version = "=0.8.0" }
+ail-analysis = { path = "../ail-analysis", version = "=0.9.0" }
+ail-bundle = { path = "../ail-bundle", version = "=0.9.0" }
+ail-conformance = { path = "../ail-conformance", version = "=0.9.0" }
+ail-diagnostic = { path = "../ail-diagnostic", version = "=0.9.0" }
+ail-ops = { path = "../ail-ops", version = "=0.9.0" }
+ail-package = { path = "../ail-package", version = "=0.9.0" }
+ail-provider = { path = "../ail-provider", version = "=0.9.0" }
+ail-runtime = { path = "../ail-runtime", version = "=0.9.0" }
+ail-service = { path = "../ail-service", version = "=0.9.0" }
+ail-store = { path = "../ail-store", version = "=0.9.0" }
+ail-syntax = { path = "../ail-syntax", version = "=0.9.0" }
 serde_json.workspace = true

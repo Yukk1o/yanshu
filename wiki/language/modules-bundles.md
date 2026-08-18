@@ -95,3 +95,5 @@ cargo run --locked -p ail-cli -- run-bundle examples\bundles\expense-approval ev
 ```
 
 示例结果是 `status = review`，并同时返回金额与人工审批原因。实现入口见 [ail-bundle manifest](/source/rust/crates/ail-bundle/src/manifest.rs.txt)、[依赖图](/source/rust/crates/ail-bundle/src/graph.rs.txt)和[链接器](/source/rust/crates/ail-bundle/src/linker.rs.txt)。
+
+需要跨 Bundle/工程复用时，继续阅读[内容寻址包与锁文件](/language/packages-lockfiles)。package 复用 Bundle 的链接与类型/效果门禁，但额外锁住整个 package 依赖闭包。
