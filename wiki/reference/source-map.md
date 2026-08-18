@@ -25,7 +25,7 @@ ail-conformance → ail-cli` 阅读；这些 crate 与 Racket oracle 共享同�
 | [runtime/lib.rs](/source/rust/crates/ail-runtime/src/lib.rs.txt) | arena 环境、闭包、求值、primitive、Library Backend |
 | [runtime/schema.rs](/source/rust/crates/ail-runtime/src/schema.rs.txt) | Schema normalization 和 issues |
 | [conformance/lib.rs](/source/rust/crates/ail-conformance/src/lib.rs.txt) | 共享 manifest runner 和 portable codec |
-| [service/lib.rs](/source/rust/crates/ail-service/src/lib.rs.txt) | capability trait、路由、事务 KV 与场景 runner |
+| [service/lib.rs](/source/rust/crates/ail-service/src/lib.rs.txt) | capability trait、路由、事务/文件 KV 与场景 runner |
 | [cli/main.rs](/source/rust/crates/ail-cli/src/main.rs.txt) | Rust check / inspect / conformance CLI |
 
 ## 语言内核

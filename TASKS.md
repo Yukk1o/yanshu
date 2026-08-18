@@ -65,5 +65,6 @@
 - [x] Implement the bounded Rust evaluator and `text@1` Library Backend.
 - [x] Run Racket and Rust against the same canonical fixtures with zero differences.
 - [x] Migrate Schema, capability traits, transactional memory KV, and service scenarios.
-- [ ] Migrate persisted KV, HTTP, version store, and provider layers in stages.
+- [x] Migrate compatible persisted KV with durable same-directory replacement.
+- [ ] Migrate HTTP, version store, and provider layers in stages.
 - [ ] Pass dependency audit, shadow-traffic, rollback, observability, and release gates.

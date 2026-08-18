@@ -172,10 +172,13 @@ Schema validator 与 `text@1`。`ail-conformance` 读取与 Racket 相同的 17-
 
 ## 阶段 3：Schema + service + capabilities
 
+::: tip 已落地
 Schema AST、normalization、issue 顺序和 fuel 已在 Rust 中落地。`ail-service` 也已用显式
 capability trait 接入 route、request/response、内存事务 KV、固定 clock/log，并通过现有
-11 个任务场景；Racket/Rust service report canonical JSON 零差异。本阶段剩余文件 KV
-兼容与异常回滚语料。
+11 个任务场景；Racket/Rust service report canonical JSON 零差异。文件 KV 已兼容旧版
+`version: 1` JSON，采用同目录临时文件、`sync_all` 与标准库 `rename` 替换，并验证重启恢复、
+损坏文件拒绝、失败不提交内存状态及临时文件清理。
+:::
 
 加入 Schema AST/validator、route、request/response 和 capability traits。先使用内存 KV adapter 重放 11 个任务场景，再实现与旧文件格式兼容的 adapter。
 

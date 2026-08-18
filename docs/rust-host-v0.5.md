@@ -13,8 +13,9 @@ language host. It does not switch production traffic yet.
   normalization, and the `text@1` reference backend;
 - `ail-conformance`: the same v1 JSON manifest/fixture codec used by Racket;
 - `ail-service`: explicit capability trait, route dispatch, response validation,
-  transactional memory KV, fixed clock/log adapters, and scenario runner;
-- `ail-cli`: Rust `check`, `inspect`, and `conformance` commands.
+  transactional memory KV, Racket-compatible persisted file KV, fixed clock/log
+  adapters, and scenario runner;
+- `ail-cli`: Rust `check`, `inspect`, `conformance`, and `test-service` commands.
 
 The runtime represents environments and closures with checked arena indices.
 It does not use pointers, native ABI shims, or unsafe self-referential structs.
@@ -41,7 +42,9 @@ The current corpus covers:
 - integers beyond `i64`, arithmetic errors, arity, fuel, and depth machinery;
 - Schema defaults and stable ordered issues;
 - exact-version Library Backend availability, types, fuel cost, Unicode text
-  semantics, and result normalization.
+  semantics, and result normalization;
+- persisted KV reopen, invalid-document rejection, failed-write rollback, and
+  temporary-file cleanup.
 
 Supply-chain checks are separate because they may update the RustSec database:
 
@@ -56,8 +59,8 @@ internal unsafe implementations remain inventoried according to
 ## Not switched yet
 
 Racket remains the default service and semantic oracle. Rust now hosts the
-in-memory capability/service boundary, but not persisted KV, the HTTP server,
-version storage, or LLM providers. Those layers will migrate only after their
-host-neutral scenario and file-format fixtures exist. The cutover sequence
-remains: CI differential, offline replay, shadow execution, canary, then
-explicit default-host change.
+capability/service boundary and compatible local persistence, but not the HTTP
+server, version storage, or LLM providers. Those layers will migrate only after
+their host-neutral scenario and file-format fixtures exist. The cutover
+sequence remains: CI differential, offline replay, shadow execution, canary,
+then explicit default-host change.

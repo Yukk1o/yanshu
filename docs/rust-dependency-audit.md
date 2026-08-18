@@ -20,7 +20,7 @@ exception.
 
 ## Current graph
 
-The frontend has two direct external dependencies:
+The current Rust host has two direct external dependencies:
 
 | Dependency | Purpose | Decision |
 | --- | --- | --- |
@@ -36,6 +36,13 @@ MIT, Apache-2.0, and Unlicense.
 The initial prototype briefly enabled Serde's derive feature. It was removed
 before this checkpoint because the frontend does not need it, eliminating the
 `proc-macro2`, `quote`, `syn`, `unicode-ident`, and `serde_derive` build chain.
+
+The persisted KV implementation also evaluated `atomic-write-file 0.3.1`.
+It was removed before this checkpoint because it added twelve packages to the
+locked graph. The host instead creates a same-directory file with
+`create_new`, writes and `sync_all`s it, then uses the safe standard-library
+`rename` operation to replace the prior snapshot. This keeps atomic replacement
+inside the supported Rust API without expanding the third-party trust base.
 
 ## Unsafe inventory status
 
