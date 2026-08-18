@@ -8,7 +8,9 @@
 main (v0.1.0)
   └─ develop
        ├─ feature/web-backend-runtime      已合并为 v0.2 检查点
-       └─ feature/business-backend-v0.3   当前功能线
+       ├─ feature/business-backend-v0.3   已合并
+       ├─ feature/library-backend-v0.4    已合并
+       └─ feature/rust-host-v0.5          当前实现线
 ```
 
 - `main`：始终是经过测试、可发布的检查点，并用 `v*` annotated tag 标记；
@@ -37,7 +39,7 @@ git switch develop
 git switch -c feature/example
 
 # 修改 + 测试
-.\scripts\test.ps1
+cargo test --workspace --locked
 
 git add <明确文件>
 git commit -m "feat(...): ..."
@@ -55,17 +57,16 @@ git merge --no-ff feature/example
 1. 候选通过可信 suite；
 2. 人类按[AI 改动审查清单](/evolution/review-ai-change)核对业务意图与权限；
 3. 把明确改动带入 feature branch；
-4. 运行完整 `scripts/test.ps1`；
+4. 运行 Rust workspace 测试、语言 conformance 与相关业务 suite；
 5. 创建可读 commit 并正常 review / merge。
 
 候选 metadata 和模型 notes 不能代替 commit message，也不能代替代码审查。
 
 ## 不进入 Git 的内容
 
-- `.toolchains/`；
 - `.runtime/`；
 - `.env` 与任何 API key；
-- Racket `compiled/`、build output；
+- Rust `target/`、Wiki build output；
 - `wiki/node_modules/`、VitePress cache/dist、npm cache；
 - Wiki 构建时生成的 `public/source/` 快照。
 

@@ -8,7 +8,7 @@ Wiki 使用成熟的开源静态文档框架 [VitePress](https://vitepress.dev/)
 - npm；
 - 在仓库的 `wiki/` 目录运行命令。
 
-当前锁定稳定版 VitePress 1.6.4。依赖、cache 和构建结果都留在 `wiki/`，与 Racket 项目根隔离。
+当前锁定稳定版 VitePress 1.6.4。依赖、cache 和构建结果都留在 `wiki/`，与 Rust workspace 隔离。
 
 ## 安装与本地开发
 
@@ -59,7 +59,6 @@ npm run sync-source
 - `.env` 或密钥；
 - `.runtime/` 数据与 observations；
 - `.git/`；
-- `.toolchains/`；
 - npm cache / node_modules。
 
 ## 内容与导航

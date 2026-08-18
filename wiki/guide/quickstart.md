@@ -1,134 +1,158 @@
 # 5 分钟上手
 
-这一页只做两件事：先跑测试，再打开真实任务后端。命令均在仓库根目录执行。
+这一页只使用当前 Rust 工具链：先解析一个 `.ail` 程序，再运行完整业务场景，最后启动活动版本 JSON API。所有命令都在仓库根目录执行。
 
-## 1. 准备 Racket 工具链
+## 1. 检查工具链
 
-```powershell
-.\scripts\bootstrap.ps1
-```
-
-脚本下载官方 Minimal Racket 9.3 Windows x64 压缩包、核对 SHA-256，再放进项目私有的 `.toolchains/`。它不会修改系统 PATH。已经存在工具链时只打印版本。
-
-脚本源码：[scripts/bootstrap.ps1](/source/scripts/bootstrap.ps1.txt)。
-
-## 2. 运行全部测试
+workspace 声明的最低 Rust 版本是 1.97：
 
 ```powershell
-.\scripts\test.ps1
+rustc --version
+cargo --version
 ```
 
-成功时会看到 Racket 测试汇总。测试覆盖语言、Schema、事务 KV、HTTP 边界、版本门禁、候选演化和任务业务场景。测试入口：[tests/all.rkt](/source/tests/all.rkt.txt)。
+如果本机尚未安装 Rust，请通过官方 rustup 安装符合版本要求的稳定工具链。
 
-## 3. 启动任务服务
+## 2. 让 Parser 读取程序
 
 ```powershell
-.\scripts\serve-tasks.ps1
+cargo run --quiet --locked -p ail-cli -- `
+  inspect examples\discount\v2.ail
 ```
 
-启动脚本会先：
-
-1. 解析 [service.ail](/source/examples/tasks/service.ail.txt)；
-2. 运行 [11 个有状态场景](/source/examples/tasks/scenarios.json.txt)；
-3. 只有全通过才注册并晋升这个版本；
-4. 从活动版本启动 HTTP 服务。
-
-出现类似下面的 JSON 后，打开 <http://127.0.0.1:8080/>：
+输出是 JSON，不是简单回显：
 
 ```json
 {
   "ok": true,
-  "event": "listening",
-  "host": "127.0.0.1",
-  "port": 8080
+  "program": {
+    "name": "discount",
+    "version": 1,
+    "exports": ["calculate-discount"]
+  }
 }
 ```
 
-网页中的新增、编辑、完成和删除都会经过 `.ail` 路由与事务 KV，不是前端假数据。按 `Ctrl+C` 停止服务，再启动后任务仍会从 `.runtime/tasks/store.json` 恢复。
+`program` 字段包含 Parser 看到的 AST 摘要。命令实现见 [ail-cli](/source/rust/crates/ail-cli/src/main.rs.txt)，示例源码见 [discount/v2.ail](/source/examples/discount/v2.ail.txt)。
 
-::: tip 修改端口
-```powershell
-$env:AI_EVOLVE_HTTP_PORT = "9000"
-.\scripts\serve-tasks.ps1
-```
-随后打开 `http://127.0.0.1:9000/`。
-:::
+## 3. 运行语言与业务验证
 
-## 4. 不经过网页调用 API
-
-保持服务运行，另开 PowerShell：
+先运行 Rust workspace 测试：
 
 ```powershell
-$body = @{
-  id = "read-wiki"
-  title = "读懂 AI-Evolve"
-} | ConvertTo-Json
-
-Invoke-RestMethod `
-  -Method Post `
-  -Uri http://127.0.0.1:8080/tasks `
-  -ContentType application/json `
-  -Body $body
-
-Invoke-RestMethod -Uri http://127.0.0.1:8080/tasks
+cargo test --workspace --locked
 ```
 
-`completed` 没有传入时，Schema 会补成 `false`；`createdAt` 和 `updatedAt` 来自宿主注入的 `clock` 能力。
-
-要验证 Rust HTTP 主机，可改用：
+再运行可移植语言语料与任务业务场景：
 
 ```powershell
-# 终端 1
+cargo run --quiet --locked -p ail-cli -- `
+  conformance conformance\v1\manifest.json
+
+cargo run --quiet --locked -p ail-cli -- `
+  test-service `
+  examples\tasks\service.ail `
+  examples\tasks\scenarios.json
+```
+
+第二个命令使用内存事务和固定时钟顺序执行 11 个场景，包括非法 body、默认值、创建、重复冲突、列表、读取、更新、删除与删除后 404。任何场景失败时输出 `ok: false` 并返回非零退出码。
+
+## 4. 启动活动版本 API
+
+```powershell
 .\scripts\serve-tasks-rust.ps1
+```
 
-# 终端 2
+脚本会先运行完整场景，只有全部通过才注册并晋升版本；随后在 `127.0.0.1:8081` 启动 JSON API。另开 PowerShell：
+
+```powershell
 Invoke-RestMethod http://127.0.0.1:8081/tasks
 ```
 
-该脚本同样先执行 11 个场景，再由 Rust CLI 注册并晋升活动版本。当前 Rust 入口只提供
-JSON API；可视化网页仍使用第 3 步的 Racket 同源服务。
+当前入口提供 JSON API，不包含静态网页。按 `Ctrl+C` 停止服务；任务数据与代码版本分别位于 `.runtime/tasks-rust/store.json` 和 `.runtime/tasks-rust/code`。
 
-## 5. 看懂第一个命令
+## 5. 验证 Bearer 认证
 
-直接检查一个纯函数程序：
+server 始终拒绝非 loopback 地址。要启用本地单 token 认证，终端 1 安全输入 token：
 
 ```powershell
-.\.toolchains\racket\Racket.exe src\cli.rkt `
-  check examples\discount\v2.ail
+$secret = Read-Host "Local Bearer token" -AsSecureString
+$env:AI_EVOLVE_HTTP_BEARER_TOKEN = `
+  [Net.NetworkCredential]::new("", $secret).Password
+.\scripts\serve-tasks-rust.ps1
 ```
 
-输出的 `program` 不是简单回显，而是 Parser 生成的结构化 AST。这相当于：
+环境变量不会跨 PowerShell 进程共享，所以终端 2 必须再次输入**同一个** token：
 
-```go
-source := readFile("v2.ail")
-program, err := Parse(Read(source))
-json.NewEncoder(os.Stdout).Encode(program)
+```powershell
+$secret = Read-Host "Same local Bearer token" -AsSecureString
+$env:AI_EVOLVE_HTTP_BEARER_TOKEN = `
+  [Net.NetworkCredential]::new("", $secret).Password
+$headers = @{ Authorization = "Bearer $env:AI_EVOLVE_HTTP_BEARER_TOKEN" }
+$response = Invoke-WebRequest `
+  -Headers $headers `
+  -Uri http://127.0.0.1:8081/tasks
+$response.StatusCode
+$response.Headers["X-Request-Id"]
 ```
 
-或者 Rust：
+不设置 `AI_EVOLVE_HTTP_BEARER_TOKEN` 时认证关闭，但 loopback 限制仍然存在。客户端传入的 `x-request-id`、`authorization`、`cookie`、`proxy-authorization` 和 `x-api-key` 不会进入 `.ail` request headers。
 
-```rust
-let source = fs::read_to_string("v2.ail")?;
-let program: Program = parse(read(&source)?)?;
-println!("{}", serde_json::to_string(&program)?);
+## 6. 查看脱敏观测
+
+每个已识别请求会追加一条 JSONL：
+
+```powershell
+Get-Content .runtime\tasks-rust\store.json.observations.jsonl
 ```
 
-下一步建议阅读[架构导览](/guide/architecture)，不需要先啃完整 Lisp 语法。
+记录只包含 schema version、时间、宿主 request ID、method、status、duration、handler、固定到该请求的源码 hash 和 error code。它不记录 path、query、headers、body、凭据或内部诊断。
+
+这是本地审计证据，尚不包含轮转、保留期、聚合、告警或生产访问控制。
+
+## 7. 修改一个候选但不直接上线
+
+先复制示例到自己的工作分支并修改，再检查和运行完整 suite：
+
+```powershell
+cargo run --quiet --locked -p ail-cli -- `
+  check examples\tasks\service.ail
+
+cargo run --quiet --locked -p ail-cli -- `
+  test-service `
+  examples\tasks\service.ail `
+  examples\tasks\scenarios.json
+```
+
+需要进入版本库时使用 `deploy-service`；它只会在场景全通过后晋升：
+
+```powershell
+cargo run --quiet --locked -p ail-cli -- `
+  deploy-service `
+  examples\tasks\service.ail `
+  examples\tasks\scenarios.json `
+  .runtime\tasks-rust\code
+```
+
+AI 候选应先执行不带 `--promote` 的 `evolve-service`，让候选保持 staged；详见 [AI 演化生命周期](/evolution/lifecycle)。
 
 ## 常见问题
 
-### `Racket.exe` 不存在
+### Rust 版本过低
 
-重新运行 `scripts/bootstrap.ps1`。网络下载失败时，检查是否能访问 Racket 官方下载地址；不要把 `.toolchains/` 提交到 Git。
+确认 `rustc --version` 满足 workspace 的 `rust-version = "1.97"`，再更新稳定工具链。
 
-### 8080 端口被占用
+### 8081 端口被占用
 
-按上面的方式设置 `AI_EVOLVE_HTTP_PORT`，例如 9000。
+```powershell
+$env:AI_EVOLVE_RUST_HTTP_BIND = "127.0.0.1:9001"
+.\scripts\serve-tasks-rust.ps1
+```
 
-### 服务启动前就退出
+### 服务启动前退出
 
-查看 CLI 返回的结构化错误。最常见原因是 `.ail` 解析失败或 11 个业务场景未全部通过；这是部署门禁在工作，而不是 HTTP 服务器随机崩溃。
+查看 CLI 的结构化 JSON。最常见原因是 `.ail` 解析失败、11 个业务场景未全部通过、活动版本损坏或 bind 地址不是 loopback。
 
 ### 如何运行这份 Wiki
 
-见[维护 Wiki](/development/wiki)。Wiki 使用独立 `wiki/package.json`，不会把 Node 依赖混进 Racket 工具链。
+见[维护 Wiki](/development/wiki)。Wiki 的 Node 依赖隔离在 `wiki/`，不会混入 Rust workspace。

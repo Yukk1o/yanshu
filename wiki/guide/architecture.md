@@ -1,13 +1,13 @@
-# 架构导览
+# 实现架构
 
-如果你熟悉 Go / Rust，可以把项目看成“一个加载受限 IR 的应用服务器”。Lisp 只是输入格式，真正的系统由几个边界清楚的宿主模块构成。
+语言语义与宿主实现是两层。`.ail` 定义可移植 Program、Value、Schema、route 和 capability；当前 Rust workspace 负责把这些语义实现成受限解释器、业务服务与版本控制面。
 
 ## 总体数据流
 
 ```text
                  不可信输入
        ┌─────────────────────────────┐
-       │ .ail source   LLM proposal  │
+       │ .ail source   LLM candidate │
        └──────┬──────────────┬───────┘
               │              │
               ▼              │
@@ -27,114 +27,117 @@
               │ pinned per request
               ▼
  HTTP → route → handler → validated response → commit transaction
-
-     上面所有箭头的规则都由可信宿主掌握
 ```
 
-## 四层结构
+所有箭头的规则都由可信宿主掌握；候选和请求始终作为数据进入。
 
-### 1. 语言前端：Reader、Parser、AST
+## Crate 分层
 
-- [reader.rkt](/source/src/reader.rkt.txt) 只接受一个 S 表达式，关闭 `#lang`、reader extension、图结构等宿主逃逸入口，并限制节点数和深度。
-- [parser.rkt](/source/src/parser.rkt.txt) 验证顶层声明、能力、Schema、路由、导出和表达式，生成显式 AST。
-- [ast.rkt](/source/src/ast.rkt.txt) 定义 `ail-program`、`ail-route`、Schema 节点与表达式节点。
+| crate | 责任 | 关键边界 |
+| --- | --- | --- |
+| `ail-diagnostic` | 稳定 code/message/details 与私有 source span | 公共错误不泄漏内部诊断 |
+| `ail-syntax` | 有边界 Reader、Parser、AST、Schema/route 元数据 | 未知语法在执行前拒绝 |
+| `ail-runtime` | Value、词法环境、闭包、primitive、Schema、fuel/depth | 只执行自己的 AST |
+| `ail-conformance` | 读取 canonical fixture 并生成报告 | 固定 portable value / diagnostic |
+| `ail-service` | route dispatch、capability、事务 KV、响应验证 | 合法响应后才提交 |
+| `ail-store` | 内容寻址版本、metadata、active、事件、锁 | 不可变源码与原子指针 |
+| `ail-ops` | 离线备份、manifest 校验、拒绝覆盖恢复、service lease | 运行服务与维护操作互斥 |
+| `ail-rollout` | 影子采样、候选加载、结果比较与脱敏观测 | 候选副作用与主响应隔离 |
+| `ail-provider` | 离线/在线候选、HTTPS、响应验证、密钥保护 | provider 只能返回候选 |
+| `ail-http` | Axum/Tokio HTTP、限制、认证、观测 | transport 与 guest 分离 |
+| `ail-server` | 独立本地 server 进程 | loopback-only 与优雅关闭 |
+| `ail-cli` | check、conformance、部署与演化命令 | JSON 输出与退出码 |
 
-Rust 迁移时，这层很自然地对应：
+源码入口见[源码地图](/reference/source-map)。
+
+## 1. 语言前端
+
+[Reader](/source/rust/crates/ail-syntax/src/reader.rs.txt) 读取 UTF-8 源码并限制节点与嵌套；[Parser](/source/rust/crates/ail-syntax/src/parser.rs.txt) 检查顶层声明、名称唯一性、capability、library、Schema、route、export 和表达式；[AST](/source/rust/crates/ail-syntax/src/ast.rs.txt) 保存显式结构与 source span。
 
 ```rust
-enum Expr {
-    Lit(Value),
-    Var(Symbol),
-    If(Box<Expr>, Box<Expr>, Box<Expr>),
-    Let(Vec<Binding>, Box<Expr>),
-    Fn(Vec<Symbol>, Box<Expr>),
-    Do(Vec<Expr>),
-    Call(Box<Expr>, Vec<Expr>),
+pub enum ExpressionKind {
+    Literal(/* ... */),
+    Variable(/* ... */),
+    If(/* ... */),
+    Let(/* ... */),
+    Function(/* ... */),
+    Do(/* ... */),
+    Call(/* ... */),
 }
 ```
 
-关键点是：项目不调用 Racket `eval`。客体源码只会变成自己的 AST，因而迁移宿主不会改变 `.ail` 语义。
+宿主不执行候选原生代码，只解释已验证 AST。第一方 crate 统一 `#![forbid(unsafe_code)]`。
 
-### 2. 执行内核：解释器与能力
+## 2. 执行内核
 
-[runtime.rkt](/source/src/runtime.rkt.txt) 是树遍历解释器。`evaluate` 对 AST 做模式分派，`apply-callable` 只接受项目闭包或可信 primitive。
+[ail-runtime](/source/rust/crates/ail-runtime/src/lib.rs.txt) 以树遍历方式执行表达式。环境和闭包通过受检查 arena index 表示，不使用自引用裸指针。
 
 执行上下文包含：
 
-- `fuel`：每次求值和调用都会消耗；
-- `maximum-depth`：限制调用深度；
-- `logger`：只有声明 `log` 时才安装；
-- capability bindings：KV、clock 由宿主按需注入。
+- `Budget { fuel, maximum_depth }`；
+- 词法环境与闭包 arena；
+- 按声明安装的 primitive；
+- 宿主注入的 capability；
+- 精确版本的 Library Backend。
 
-Go 版本可以把 capability 写成窄接口，Rust 版本可以写成 trait：
+`Value::Int` 使用 `BigInt`，不能静默改成 `i64`。Closure 和 Primitive 不能越过 portable JSON 边界。
 
-```rust
-trait Clock { fn now_ms(&self) -> BigInt; }
-trait KvTx {
-    fn get(&self, key: &str) -> Option<Value>;
-    fn put(&mut self, key: String, value: Value);
-}
-```
+## 3. Service 与事务
 
-客体代码拿不到文件句柄、socket、数据库连接或 API key，只能调用声明并注入的 primitive。
-
-纯标准库走另一条同样受控的路径：
+[ail-service](/source/rust/crates/ail-service/src/lib.rs.txt) 把 Web 请求转换为不可变 guest Map，按 method + path 匹配静态 route，再调用导出的 handler。
 
 ```text
-.ail portable API
-      ↓
-versioned library contract（函数、类型、fuel）
-      ↓
-host-selected backend（Racket / Rust / Python sidecar / WASM）
+store snapshot → working copy → handler
+                                │
+                 ┌──────────────┴──────────────┐
+                 │合法 response               │诊断 / 非法 response
+                 ▼                             ▼
+               commit                       discard
 ```
 
-v0.4 的 `text@1` 已验证替换边界。契约由
-[library-contract.rkt](/source/src/library-contract.rkt.txt) 持有，参考实现位于
-[library-backend.rkt](/source/src/library-backend.rkt.txt)；backend 不能自行增加函数、
-改变类型或降低计费。未来 Rust crate 放在最后一层，guest 不直接操作 Cargo。
+service 层验证 response 必须只有 `status`、`headers`、`body`，并限制 status、header 与 JSON 输出。guest 看不到真实数据库连接或文件句柄，只能调用窄 `kv` capability。
 
-### 3. Web 宿主：HTTP、路由、事务
+## 4. 版本与演化控制面
 
-- [http-server.rkt](/source/src/http-server.rkt.txt) 负责 TCP、HTTP 解析、请求限制、超时、JSON 和静态测试页面；
-- [service.rkt](/source/src/service.rkt.txt) 匹配路由、构造 guest request、执行 handler、验证 response；
-- [kv-store.rkt](/source/src/kv-store.rkt.txt) 为每个请求建立 working copy，只有 handler 正常完成且响应合法才提交；
-- [schema.rkt](/source/src/schema.rkt.txt) 递归校验输入并生成稳定 issue 列表。
+[ail-store](/source/rust/crates/ail-store/src/lib.rs.txt) 使用源码 SHA-256 作为版本 ID，保存不可变源码、metadata、active pointer 和事件。写入使用原子文件替换、跨进程锁和有界锁等待。[ail-ops](/source/rust/crates/ail-ops/src/lib.rs.txt) 在这一层之上提供离线快照、逐文件 hash 与语义校验，以及拒绝覆盖的恢复；server 持有 service lease，避免运行与维护并发。
 
-这正像传统后端的 adapter / application / repository 分层，只是业务 application layer 由 `.ail` 表达。
+[ail-provider](/source/rust/crates/ail-provider/src/lib.rs.txt) 负责请求 LLM 候选，但 provider 返回后仍要重新经过 Parser 和完整 suite。[ail-cli](/source/rust/crates/ail-cli/src/main.rs.txt) 的 `evolve-service` 默认不晋升；`--promote` 也不能绕过失败报告。
 
-### 4. 演化控制面：Provider、测试、版本
+[ail-rollout](/source/rust/crates/ail-rollout/src/lib.rs.txt) 让尚未晋升的固定候选读取请求前 KV 快照，并在后台内存 store 中执行。比较器只把状态、handler、错误码与差异类别交给观测层；候选写入、guest log、响应内容和内容摘要全部丢弃。
 
-- [evolver.rkt](/source/src/evolver.rkt.txt) 把当前源码和观察发送给 LLM，严格验证其 JSON 响应；
-- [evolution-loop.rkt](/source/src/evolution-loop.rkt.txt) 解析候选、运行测试、注册版本，并在宿主明确要求时尝试晋升；
-- [service-test-suite.rkt](/source/src/service-test-suite.rkt.txt) 顺序运行有状态 Web 场景；
-- [version-store.rkt](/source/src/version-store.rkt.txt) 按 SHA-256 保存不可变源码和元数据，维护 active 指针和事件日志；
-- [service-deployment.rkt](/source/src/service-deployment.rkt.txt) 组合服务部署、活动版本加载和服务演化。
+## 5. HTTP 请求路径
 
-## 请求路径：一步一步
+1. `ail-server` 只接受 loopback bind，可选检查 Bearer。
+2. `ail-http` 生成宿主持有的 request ID 并过滤敏感 header。
+3. program loader 读取一次 active hash、验证源码完整性并解析 Program。
+4. service 匹配 route，为请求创建 KV working copy。
+5. runtime 在 fuel/depth 内执行 handler。
+6. service 验证 response；成功才提交事务。
+7. HTTP adapter 编码响应，并写入使用同一 request ID 和固定版本 hash 的脱敏观测。
+8. 若请求被采样，后台候选使用第 4 步之前抓取的 KV 快照执行并写入独立影子观测。
 
-1. HTTP host 接收连接，并在大小和截止时间内解析请求。
-2. program loader 读取一次 active source，解析成 `ail-program`；这个对象固定到请求结束。
-3. service 层按 method + path 匹配静态 route，提取 `:id` 等参数。
-4. 如果程序声明 `kv`，宿主创建请求级事务和四个 KV primitive。
-5. 解释器以 request Map 作为唯一参数调用导出的 handler。
-6. service 层检查返回值必须恰有 `status`、`headers`、`body`，并验证 header 与 JSON 序列化。
-7. 没有诊断时提交事务；异常、fuel 耗尽、超时或非法响应都丢弃事务。
-8. host 写回 HTTP 响应，并只记录脱敏观察。
+请求开始后即使 active pointer 改变，当前请求仍使用已加载 Program；新请求才会看到新版本。
 
-## 信任边界
+## 6. Library Backend 边界
 
-| 可信内核 | 不可信数据 |
-| --- | --- |
-| Reader / Parser / AST 规则 | `.ail` 源码 |
-| 解释器、fuel、深度与超时 | LLM 返回的候选 |
-| capability dispatcher | HTTP 请求 body |
-| 测试集与比较逻辑 | 候选写下的说明 |
-| 版本库与晋升策略 | 运行观察中的业务失败 |
+```text
+.ail `(libraries (text 1))`
+          ↓
+contract：函数 / 类型 / fuel / portable result
+          ↓
+host-selected trusted backend
+```
 
-这就是项目与“让模型在运行时直接 rewrite 当前函数”的本质差异。动态生成仍然存在，但新代码先成为不可变候选制品，不会原地污染活动版本。
+当前 `text@1` 参考 backend 位于 `ail-runtime`。guest 不能指定 crates.io package 或动态库。crate 发布、外部 provider trait、WASM/进程隔离和 FFI 都属于后续生态路线，见[标准库](/language/standard-library)与[Rust 宿主路线](/development/rust-roadmap)。
 
-## 为什么先用 Racket、再迁 Rust
+## 当前边界
 
-Racket 让 Reader、S 表达式和树遍历解释器能够快速验证；Rust 更适合长期宿主，因为它能提供清晰的数据类型、错误枚举、资源所有权、并发模型和单二进制部署。迁移边界从一开始就被写进[设计文档](/source/docs/design.md.txt)：`.ail`、JSON 测试、诊断代码、版本元数据和一致性测试保持不变，只替换宿主实现。
+当前实现适合语言与本地业务原型验证，还不是公网生产平台：
 
-具体模块映射见 [Rust 迁移路线](/development/rust-roadmap)。
+- Bearer 是可选单 token，不是细粒度授权；
+- file KV 不是正式数据库；
+- blocking guest 工作尚无可安全取消的进程级墙钟隔离；
+- JSONL 尚无生产轮转、保留、聚合和告警；
+- 没有静态网页交付、TLS、正式数据库 PITR、异地备份或自动 canary。
+
+这些缺口必须在宿主层解决，不能把责任推给 `.ail` 程序或模型。

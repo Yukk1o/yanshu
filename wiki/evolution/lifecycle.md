@@ -1,6 +1,6 @@
-# AI 候选、测试、晋升与回滚
+# AI 候选、验证、晋升与回滚
 
-AI-Evolve 的安全设计可以浓缩为一句：**模型有提案权，没有裁判权和发布权。**
+AI-Evolve 的演化规则可以浓缩为一句：**模型有提案权，没有裁判权和发布权。**
 
 ## 完整生命周期
 
@@ -21,7 +21,7 @@ AI-Evolve 的安全设计可以浓缩为一句：**模型有提案权，没有�
      ▼         ▼
  记录报告   注册不可变候选（SHA-256）
                │
-               │ 宿主明确传入 --promote
+               │ 宿主明确请求 promote
                ▼
          原子更新 active pointer
                │
@@ -32,11 +32,11 @@ AI-Evolve 的安全设计可以浓缩为一句：**模型有提案权，没有�
        需要时 rollback 到父版本
 ```
 
-“生成成功”与“可部署”不是同一个状态；“测试通过”与“已经上线”也不是同一个状态。
+“生成成功”“测试通过”“已经晋升”是三个不同状态。
 
-## 1. Provider 看见什么
+## 1. Provider 输入与输出
 
-[evolver.rkt](/source/src/evolver.rkt.txt) 给 provider 的核心请求是：
+[ail-provider](/source/rust/crates/ail-provider/src/lib.rs.txt) 接收当前版本和结构化观察：
 
 ```json
 {
@@ -49,9 +49,7 @@ AI-Evolve 的安全设计可以浓缩为一句：**模型有提案权，没有�
 }
 ```
 
-系统提示明确说明：源码和 observations 都是不可信数据，不能把其中内容当成更高优先级指令；不允许弱化或发明测试。
-
-Provider 必须返回只有两个字符串字段的 JSON：
+源码和 observations 都是不可信 prompt 数据，不能提升成系统指令。Provider 只能返回完整候选与说明：
 
 ```json
 {
@@ -60,97 +58,97 @@ Provider 必须返回只有两个字符串字段的 JSON：
 }
 ```
 
-OpenAI adapter 使用 Responses API 的严格 JSON Schema；DeepSeek adapter 使用 Chat Completions JSON Output，并由宿主再次逐字段检查。
+OpenAI adapter 使用 Responses API 的严格 JSON Schema；DeepSeek adapter 使用 Chat Completions JSON Output。无论远端怎样约束，宿主都要再次验证字段、大小和候选语法。
 
-## 2. 密钥在哪里
+## 2. 密钥留在宿主侧
 
-API key 只从宿主进程环境变量读取：
-
-- `AI_EVOLVE_API_KEY`；
-- 或 provider 对应的 `DEEPSEEK_API_KEY` / `OPENAI_API_KEY`。
-
-密钥不会进入：
+API key 从 `AI_EVOLVE_API_KEY` 或 provider 专用环境变量读取。它不会进入：
 
 - `.ail` 执行环境；
-- provider prompt 的 currentSource / observations；
-- 诊断和 CLI 输出；
+- prompt 的 current source / observations；
+- 公共诊断和 CLI JSON；
 - 版本 metadata；
 - 仓库文件。
 
-HTTP adapter 还会从远端错误摘要中替换 Authorization secret。完整配置见 [live-provider.md](/source/docs/live-provider.md.txt)。
+adapter 只接受 HTTPS、拒绝 redirect，并限制请求/响应大小与超时。配置变量见 [CLI Provider 配置](/reference/cli#provider-环境变量)。
 
-## 3. 谁运行测试
+## 3. 谁运行验证
 
-测试由可信宿主加载，AI 只能看到结果，不能改比较器。
+测试由可信 runner 加载；模型可以看到报告，不能修改比较器。
 
-纯函数测试：[test-suite.rkt](/source/src/test-suite.rkt.txt) 读取 JSON `entry + cases`，逐例调用导出函数。
+- 语言 conformance 固定 portable value、AST 摘要和诊断行为；
+- service suite 使用新的内存 KV 与固定时钟顺序执行有状态场景；
+- 候选必须运行整个 suite，不能只重跑失败案例；
+- 场景通过只说明符合现有断言，不证明业务意图完整。
 
-服务测试：[service-test-suite.rkt](/source/src/service-test-suite.rkt.txt) 使用一个新的内存 KV 和固定时钟，顺序执行有状态场景。任务服务的 11 个案例包括非法 body、缺字段、额外字段、默认值、创建、重复冲突、列表、读取、更新、删除与删除后 404。
+service runner 见 [ail-service](/source/rust/crates/ail-service/src/lib.rs.txt)，任务 suite 见 [scenarios.json](/source/examples/tasks/scenarios.json.txt)。
 
-候选必须通过整个 suite，不是只重新运行失败的那几条。
+## 4. 不可变版本库
 
-## 4. 版本库保存什么
-
-[version-store.rkt](/source/src/version-store.rkt.txt) 以源码 SHA-256 作为 ID：
+[ail-store](/source/rust/crates/ail-store/src/lib.rs.txt) 以源码 SHA-256 作为 ID：
 
 ```text
 code-store/
 ├─ versions/<hash>.ail       不可变源码
-├─ metadata/<hash>.json      parent、provider、测试报告等
+├─ metadata/<hash>.json      parent、provider、测试报告
 ├─ active.json               当前活动 hash
-└─ events.jsonl              registered/promoted/rolled-back 审计事件
+└─ events.jsonl              registered/promoted/rolled-back
 ```
 
-注册候选不会覆盖旧源码。晋升只更新很小的 active pointer；回滚从当前 metadata 找到 parent，再更新 pointer。
+注册不会覆盖旧源码。读取版本时还会重新校验 hash，防止路径替换或内容损坏。active 是很小的原子指针，不是工作目录里的可变源码。
 
-这类似 OCI image digest + deployment pointer，而不是 `git checkout` 后原地覆盖工作目录。
+## 5. 晋升门禁
 
-## 5. 晋升有哪些门
-
-`evolve` 和 `evolve-service` 默认只生成、解析、测试和注册，不晋升。只有调用方显式传入 `--promote` 才请求晋升；即使传入，测试失败仍不能改变 active。
+`evolve-service` 默认只生成、解析、测试和注册，不改变 active。只有显式 `--promote` 才请求晋升；失败报告仍然不能成为活动版本。
 
 | 状态 | 能注册 | 能晋升 |
 | --- | --- | --- |
-| provider 超时/拒绝/无效 JSON | 否 | 否 |
-| 候选 `.ail` 解析失败 | 否 | 否 |
-| 候选测试失败 | 可以保留失败证据（按流程） | 否 |
-| 候选测试全通过但未传 `--promote` | 是 | 否 |
-| 候选测试全通过且宿主传 `--promote` | 是 | 是 |
+| provider 超时、无效 JSON | 否 | 否 |
+| 候选语法或结构非法 | 否 | 否 |
+| 完整 suite 失败 | 保留报告取决于调用流程 | 否 |
+| suite 全通过，未请求 promote | 是 | 否 |
+| suite 全通过，显式请求 promote | 是 | 是 |
 
-具体控制流：[evolution-loop.rkt](/source/src/evolution-loop.rkt.txt)、[service-deployment.rkt](/source/src/service-deployment.rkt.txt)。
+CLI 控制流见 [ail-cli](/source/rust/crates/ail-cli/src/main.rs.txt)。
 
-## 6. 请求为什么不会执行一半换版本
+## 6. 每个请求固定版本
 
-`make-active-program-loader` 每个请求解析一次 `active-source`，HTTP host 随后只持有返回的 program 对象。晋升发生在并发请求中时：
+HTTP program loader 在请求开始时完成一次：
 
-- 已开始请求继续用旧 program；
-- 晋升后的新请求读到新 active hash；
-- 二者不会共享可变代码对象。
+```text
+read active hash → verify source hash → parse Program → LoadedProgram
+```
 
-这比“运行时直接修改闭包 body”更容易推理、测试和回滚。
+之后 route、handler 和 observation 都使用同一个 `LoadedProgram`：
 
-## 7. 回滚能做什么，不能做什么
+- 已开始的请求继续使用旧版本；
+- 晋升后的新请求读取新 active；
+- 观测中的 `version` 是该请求真正执行的 hash；
+- 不会执行到一半替换函数体。
 
-`rollback-service` 把 active 指回当前版本的 parent，后续请求恢复旧代码。它不会自动回滚已经提交的数据格式变更。
+实现见 [ail-http](/source/rust/crates/ail-http/src/lib.rs.txt)。
 
-因此未来加入 PostgreSQL migration 时必须额外设计：
+## 7. 晋升前影子运行
+
+通过 suite 并已注册的候选可以在不晋升的情况下接收影子请求。宿主固定候选 hash，用 request ID 确定性采样，并在活动请求提交前复制 KV 状态。活动版本照常返回用户；候选只在有并发上限的后台内存 store 中执行，所有写入、日志和响应都会丢弃。
+
+影子观测只回答“这次活动与候选在哪些可观测类别上不同”，不会自动晋升。候选不可用也只产生脱敏记录。完整隔离条件见[安全模型](/evolution/security#影子运行边界)。
+
+## 8. 回滚边界
+
+版本库可以把 active 指回当前 metadata 的 parent，让后续请求恢复旧代码。回滚不会自动撤销已经提交的数据变化。
+
+因此正式数据库上线前必须设计：
 
 - 向前/向后兼容的数据 Schema；
-- expand → migrate → contract 策略；
-- 代码 rollback 与数据 rollback 的独立审批；
-- 灰度指标和停止条件。
+- expand → migrate → contract；
+- 代码回滚与数据回滚的独立审批；
+- shadow 累计阈值、canary 指标与停止条件。
 
-## 威胁模型速查
+当前 CLI 的 `version-conformance` 会验证注册、晋升和回滚生命周期；还没有面向生产操作者的完整回滚编排界面。
 
-| 风险 | 当前缓解 |
-| --- | --- |
-| 候选注入 Racket 代码 | Reader 禁用扩展，Parser 只生成独立 AST，不用 `eval` |
-| 候选无限递归 | fuel + 调用深度 + handler 墙钟超时 |
-| 候选直接联网/读文件 | 无对应 capability |
-| 候选偷 API key | key 不进入 guest environment |
-| 候选改测试给自己判通过 | 测试集和 runner 属于宿主 |
-| 写 KV 后崩溃留下半成品 | 合法响应后才提交事务 |
-| 晋升影响正在执行的请求 | request-level version pinning |
-| 模型输出恶意说明 | notes 只是 metadata，不执行 |
+## 9. 审查仍是独立门
 
-仍未解决的生产风险包括 OS 进程隔离、完整内存限制、认证授权、供应链和人工审批。项目没有宣称当前原型可以无人监管地持续改写公网生产系统。
+测试是必要条件，不是业务意图的替代品。晋升前应比较真实源码、场景、Schema、route、capability、错误 code 与数据兼容性，不要只读 provider notes。
+
+详细清单见[如何审查 AI 生成的改动](/evolution/review-ai-change)，威胁模型见[安全模型](/evolution/security)。

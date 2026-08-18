@@ -207,4 +207,4 @@ fn create_task(request: Request) -> Response {
 4. 同屏展示 route/schema/capability/错误码的结构化 diff；
 5. 仍以 `.ail` AST、测试和宿主策略作为执行真相。
 
-它的价值是降低审查门槛，不是创建第二门可执行语言。路线位置见 [Rust 迁移路线](/development/rust-roadmap#阶段-5-生成只读审查视图建议)。
+它的价值是降低审查门槛，不是创建第二门可执行语言。路线位置见 [Rust 宿主与生态路线](/development/rust-roadmap)。

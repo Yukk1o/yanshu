@@ -1,92 +1,115 @@
-# 项目是什么
+# AI-Evolve 是什么语言
 
-AI-Evolve 是一个“小型语言 + 受限解释器 + 版本门禁”的实验。目标不是发明一种比 Go 或 Rust 更适合人类的大型通用语言，而是验证：**业务程序能否以结构化数据存在，让 AI 生成后继版本，同时不把运行权、测试权和发布权交给 AI。**
+AI-Evolve 是一门把程序当作**可验证数据**的实验性语言。它不是要替代 Go 或 Rust 去编写所有软件，而是解决一个更具体的问题：当 AI 能持续生成代码时，怎样让候选代码容易理解、容易验证，又不能绕过测试和发布边界直接进入运行时。
 
-## 两种语言，不要混在一起
+它的核心承诺是：**AI 有提案权，语言宿主保留解释权、验证权和发布权。**
 
-| 名称 | 当前选择 | 职责 | 将来是否替换 |
-| --- | --- | --- | --- |
-| 宿主语言 | Racket | Reader、Parser、解释器、HTTP、KV、测试、版本库、LLM 接口 | 计划迁到 Rust |
-| 客体语言 | 项目自己的 `.ail` Lisp | 用户可编写、AI 可生成的业务规则 | 语义和文件格式应保持稳定 |
-
-如果用 Go 来类比：Racket 部分像一个 Go 服务进程；`.ail` 程序像进程里加载的受限规则文件。如果用 Rust 来类比：`.ail` 源码被解析成 `enum Expr`，再由一个带预算的 `eval(&Expr, &mut Context)` 执行。
-
-源码入口：[AST 定义](/source/src/ast.rkt.txt)、[Reader](/source/src/reader.rkt.txt)、[Parser](/source/src/parser.rkt.txt)、[解释器](/source/src/runtime.rkt.txt)。
-
-## 一次普通请求发生了什么
-
-```text
-浏览器 / HTTP 客户端
-        │ JSON 请求
-        ▼
-Racket HTTP host ──读取一次 active hash──► 版本库
-        │                                      │
-        │ service-request                      └─返回固定的 .ail 源码
-        ▼
-路由匹配 ─► Parser/AST ─► 受限解释器 ─► .ail handler
-                                   │
-                                   ├─显式 kv 能力（事务）
-                                   ├─显式 clock 能力
-                                   └─显式 log 能力
-        │
-        ▼
-宿主验证响应形状 ─► 成功才提交 KV ─► JSON 响应
-```
-
-这里最重要的是“固定版本”：请求开始后就拿到一个确定的程序对象。即使另一个请求此时晋升了新版本，正在运行的请求也不会执行到一半换代码。
-
-## Go / Rust 概念对照
-
-| AI-Evolve | Go 中可以怎么理解 | Rust 中可以怎么理解 |
-| --- | --- | --- |
-| `ail-program` / AST | 一组 struct + interface 节点 | `Program` + `enum Expr` |
-| `execute-export` | 调用注册表中的 handler | 对已校验 IR 求值 |
-| `Ok` / `Err` 客体值 | `(value, err)` 的显式分支 | `Result<T, E>` |
-| capability | 只注入所需的小 interface | 传入受限 trait object / capability token |
-| fuel | 每执行一步减一的预算 | `&mut Budget`，耗尽返回诊断 |
-| KV transaction | handler 成功后 `tx.Commit()` | `Transaction` 成功路径提交，失败丢弃 |
-| source hash | 制品的 SHA-256 ID | 不可变 artifact ID |
-| promote / rollback | 原子更新当前版本指针 | 受策略保护的 active pointer |
-
-## 现在已经能做什么
-
-- 写纯函数并用 JSON 案例测试；
-- 声明 GET、POST、PUT、PATCH、DELETE 路由和路径参数；
-- 读取请求的 params、query、headers、body；
-- 用 Schema 校验字符串、整数、布尔、列表和封闭对象；
-- 返回统一的成功响应和错误信封；
-- 在事务 KV 中持久化 JSON 数据；
-- 使用受宿主控制的时钟和结构化日志；
-- 启动一个有并发数、大小、读取时间和执行时间限制的本地 HTTP 服务；
-- 对候选版本运行完整测试，通过后注册、晋升或回滚；
-- 调用 DeepSeek Chat Completions 或 OpenAI Responses 生成候选。
-
-完整可运行案例是[任务 CRUD 服务](/source/examples/tasks/service.ail.txt)。
-
-## 它目前不是什么
-
-它不是公网生产框架，也不是通用 Lisp。当前没有认证授权、TLS、PostgreSQL、异步任务、包管理、静态类型系统、宏、文件上传、WebSocket 或独立进程沙箱。KV 是本地 JSON 原型；HTTP host 也是为了验证语义而写的有边界实现。
-
-因此正确定位是：**可运行的本地业务后端原型，以及 Rust 重写前的语义实验室。** 生产化缺口见 [Web 后端与路由](/backend/web#当前边界)。
-
-## 为什么客体语言还是 Lisp
-
-Lisp 的括号不是为了让用户痛苦，而是让源码天然接近一棵树：
+## 一眼看懂一个程序
 
 ```lisp
-(if (= user-type "vip")
-    (- price (quotient price 10))
-    price)
+(program
+  (name discount)
+  (version 1)
+  (capabilities)
+  (def calculate-discount
+    (fn (price user-type)
+      (if (= user-type "vip")
+          (- price (quotient price 10))
+          price)))
+  (export calculate-discount))
 ```
 
-它几乎可以直接表示为：
+括号只是表面形式。解析后它是一棵明确的 `Program` / `Expression` 树，近似下面的 Rust 数据：
+
+```rust
+Program {
+    name: "discount",
+    capabilities: [],
+    definitions: [Definition {
+        name: "calculate-discount",
+        value: Expr::Function { /* ... */ },
+    }],
+    exports: ["calculate-discount"],
+}
+```
+
+这就是“代码即数据”：模型可以生成完整程序，工具可以比较 AST，解释器只执行语言允许的节点。源码示例见 [discount/v2.ail](/source/examples/discount/v2.ail.txt)，结构定义见 [ail-syntax AST](/source/rust/crates/ail-syntax/src/ast.rs.txt)。
+
+## 语言为 AI 做了哪些取舍
+
+| 取舍 | 对 AI 和审查者的价值 |
+| --- | --- |
+| S 表达式对应 AST | 少一层复杂语法，结构边界明显 |
+| 小而封闭的 form 集合 | 模型不能凭空发明宿主语法 |
+| 函数式默认、不可变值 | 行为更容易重放、比较和测试 |
+| Schema、route、capability 是语言结构 | API、数据与权限变化可以结构化审查 |
+| 稳定诊断 code + JSON 输出 | 工具不必解析人类终端文案 |
+| fuel、深度和输入上限 | 候选不能无限消耗解释器资源 |
+| 内容哈希版本 + 显式晋升 | “生成成功”不会自动变成“正在运行” |
+
+## 语言由哪些部分组成
 
 ```text
-If(
-  Call("=", [user_type, "vip"]),
-  Call("-", [price, Call("quotient", [price, 10])]),
-  price
-)
+.ail 源码
+   │
+   ▼
+受限 Reader ──► Parser ──► AST
+                           │
+               ┌───────────┴───────────┐
+               ▼                       ▼
+        有界解释器               结构化检查 / diff
+               │
+       ┌───────┼────────┐
+       ▼       ▼        ▼
+   纯函数    Web DSL   版本化标准库
+               │
+               ▼
+      显式 capability 与事务
 ```
 
-这对 AI、Parser、静态检查和后续 AST patch 都很友好。你不必喜欢 Lisp 才能理解宿主项目；先用 [Go / Rust 视角看架构](/guide/architecture)，需要改业务规则时再查[语法入门](/language/syntax)。
+- **语言前端**只接受一个有边界的 S 表达式，验证程序、Schema、路由和导出。
+- **解释器**执行自己的 AST，不执行任意宿主源码；fuel 和调用深度构成硬预算。
+- **数据模型**包含任意精度整数、字符串、布尔、List、Map、Result 和闭包。
+- **Web DSL**把 route、request、response、Schema 和统一错误变成语言契约。
+- **Library Backend**用版本化 portable API 连接可信实现，不让 guest 任意加载包。
+- **演化控制面**把候选、测试报告、内容哈希、active 指针和回滚分开。
+
+## 它适合做什么
+
+当前最合适的场景是小型、可测试、契约清楚的业务逻辑：
+
+- 价格、折扣、资格、路由等纯规则；
+- 带 Schema 的 JSON API handler；
+- 使用事务 KV 的小型 CRUD 服务；
+- 需要模型提出候选、由完整场景验证后再晋升的程序；
+- 研究 AST patch、结构化 diff 和只读审查视图。
+
+完整案例是[任务 CRUD 服务](/source/examples/tasks/service.ail.txt)，覆盖 11 个有状态场景。
+
+## 它刻意不是什么
+
+AI-Evolve 当前不是通用系统语言，也不是公网生产框架。它没有宏、可变变量、并发、用户模块、任意包导入、浮点数、文件和网络能力；宿主侧也仍缺少细粒度授权、独立进程沙箱、正式数据库/PITR、异地备份、指标告警和 canary 自动化。
+
+这些限制不是临时藏起来的“功能缺失”，而是语言可信边界的一部分。新能力应该通过版本化语义和明确 capability 引入，不能让模型靠调用未知宿主函数越过边界。
+
+## 人类怎样阅读它
+
+不需要先成为 Lisp 专家。先记住：左括号后第一个词是操作，其余是参数。
+
+```lisp
+(if (= role "admin")
+    (api-response 200 data)
+    (api-error 403 "FORBIDDEN" "access denied"))
+```
+
+可以直接读成：
+
+```rust
+if role == "admin" {
+    api_response(200, data)
+} else {
+    api_error(403, "FORBIDDEN", "access denied")
+}
+```
+
+下一步读[语言范式](/language/paradigms)建立心智模型，或直接进入[语法入门](/language/syntax)。

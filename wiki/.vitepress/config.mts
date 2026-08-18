@@ -3,57 +3,62 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   lang: 'zh-CN',
   title: 'AI-Evolve Wiki',
-  description: '用 Go / Rust 思维读懂可测试、可晋升、可回滚的 AI 编程语言实验',
+  description: '让程序成为 AI 可理解、可验证、可继续演化的数据',
+  appearance: 'force-dark',
   cleanUrls: true,
   lastUpdated: true,
   head: [
-    ['meta', { name: 'theme-color', content: '#17324d' }],
+    ['meta', { name: 'theme-color', content: '#071017' }],
     ['meta', { name: 'viewport', content: 'width=device-width, initial-scale=1.0' }]
   ],
   markdown: {
     lineNumbers: true
   },
   themeConfig: {
-    siteTitle: 'AI-Evolve / 工程手册',
+    siteTitle: 'AI-Evolve / 语言观测台',
     nav: [
-      { text: '开始', link: '/guide/quickstart' },
-      { text: '语言', link: '/language/syntax' },
-      { text: 'Web 后端', link: '/backend/web' },
+      { text: '语言概览', link: '/guide/what-is' },
+      { text: '语法', link: '/language/syntax' },
+      { text: '数据模型', link: '/language/data-model' },
+      { text: 'Web DSL', link: '/backend/web' },
       { text: 'AI 演化', link: '/evolution/lifecycle' },
-      { text: '审查 AI 改动', link: '/evolution/review-ai-change' },
-      { text: 'CLI', link: '/reference/cli' }
+      { text: '安全', link: '/evolution/security' }
     ],
     sidebar: [
       {
-        text: '先建立全局认识',
+        text: '认识 AI-Evolve',
         items: [
-          { text: '项目是什么', link: '/guide/what-is' },
+          { text: '语言是什么', link: '/guide/what-is' },
           { text: '5 分钟上手', link: '/guide/quickstart' },
-          { text: '架构导览', link: '/guide/architecture' }
+          { text: '语言范式', link: '/language/paradigms' }
         ]
       },
       {
-        text: '读懂这门语言',
+        text: '语言手册',
         items: [
           { text: '语法入门', link: '/language/syntax' },
-          { text: 'Web 后端与路由', link: '/backend/web' },
-          { text: 'Schema 与统一错误', link: '/backend/schema-errors' }
+          { text: '数据模型', link: '/language/data-model' },
+          { text: 'Schema 与统一错误', link: '/backend/schema-errors' },
+          { text: '标准库与 Library Backend', link: '/language/standard-library' },
+          { text: 'Web DSL 与路由', link: '/backend/web' }
         ]
       },
       {
-        text: '理解演化与安全',
+        text: 'AI 演化与安全',
         items: [
-          { text: '候选、测试、晋升与回滚', link: '/evolution/lifecycle' },
+          { text: '候选、验证、晋升与回滚', link: '/evolution/lifecycle' },
+          { text: '安全模型与能力边界', link: '/evolution/security' },
           { text: '如何审查 AI 生成的改动', link: '/evolution/review-ai-change' }
         ]
       },
       {
-        text: '操作与开发',
+        text: '实现与工具',
         items: [
+          { text: '实现架构', link: '/guide/architecture' },
           { text: 'CLI 参考', link: '/reference/cli' },
           { text: '源码地图', link: '/reference/source-map' },
+          { text: 'Rust 宿主与生态路线', link: '/development/rust-roadmap' },
           { text: 'Git 分支工作流', link: '/development/git-workflow' },
-          { text: 'Rust 迁移路线', link: '/development/rust-roadmap' },
           { text: '维护 Wiki', link: '/development/wiki' }
         ]
       }
@@ -78,8 +83,8 @@ export default defineConfig({
     lightModeSwitchTitle: '切换到浅色模式',
     darkModeSwitchTitle: '切换到深色模式',
     footer: {
-      message: '宿主负责安全边界，AI 只负责提交候选。',
-      copyright: 'AI-Evolve project documentation'
+      message: 'AI 负责提出候选，语言门禁负责决定什么能够运行。',
+      copyright: 'AI-Evolve language documentation'
     }
   }
 })

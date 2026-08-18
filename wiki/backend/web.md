@@ -1,4 +1,4 @@
-# Web 后端与路由
+# Web DSL 与路由
 
 `.ail` 只声明业务路由和 handler；socket、HTTP 解析、JSON、超时、事务和版本选择都在宿主侧。这个分工类似 Go/Rust Web 框架把 transport adapter 与业务 service 分开。
 
@@ -101,13 +101,13 @@ type ServiceRequest struct {
 
 ## 每个请求一个事务
 
-[kv-store.rkt](/source/src/kv-store.rkt.txt) 会在锁内复制当前数据，handler 只操作 working set：
+[ail-service](/source/rust/crates/ail-service/src/lib.rs.txt) 为请求建立 working set，handler 只操作当前事务视图：
 
 ```text
 store snapshot → working copy → handler
                                 │
                  ┌──────────────┴──────────────┐
-                 │合法 response，无 diagnostic│异常 / 超时 / 非法 response
+                 │合法 response，无 diagnostic│diagnostic / 非法 response
                  ▼                             ▼
                commit                       discard
 ```
@@ -124,30 +124,41 @@ store snapshot → working copy → handler
 
 ## HTTP host 的限制
 
-[http-server.rkt](/source/src/http-server.rkt.txt) 当前提供：
+[ail-http](/source/rust/crates/ail-http/src/lib.rs.txt) 当前提供：
 
 - 只监听配置的 host，演示默认 `127.0.0.1`；
 - 固定 worker 并发上限；
 - request line、header 总量、header 数、body 大小限制；
-- 请求读取 deadline 与 handler 墙钟超时；
+- request body 读取 deadline；
 - 解释器 fuel 和调用深度限制；
-- 仅非流式 JSON，一个连接一个请求，`Connection: close`；
+- 非流式 JSON request / response；
 - 请求开始时固定活动程序版本；
 - 对外隐藏内部诊断，只暴露 request ID。
 
-Rust 迁移路径已经使用 [ail-http](/source/rust/crates/ail-http/src/lib.rs.txt) 的
-Axum/Tokio HTTP/1.1 adapter，并由
+当前 HTTP 宿主使用 Axum/Tokio HTTP/1.1 adapter，并由
 [ail-server](/source/rust/crates/ail-server/src/main.rs.txt) 提供独立进程入口。它保留目标、
 header、body、响应和并发上限，使用成熟协议栈处理连接，并在每个请求开始时从兼容版本库
 加载一次活动源码。真实 loopback TCP 测试覆盖监听、请求、解释执行、响应和优雅关闭。
 
-Rust server 只允许 loopback 监听，公网部署必须放在可信 TLS 反向代理后面。设置
+server 只允许 loopback 监听，公网部署必须放在可信 TLS 反向代理后面。设置
 `AI_EVOLVE_HTTP_BEARER_TOKEN` 可启用 Bearer 认证；宿主保存 token 摘要并做常量时间比较，
 `authorization`、`cookie`、`proxy-authorization`、`x-api-key` 和客户端伪造的
 `x-request-id` 不会传给 `.ail` handler。
 每个响应都有 `X-Request-Id`，内部错误公开正文中的 ID 与宿主诊断使用同一个值。
 
-Rust host 当前把同步解释器放到 blocking worker，并以解释器 fuel/depth 作为 guest 的硬
+独立 server 默认把每个请求的脱敏观测追加到 `<data-store>.observations.jsonl`。每行是一个
+JSON 文档，只包含 `timestampMs`、`requestId`、`method`、`status`、`durationMs`、
+`handler`、`version` 和 `errorCode`（另有 schema 版本）。其中 `version` 是该请求真正加载的
+不可变源码哈希，而不是写日志时才读取的活动指针。path、query、headers、body 和内部诊断
+详情不会写入；测试也使用特殊秘密值验证这些内容没有泄漏。日志目前负责本地持久化，生产
+采集、轮转、保留期和告警仍由部署层完成。
+
+尚未晋升的固定候选还可以接收影子请求。活动版本在真实 store 上提交；候选读取同一请求前
+KV 快照，只在有并发上限的后台内存 store 中执行。候选的写入、guest log 和响应都会丢弃，
+差异另写 `<data-store>.shadow.jsonl`。影子记录不含请求/响应内容、KV 值或内容指纹，也不会
+因为候选加载或执行失败而修改主响应。启用方式见 [CLI Server 控制项](/reference/cli#server-控制项)。
+
+当前宿主把同步解释器放到 blocking worker，并以解释器 fuel/depth 作为 guest 的硬
 执行边界。它没有伪造一个无法取消 blocking 写事务的 handler 墙钟超时；生产隔离阶段需要
 把不可取消工作放进可终止的独立进程，之后才能安全提供强墙钟 deadline。
 
@@ -160,8 +171,9 @@ Rust host 当前把同步解释器放到 blocking worker，并以解释器 fuel/
 | 非 JSON request body | 415 |
 | 缺少或错误的 Bearer token | 401，并返回 `WWW-Authenticate: Bearer` |
 | HTTP / JSON 格式错误 | 400 |
+| request body 读取超时 | 408 |
 | 请求或 header 超限 | 413 |
-| handler 超时 | 504 |
+| 并发槽耗尽或活动 store 不可用 | 503 |
 | 客体诊断或非法 response | 500 + public request ID |
 
 业务 400、404、409 等由 `.ail` handler 使用 `api-error` 返回。
@@ -174,7 +186,7 @@ Rust host 当前把同步解释器放到 blocking worker，并以解释器 fuel/
 - 独立 OS 进程或更强沙箱；
 - PostgreSQL 等正式数据库、连接池、迁移与备份；
 - 内存和响应输出上限的完整治理；
-- 指标、trace、告警、审计、灰度和人工审批；
+- 指标聚合、trace、告警、日志轮转、审计、灰度和人工审批；
 - Rust 静态资源交付或独立前端/反向代理部署。
 
 输入校验和错误契约见 [Schema 与统一错误](/backend/schema-errors)。

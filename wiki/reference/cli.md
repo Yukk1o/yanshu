@@ -1,224 +1,213 @@
 # CLI 参考
 
-所有命令从仓库根目录运行。为便于复制，下面先定义可执行文件变量：
+所有命令从仓库根目录运行。当前 CLI 是 Rust workspace 中的 `ail-cli`，正常结果、验证报告和已知错误都输出 JSON。
+
+下面写出完整 `cargo run`，便于直接复制。命令分发见 [ail-cli main.rs](/source/rust/crates/ail-cli/src/main.rs.txt)。
+
+## `check` / `inspect`
 
 ```powershell
-$ail = ".\.toolchains\racket\Racket.exe"
+cargo run --quiet --locked -p ail-cli -- `
+  check examples\discount\v2.ail
+
+cargo run --quiet --locked -p ail-cli -- `
+  inspect examples\discount\v2.ail
 ```
 
-CLI 正常结果、测试报告和已知语言错误都输出 JSON。命令分发的真实实现见 [src/cli.rkt](/source/src/cli.rkt.txt)。
-
-## 语言与纯函数
-
-### `check` / `inspect`
-
-```powershell
-& $ail src\cli.rkt check examples\discount\v2.ail
-& $ail src\cli.rkt inspect examples\discount\v2.ail
-```
-
-两者当前行为相同：读取、解析并输出结构化 program / AST。适合检查 Parser 看见的内容。
-
-### `run`
-
-```powershell
-& $ail src\cli.rkt run `
-  examples\discount\v2.ail `
-  calculate-discount `
-  examples\discount\vip-args.json
-```
+两者当前行为相同：读取、解析并输出结构化 Program / AST 摘要。适合确认 Parser 实际看到了哪些 definition、Schema、route、capability、library 和 export。
 
 格式：
 
 ```text
-run <program.ail> <exported-entry> <args-json-or-file>
+check <program.ail>
+inspect <program.ail>
 ```
 
-最后一个参数必须表示 JSON 数组；Windows 推荐传文件路径，避免 shell 引号差异。
-
-### `test`
+## `conformance`
 
 ```powershell
-& $ail src\cli.rkt test `
-  examples\discount\v2.ail `
-  examples\discount\tests.json
+cargo run --quiet --locked -p ail-cli -- `
+  conformance conformance\v1\manifest.json
 ```
 
-运行纯函数 JSON suite。只要有失败，进程 exit code 为 1。
+运行语言一致性语料，验证合法程序、portable value、Schema、library 和稳定 diagnostic。任一 case 不匹配时 JSON 为 `ok: false`，进程返回非零退出码。
 
-### `conformance`
-
-```powershell
-& $ail src\cli.rkt conformance conformance\v1\manifest.json
-```
-
-运行与宿主无关的语言一致性语料。目前 Racket 是语义 oracle；迁移期间 Rust runner
-必须读取同一份 manifest，并与其中的 canonical value / diagnostic 完全相等。任一 case
-不匹配时进程 exit code 为 1。格式说明见
-[conformance-v1.md](/source/docs/conformance-v1.md.txt)。
-
-### `demo`
+## `test-service`
 
 ```powershell
-& $ail src\cli.rkt demo
-```
-
-离线演示：从有缺陷折扣程序开始，通过 file provider 取得已知候选，测试、注册、晋升、调用，再回滚到父版本。它不请求真实 LLM。
-
-## Web 服务
-
-### `test-service`
-
-```powershell
-& $ail src\cli.rkt test-service `
+cargo run --quiet --locked -p ail-cli -- `
+  test-service `
   examples\tasks\service.ail `
   examples\tasks\scenarios.json
 ```
 
-在内存 KV 和固定时钟上顺序运行有状态业务场景，不监听端口。
-
-### `serve`
-
-```powershell
-& $ail src\cli.rkt serve `
-  examples\tasks\service.ail `
-  8080 `
-  .runtime\tasks\store.json
-```
-
 格式：
 
 ```text
-serve <program.ail> <port> <data-store.json>
+test-service <program.ail> <scenarios.json>
 ```
 
-每个请求重新加载指定源码文件，因此适合本地编辑观察；没有代码版本门禁。数据仍写入 file KV。
+使用新的内存 KV 和固定时钟顺序运行有状态业务场景，不监听端口，也不修改版本库。
 
-### `deploy-service`
+## `deploy-service`
 
 ```powershell
-& $ail src\cli.rkt deploy-service `
+cargo run --quiet --locked -p ail-cli -- `
+  deploy-service `
   examples\tasks\service.ail `
   examples\tasks\scenarios.json `
-  .runtime\tasks\code
-```
-
-先跑完整 service suite。全通过才把 candidate 注册并提升为活动版本；报告不通过时返回 exit code 1，active 不变。
-
-### `serve-active`
-
-```powershell
-& $ail src\cli.rkt serve-active `
-  .runtime\tasks\code `
-  8080 `
-  .runtime\tasks\store.json
+  .runtime\tasks-rust\code
 ```
 
 格式：
 
 ```text
-serve-active <code-store> <port> <data-store.json>
+deploy-service <program.ail> <scenarios.json> <code-store>
 ```
 
-每个请求从 code store 读取一次 active source 并固定到请求结束。CLI 同时把脱敏观察追加到 `<data-store>.observations.jsonl`。
+执行顺序：解析 → 完整 service suite → 注册内容哈希版本 → 只有全通过才晋升。失败报告不会改变 active；已经是 active 的同内容源码不会重复晋升。
 
-### `rollback-service`
-
-```powershell
-& $ail src\cli.rkt rollback-service .runtime\tasks\code
-```
-
-把 active 指回当前版本 metadata 中的 parent。没有活动版本或没有 parent 时返回结构化版本错误。
-
-## AI 演化
-
-### `evolve`
+## `evolve-service`
 
 ```powershell
-& $ail src\cli.rkt evolve `
-  examples\discount\v1.ail `
-  examples\discount\tests.json
-```
-
-生成并测试纯函数候选，默认不晋升。显式请求晋升：
-
-```powershell
-& $ail src\cli.rkt evolve `
-  examples\discount\v1.ail `
-  examples\discount\tests.json `
-  --promote
-```
-
-`--promote` 不是绕过测试；失败候选仍不能成为 active。
-
-### `evolve-service`
-
-```powershell
-& $ail src\cli.rkt evolve-service `
-  .runtime\tasks\code `
+cargo run --quiet --locked -p ail-cli -- `
+  evolve-service `
+  .runtime\tasks-rust\code `
   examples\tasks\scenarios.json
 ```
 
-它以当前 active service 源码为起点，让 provider 提出候选，再运行有状态场景。也支持最后加 `--promote`。
+格式：
+
+```text
+evolve-service <code-store> <scenarios.json> [--promote]
+```
+
+命令从 active 版本读取当前源码和报告，让配置的 provider 提出完整候选，然后重新解析并运行完整 suite。
+
+- 不带 `--promote`：通过测试的候选可以注册，但 active 不变；
+- 带 `--promote`：只有候选全通过且不是当前版本才更新 active；
+- `notes` 只进入不可信 metadata，不能代替测试或审查。
+
+推荐先 staged，再由独立审查步骤决定是否执行带 `--promote` 的命令。
+
+## `version-conformance`
+
+```powershell
+cargo run --quiet --locked -p ail-cli -- `
+  version-conformance `
+  examples\discount\v1.ail `
+  examples\discount\v2.ail
+```
+
+格式：
+
+```text
+version-conformance <initial.ail> <candidate.ail>
+```
+
+在临时版本库中验证内容哈希、注册、晋升、active 指针、重启读取、事件顺序与回滚生命周期。它是实现检查，不是操作现有生产 store 的回滚命令。
+
+## 离线备份、校验与恢复
+
+创建快照前先停止对应 server；快照目录必须不存在：
+
+```powershell
+cargo run --quiet --locked -p ail-cli -- `
+  backup-service `
+  .runtime\tasks-rust\code `
+  .runtime\tasks-rust\store.json `
+  .backups\tasks-2026-08-18
+```
+
+在传输后或恢复前重复做只读校验：
+
+```powershell
+cargo run --quiet --locked -p ail-cli -- `
+  verify-backup .backups\tasks-2026-08-18
+```
+
+恢复目标 code store 和 data store 都必须不存在；命令没有覆盖开关：
+
+```powershell
+cargo run --quiet --locked -p ail-cli -- `
+  restore-service `
+  .backups\tasks-2026-08-18 `
+  .runtime\tasks-restored\code `
+  .runtime\tasks-restored\store.json
+```
+
+格式：
+
+```text
+backup-service <code-store> <data-store.json> <snapshot-dir>
+verify-backup <snapshot-dir>
+restore-service <snapshot-dir> <code-store> <data-store.json>
+```
+
+`backup-service` 在离线 service lock 和版本库锁内创建 schema v1 manifest，对每个 payload 文件记录相对路径、大小和 SHA-256。`verify-backup` 还检查源码哈希、metadata、active、事件生命周期与 KV v1 语义；路径穿越、符号链接、未知/重复/超限文件和 hash/size 不一致都会失败。运行中的 server 持有 `<data-store>.service.lock`，维护命令会返回 `SERVICE_MAINTENANCE_LOCKED`。
+
+观测 JSONL 不属于业务恢复点，不进入快照。恢复后应先重新运行完整业务场景，再在新的 loopback 端口验证；详细边界见[备份与恢复说明](/source/docs/backup-restore.md.txt)。
+
+## 启动 HTTP server
+
+先确保 code store 有活动版本，再启动独立 server：
+
+```powershell
+cargo run --quiet --locked -p ail-server -- `
+  .runtime\tasks-rust\code `
+  127.0.0.1:8081 `
+  .runtime\tasks-rust\store.json
+```
+
+格式：
+
+```text
+ail-server <code-store> <loopback-bind-address> <data-store.json>
+```
+
+也可以使用 [serve-tasks-rust.ps1](/source/scripts/serve-tasks-rust.ps1.txt)，它会先验证并部署任务服务。
+
+### Server 控制项
+
+| 控制项 | 当前行为 |
+| --- | --- |
+| `AI_EVOLVE_HTTP_BEARER_TOKEN` | 可选；设置后每个请求必须使用同一 Bearer token |
+| bind address | 只接受 IPv4 / IPv6 loopback；wildcard 与公网地址拒绝 |
+| `X-Request-Id` | 宿主随机生成并写入所有已识别请求的响应 |
+| guest headers | 过滤 `authorization`、`cookie`、`proxy-authorization`、`x-api-key`、`x-request-id` |
+| program version | 请求开始时读取、验证并固定一次 active hash |
+| observation | `<data-store>.observations.jsonl`，每请求一条有界脱敏记录 |
+| `AI_EVOLVE_SHADOW_VERSION` | 可选；已注册候选的 64 位内容 hash |
+| `AI_EVOLVE_SHADOW_PERCENT` | 启用影子时必填；整数 `1..100` |
+| `AI_EVOLVE_SHADOW_MAX_CONCURRENCY` | 影子后台并发上限，默认 `4` |
+
+启动 JSON 会给出 `authenticationRequired`、observation 路径、`shadowEnabled`、固定候选与影子观测路径。普通观测字段是 `schemaVersion/timestampMs/requestId/method/status/durationMs/handler/version/errorCode`；不记录 path、query、headers、body、凭据或内部诊断详情。
+
+影子模式必须同时设置 `VERSION` 与 `PERCENT`。候选使用活动请求提交前的 KV 快照，但只在隔离内存执行；结果追加到 `<data-store>.shadow.jsonl`，不会改变真实 KV 或用户响应。记录只含版本、状态、handler、错误码和差异类别，不含内容值或内容指纹。配置与边界见[影子运行说明](/source/docs/shadow-rollout.md.txt)。
+
+Bearer 只解决本地单 token 认证，不能替代 TLS、用户身份、角色授权或可信反向代理。
 
 ## Provider 环境变量
 
 | 变量 | 用途 |
 | --- | --- |
-| `AI_EVOLVE_PROVIDER` | `openai-responses` 或 `deepseek-chat` |
-| `AI_EVOLVE_API_KEY` | 通用 Bearer key，也可用 provider 专用变量 |
-| `AI_EVOLVE_BASE_URL` | API base URL |
+| `AI_EVOLVE_PROVIDER` | `openai-responses` / `openai` 或 `deepseek-chat` / `deepseek` |
+| `AI_EVOLVE_API_KEY` | 通用 key；也可使用 provider 专用变量 |
+| `OPENAI_API_KEY` | OpenAI key；DeepSeek 模式也会作为兼容后备读取 |
+| `DEEPSEEK_API_KEY` | DeepSeek key |
+| `AI_EVOLVE_BASE_URL` | HTTPS API base URL |
 | `AI_EVOLVE_MODEL` | 模型 ID |
 | `AI_EVOLVE_REASONING_EFFORT` | reasoning effort |
-| `AI_EVOLVE_MAX_OUTPUT_TOKENS` | 候选输出上限 |
-| `AI_EVOLVE_TIMEOUT_SECONDS` | provider 请求超时 |
-| `AI_EVOLVE_STORE` | 纯函数 evolve 的版本库路径覆盖 |
+| `AI_EVOLVE_MAX_OUTPUT_TOKENS` | 正整数候选输出上限 |
+| `AI_EVOLVE_TIMEOUT_SECONDS` | 正整数请求超时秒数 |
 
-不要把 key 写进命令历史或仓库。项目自带 `scripts/live-demo.ps1` 会以安全提示方式读取 DeepSeek key。
+不要把 key 写进命令历史、Wiki 或仓库。PowerShell 可以用 `Read-Host -AsSecureString` 在当前进程临时设置。
 
-## Exit code
+## JSON 与退出码
 
-| code | 含义 |
+| 结果 | exit code |
 | --- | --- |
-| 0 | 操作成功 / suite 全通过 |
-| 1 | 已知语言、provider、测试或版本操作失败 |
-| 2 | CLI 参数不符合任何命令格式 |
+| 命令成功且报告通过 | 0 |
+| 已知语言、provider、suite、版本或参数错误 | 1 |
 
-自动化脚本应同时检查 exit code 和 JSON 中的 `ok` 字段。
-
-## Rust 迁移期 CLI
-
-当前 Rust host 已支持前端、语言/服务一致性语料、版本库生命周期、测试门禁部署和
-活动版本 HTTP API：
-
-```powershell
-cargo run --quiet --locked -p ail-cli -- inspect examples\tasks\service.ail
-cargo run --quiet --locked -p ail-cli -- conformance conformance\v1\manifest.json
-cargo run --quiet --locked -p ail-cli -- test-service `
-  examples\tasks\service.ail `
-  examples\tasks\scenarios.json
-cargo run --quiet --locked -p ail-cli -- deploy-service `
-  examples\tasks\service.ail `
-  examples\tasks\scenarios.json `
-  .runtime\tasks-rust\code
-cargo run --quiet --locked -p ail-server -- `
-  .runtime\tasks-rust\code `
-  127.0.0.1:8081 `
-  .runtime\tasks-rust\store.json
-cargo run --quiet --locked -p ail-cli -- evolve-service `
-  .runtime\tasks-rust\code `
-  examples\tasks\scenarios.json
-cargo run --quiet --locked -p ail-cli -- evolve-service `
-  .runtime\tasks-rust\code `
-  examples\tasks\scenarios.json `
-  --promote
-cargo run --quiet --locked -p ail-cli -- version-conformance `
-  examples\discount\v1.ail `
-  examples\discount\v2.ail
-```
-
-`scripts/check-rust.ps1` 会把上述结果与 Racket canonical JSON 做精确差分。迁移期仍以
-Racket 网页服务作为默认宿主；Rust 已能安全切换活动版本并承接 JSON HTTP 监听。
-也可以直接运行 [serve-tasks-rust.ps1](/source/scripts/serve-tasks-rust.ps1.txt)。
-Rust `evolve-service` 从相同环境变量读取 provider；不带 `--promote` 时只注册通过测试的
-候选，不改变活动版本。第一方实现完全禁止 unsafe，API key 不写入 JSON 输出或版本元数据。
+自动化应同时检查 exit code 和 JSON 顶层 `ok`。不要只搜索终端文本，因为稳定接口是 `code/message/details` 和结构化 report。
