@@ -44,6 +44,9 @@ Invoke-RestMethod http://127.0.0.1:8081/tasks
 
 该入口当前提供 JSON API；浏览器测试控制台仍由上面的 Racket 启动脚本提供。
 Rust 绑定地址可通过 `$env:AI_EVOLVE_RUST_HTTP_BIND="127.0.0.1:9001"` 修改。
+Rust server 只接受 loopback 地址；公网入口必须经可信 TLS 反向代理。需要认证时在启动前
+设置 `$env:AI_EVOLVE_HTTP_BEARER_TOKEN`，调用方使用 `Authorization: Bearer ...`。
+Token 不会进入 guest headers、诊断或启动 JSON。每个响应都带独立的 `X-Request-Id`。
 
 ## 快速开始
 

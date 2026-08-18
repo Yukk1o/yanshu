@@ -1,9 +1,9 @@
 #![forbid(unsafe_code)]
 
-use std::{env, io::Write, process::ExitCode};
+use std::{env, io::Write, net::SocketAddr, process::ExitCode};
 
 use ail_diagnostic::{AilResult, Diagnostic};
-use ail_http::{HttpConfig, build_active_router, serve_with_shutdown};
+use ail_http::{BearerAuth, HttpConfig, build_active_router_with_auth, serve_with_shutdown};
 use serde_json::json;
 use tokio::{net::TcpListener, runtime, signal};
 
@@ -25,7 +25,14 @@ fn run(arguments: Vec<String>) -> AilResult<()> {
             json!({ "usage": "ail-server <code-store> <bind-address> <data-store.json>" }),
         ));
     };
-    let router = build_active_router(code_store, data_store, HttpConfig::default())?;
+    let authentication = configured_authentication()?;
+    let authentication_required = authentication.is_some();
+    let router = build_active_router_with_auth(
+        code_store,
+        data_store,
+        HttpConfig::default(),
+        authentication,
+    )?;
     let runtime = runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -46,6 +53,7 @@ fn run(arguments: Vec<String>) -> AilResult<()> {
         let address = listener.local_addr().map_err(|_| {
             Diagnostic::simple("HTTP_BIND_FAILURE", "HTTP listener address is unavailable")
         })?;
+        require_loopback(address)?;
         println!(
             "{}",
             json!({
@@ -54,6 +62,7 @@ fn run(arguments: Vec<String>) -> AilResult<()> {
                     "address": address.to_string(),
                     "codeStore": code_store,
                     "dataStore": data_store,
+                    "authenticationRequired": authentication_required,
                 }
             })
         );
@@ -71,9 +80,34 @@ fn run(arguments: Vec<String>) -> AilResult<()> {
     })
 }
 
+fn configured_authentication() -> AilResult<Option<BearerAuth>> {
+    match env::var("AI_EVOLVE_HTTP_BEARER_TOKEN") {
+        Ok(token) => BearerAuth::new(token).map(Some),
+        Err(env::VarError::NotPresent) => Ok(None),
+        Err(env::VarError::NotUnicode(_)) => Err(Diagnostic::simple(
+            "HTTP_INVALID_AUTH_CONFIG",
+            "HTTP Bearer token must be valid Unicode",
+        )),
+    }
+}
+
+fn require_loopback(address: SocketAddr) -> AilResult<()> {
+    if address.ip().is_loopback() {
+        Ok(())
+    } else {
+        Err(Diagnostic::new(
+            "HTTP_NON_LOOPBACK_FORBIDDEN",
+            "Rust HTTP server must bind a loopback address behind a trusted reverse proxy",
+            json!({ "address": address.to_string() }),
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::run;
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+    use super::{require_loopback, run};
 
     #[test]
     fn rejects_invalid_arguments_before_starting_a_runtime() {
@@ -82,5 +116,17 @@ mod tests {
             Err(diagnostic) => diagnostic,
         };
         assert_eq!(diagnostic.code, "CLI_USAGE");
+    }
+
+    #[test]
+    fn permits_only_loopback_listener_addresses() {
+        let loopback = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080);
+        assert!(require_loopback(loopback).is_ok());
+        let wildcard = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 8080);
+        let diagnostic = match require_loopback(wildcard) {
+            Ok(()) => panic!("wildcard listener must fail"),
+            Err(diagnostic) => diagnostic,
+        };
+        assert_eq!(diagnostic.code, "HTTP_NON_LOOPBACK_FORBIDDEN");
     }
 }

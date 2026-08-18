@@ -12,7 +12,8 @@ use std::{
 use ail_diagnostic::{AilResult, Diagnostic};
 use ail_runtime::{Value as GuestValue, json_to_value};
 use ail_service::{
-    DispatchResult, FileKvStore, ServiceRequest, ServiceResponse, handle_file_service_request,
+    DispatchResult, FileKvStore, ServiceRequest, ServiceResponse,
+    handle_file_service_request_with_id,
 };
 use ail_store::VersionStore;
 use ail_syntax::{Program, load_program_source};
@@ -22,13 +23,16 @@ use axum::{
     extract::{Request, State},
     http::{
         HeaderMap, HeaderName, HeaderValue, StatusCode,
-        header::{CONTENT_LENGTH, CONTENT_TYPE},
+        header::{AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, WWW_AUTHENTICATE},
     },
     response::Response,
 };
 use num_bigint::BigInt;
 use serde_json::{Value as JsonValue, json};
+use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 use tokio::{net::TcpListener, sync::Semaphore, task, time};
+use zeroize::Zeroizing;
 
 pub trait ProgramLoader: Send + Sync {
     fn load(&self) -> AilResult<Program>;
@@ -104,6 +108,44 @@ struct HttpState {
     store: Arc<Mutex<FileKvStore>>,
     permits: Arc<Semaphore>,
     config: HttpConfig,
+    authentication: Option<Arc<BearerAuth>>,
+}
+
+pub struct BearerAuth {
+    token_digest: [u8; 32],
+}
+
+impl BearerAuth {
+    pub fn new(token: String) -> AilResult<Self> {
+        let token = Zeroizing::new(token);
+        if token.is_empty() || token.trim() != token.as_str() {
+            return Err(Diagnostic::simple(
+                "HTTP_INVALID_AUTH_CONFIG",
+                "HTTP Bearer token must be a non-empty value without surrounding whitespace",
+            ));
+        }
+        Ok(Self {
+            token_digest: Sha256::digest(token.as_bytes()).into(),
+        })
+    }
+
+    fn authorizes(&self, headers: &HeaderMap) -> bool {
+        let values = headers.get_all(AUTHORIZATION).iter().collect::<Vec<_>>();
+        let [value] = values.as_slice() else {
+            return false;
+        };
+        let Some(value) = value.to_str().ok() else {
+            return false;
+        };
+        let Some((scheme, token)) = value.split_once(' ') else {
+            return false;
+        };
+        if !scheme.eq_ignore_ascii_case("Bearer") || token.is_empty() {
+            return false;
+        }
+        let candidate: [u8; 32] = Sha256::digest(token.as_bytes()).into();
+        self.token_digest.ct_eq(&candidate).unwrap_u8() == 1
+    }
 }
 
 pub fn build_router(
@@ -111,12 +153,22 @@ pub fn build_router(
     store: FileKvStore,
     config: HttpConfig,
 ) -> AilResult<Router> {
+    build_router_with_auth(loader, store, config, None)
+}
+
+pub fn build_router_with_auth(
+    loader: Arc<dyn ProgramLoader>,
+    store: FileKvStore,
+    config: HttpConfig,
+    authentication: Option<BearerAuth>,
+) -> AilResult<Router> {
     validate_config(&config)?;
     let state = HttpState {
         loader,
         store: Arc::new(Mutex::new(store)),
         permits: Arc::new(Semaphore::new(config.maximum_concurrency)),
         config,
+        authentication: authentication.map(Arc::new),
     };
     Ok(Router::new().fallback(dispatch).with_state(state))
 }
@@ -126,9 +178,18 @@ pub fn build_active_router(
     data_store: impl AsRef<Path>,
     config: HttpConfig,
 ) -> AilResult<Router> {
+    build_active_router_with_auth(code_store, data_store, config, None)
+}
+
+pub fn build_active_router_with_auth(
+    code_store: impl AsRef<Path>,
+    data_store: impl AsRef<Path>,
+    config: HttpConfig,
+    authentication: Option<BearerAuth>,
+) -> AilResult<Router> {
     let loader: Arc<dyn ProgramLoader> = Arc::new(ActiveVersionLoader::new(code_store));
     let store = FileKvStore::open(data_store)?;
-    build_router(loader, store, config)
+    build_router_with_auth(loader, store, config, authentication)
 }
 
 pub async fn serve_with_shutdown<Shutdown>(
@@ -145,38 +206,90 @@ where
 }
 
 async fn dispatch(State(state): State<HttpState>, request: Request) -> Response {
+    let request_id = match generate_request_id() {
+        Ok(request_id) => request_id,
+        Err(diagnostic) => {
+            return protocol_error_response(StatusCode::INTERNAL_SERVER_ERROR, &diagnostic, None);
+        }
+    };
+    let mut response = dispatch_identified(state, request, &request_id).await;
+    if let Ok(value) = HeaderValue::try_from(request_id.as_str()) {
+        response
+            .headers_mut()
+            .insert(HeaderName::from_static("x-request-id"), value);
+    }
+    response
+}
+
+async fn dispatch_identified(state: HttpState, request: Request, request_id: &str) -> Response {
+    if let Some(authentication) = &state.authentication
+        && !authentication.authorizes(request.headers())
+    {
+        let mut response = protocol_error_response(
+            StatusCode::UNAUTHORIZED,
+            &Diagnostic::simple(
+                "HTTP_AUTH_REQUIRED",
+                "valid Bearer authentication is required",
+            ),
+            Some(request_id),
+        );
+        response
+            .headers_mut()
+            .insert(WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
+        return response;
+    }
     let Ok(_permit) = Arc::clone(&state.permits).try_acquire_owned() else {
         return protocol_error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             &Diagnostic::simple("HTTP_BUSY", "server concurrency limit is exhausted"),
+            Some(request_id),
         );
     };
     let method_is_head = request.method() == axum::http::Method::HEAD;
     let service_request = match parse_request(request, &state.config).await {
         Ok(request) => request,
         Err(diagnostic) => {
-            return protocol_error_response(diagnostic_status(&diagnostic), &diagnostic);
+            return protocol_error_response(
+                diagnostic_status(&diagnostic),
+                &diagnostic,
+                Some(request_id),
+            );
         }
     };
     let worker_state = state.clone();
-    let result =
-        task::spawn_blocking(move || execute_request(&worker_state, &service_request)).await;
+    let worker_request_id = request_id.to_owned();
+    let result = task::spawn_blocking(move || {
+        execute_request(&worker_state, &service_request, &worker_request_id)
+    })
+    .await;
     match result {
-        Ok(Ok(result)) => {
-            dispatch_response(result, method_is_head, state.config.maximum_response_bytes)
-        }
-        Ok(Err(diagnostic)) => protocol_error_response(diagnostic_status(&diagnostic), &diagnostic),
+        Ok(Ok(result)) => dispatch_response(
+            result,
+            method_is_head,
+            state.config.maximum_response_bytes,
+            request_id,
+        ),
+        Ok(Err(diagnostic)) => protocol_error_response(
+            diagnostic_status(&diagnostic),
+            &diagnostic,
+            Some(request_id),
+        ),
         Err(_) => protocol_error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             &Diagnostic::simple(
                 "HTTP_WORKER_FAILURE",
                 "request worker could not be completed",
             ),
+            Some(request_id),
         ),
     }
 }
 
-fn execute_request(state: &HttpState, request: &ServiceRequest) -> AilResult<DispatchResult> {
+fn execute_request(
+    state: &HttpState,
+    request: &ServiceRequest,
+    request_id: &str,
+) -> AilResult<DispatchResult> {
     let program = state.loader.load().map_err(|_| {
         Diagnostic::simple("HTTP_SERVICE_UNAVAILABLE", "service program is unavailable")
     })?;
@@ -186,11 +299,12 @@ fn execute_request(state: &HttpState, request: &ServiceRequest) -> AilResult<Dis
             "service data store is unavailable",
         )
     })?;
-    Ok(handle_file_service_request(
+    Ok(handle_file_service_request_with_id(
         &program,
         request,
         &mut store,
         &current_milliseconds(),
+        request_id,
     ))
 }
 
@@ -309,12 +423,22 @@ fn parse_headers(
                 json!({ "limitBytes": config.maximum_header_bytes }),
             ));
         }
+        if is_sensitive_request_header(name.as_str()) {
+            continue;
+        }
         result.insert(
             name.as_str().to_owned(),
             GuestValue::String(value.trim().to_owned()),
         );
     }
     Ok(result)
+}
+
+fn is_sensitive_request_header(name: &str) -> bool {
+    matches!(
+        name,
+        "authorization" | "cookie" | "proxy-authorization" | "x-api-key" | "x-request-id"
+    )
 }
 
 fn has_json_content_type(headers: &HeaderMap) -> bool {
@@ -394,9 +518,18 @@ fn hex_digit(byte: u8) -> Option<u8> {
     }
 }
 
-fn dispatch_response(result: DispatchResult, head: bool, maximum_bytes: usize) -> Response {
+fn dispatch_response(
+    result: DispatchResult,
+    head: bool,
+    maximum_bytes: usize,
+    request_id: &str,
+) -> Response {
     service_response_to_http(result.response, head, maximum_bytes).unwrap_or_else(|diagnostic| {
-        protocol_error_response(StatusCode::INTERNAL_SERVER_ERROR, &diagnostic)
+        protocol_error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            &diagnostic,
+            Some(request_id),
+        )
     })
 }
 
@@ -438,12 +571,17 @@ fn service_response_to_http(
     Ok(output)
 }
 
-fn protocol_error_response(status: StatusCode, diagnostic: &Diagnostic) -> Response {
+fn protocol_error_response(
+    status: StatusCode,
+    diagnostic: &Diagnostic,
+    request_id: Option<&str>,
+) -> Response {
+    let details = request_id.map_or_else(|| json!({}), |value| json!({ "requestId": value }));
     let document = json!({
         "error": {
             "code": diagnostic.code,
             "message": diagnostic.message.as_ref(),
-            "details": {},
+            "details": details,
         }
     });
     let body = serde_json::to_vec(&document).unwrap_or_else(|_| b"{}".to_vec());
@@ -458,6 +596,7 @@ fn protocol_error_response(status: StatusCode, diagnostic: &Diagnostic) -> Respo
 
 fn diagnostic_status(diagnostic: &Diagnostic) -> StatusCode {
     match diagnostic.code {
+        "HTTP_AUTH_REQUIRED" => StatusCode::UNAUTHORIZED,
         "HTTP_REQUEST_TIMEOUT" => StatusCode::REQUEST_TIMEOUT,
         "HTTP_UNSUPPORTED_MEDIA_TYPE" => StatusCode::UNSUPPORTED_MEDIA_TYPE,
         "HTTP_INVALID_CONTENT_LENGTH"
@@ -469,6 +608,24 @@ fn diagnostic_status(diagnostic: &Diagnostic) -> StatusCode {
         }
         _ => StatusCode::BAD_REQUEST,
     }
+}
+
+fn generate_request_id() -> AilResult<String> {
+    let mut random = [0_u8; 16];
+    getrandom::fill(&mut random).map_err(|_| {
+        Diagnostic::simple(
+            "HTTP_RANDOM_FAILURE",
+            "HTTP request identifier could not be generated",
+        )
+    })?;
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(36);
+    output.push_str("req-");
+    for byte in random {
+        output.push(char::from(HEX[usize::from(byte >> 4)]));
+        output.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    Ok(output)
 }
 
 fn invalid_path_encoding() -> Diagnostic {
@@ -523,7 +680,11 @@ mod tests {
     use axum::{
         Router,
         body::{Body, to_bytes},
-        http::{Request, StatusCode, header::CONTENT_TYPE},
+        http::{
+            HeaderMap, HeaderValue, Request, StatusCode,
+            header::{AUTHORIZATION, CONTENT_TYPE, COOKIE, WWW_AUTHENTICATE},
+        },
+        response::Response,
     };
     use serde_json::{Value as JsonValue, json};
     use tokio::{
@@ -534,8 +695,8 @@ mod tests {
     use tower::ServiceExt;
 
     use super::{
-        FixedProgramLoader, HttpConfig, ProgramLoader, build_active_router, build_router,
-        serve_with_shutdown,
+        BearerAuth, FixedProgramLoader, HttpConfig, ProgramLoader, build_active_router,
+        build_router, build_router_with_auth, serve_with_shutdown,
     };
 
     const TASK_SERVICE: &str = include_str!("../../../../examples/tasks/service.ail");
@@ -562,11 +723,28 @@ mod tests {
         require(build_router(loader, store, config))
     }
 
-    async fn call(router: Router, request: Request<Body>) -> (StatusCode, JsonValue) {
-        let response = router
+    fn authenticated_router(path: &std::path::Path, token: &str) -> Router {
+        let loader: Arc<dyn ProgramLoader> =
+            Arc::new(require(FixedProgramLoader::from_source(TASK_SERVICE)));
+        let store = require(ail_service::FileKvStore::open(path));
+        let authentication = require(BearerAuth::new(token.to_owned()));
+        require(build_router_with_auth(
+            loader,
+            store,
+            HttpConfig::default(),
+            Some(authentication),
+        ))
+    }
+
+    async fn call_raw(router: Router, request: Request<Body>) -> Response {
+        router
             .oneshot(request)
             .await
-            .unwrap_or_else(|error| match error {});
+            .unwrap_or_else(|error| match error {})
+    }
+
+    async fn call(router: Router, request: Request<Body>) -> (StatusCode, JsonValue) {
+        let response = call_raw(router, request).await;
         let status = response.status();
         let bytes = to_bytes(response.into_body(), 2 * 1024 * 1024)
             .await
@@ -655,6 +833,91 @@ mod tests {
             let (status, body) = call(limited, oversized).await;
             assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
             assert_eq!(body["error"]["code"], "HTTP_INVALID_CONTENT_LENGTH");
+        });
+    }
+
+    #[test]
+    fn bearer_authentication_request_ids_and_sensitive_header_filtering_are_host_owned() {
+        let temporary = TestDirectory::new();
+        let store_path = temporary.path.join("store.json");
+        runtime().block_on(async {
+            let router = authenticated_router(&store_path, "correct-horse-battery-staple");
+            let unauthorized = call_raw(router.clone(), request("GET", "/tasks", None)).await;
+            assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+            assert_eq!(
+                unauthorized.headers().get(WWW_AUTHENTICATE),
+                Some(&HeaderValue::from_static("Bearer"))
+            );
+            let first_id = unauthorized
+                .headers()
+                .get("x-request-id")
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or_else(|| panic!("unauthorized response must have a request ID"))
+                .to_owned();
+            assert!(first_id.starts_with("req-"));
+            assert_eq!(first_id.len(), 36);
+
+            let authorized = Request::builder()
+                .method("GET")
+                .uri("/tasks")
+                .header(AUTHORIZATION, "bEaReR correct-horse-battery-staple")
+                .header(COOKIE, "session=guest-must-not-see-this")
+                .body(Body::empty())
+                .unwrap_or_else(|error| panic!("request build failed: {error}"));
+            let authorized = call_raw(router, authorized).await;
+            assert_eq!(authorized.status(), StatusCode::OK);
+            let second_id = authorized
+                .headers()
+                .get("x-request-id")
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or_else(|| panic!("authorized response must have a request ID"));
+            assert_ne!(first_id, second_id);
+        });
+
+        let mut headers = HeaderMap::new();
+        headers.insert(AUTHORIZATION, HeaderValue::from_static("Bearer secret"));
+        headers.insert(COOKIE, HeaderValue::from_static("session=secret"));
+        headers.insert("x-request-id", HeaderValue::from_static("client-spoof"));
+        headers.insert("x-visible", HeaderValue::from_static("yes"));
+        let parsed = require(super::parse_headers(&headers, &HttpConfig::default()));
+        assert!(!parsed.contains_key("authorization"));
+        assert!(!parsed.contains_key("cookie"));
+        assert!(!parsed.contains_key("x-request-id"));
+        assert!(parsed.contains_key("x-visible"));
+    }
+
+    #[test]
+    fn internal_error_request_id_matches_the_response_header() {
+        const FAILING_SERVICE: &str = r#"
+            (program
+              (name failing-service)
+              (version 1)
+              (capabilities)
+              (route GET "/boom" boom)
+              (def boom (fn (request) (get (map) "missing")))
+              (export boom))
+        "#;
+        let temporary = TestDirectory::new();
+        let store_path = temporary.path.join("store.json");
+        let loader: Arc<dyn ProgramLoader> =
+            Arc::new(require(FixedProgramLoader::from_source(FAILING_SERVICE)));
+        let store = require(ail_service::FileKvStore::open(&store_path));
+        let router = require(build_router(loader, store, HttpConfig::default()));
+        runtime().block_on(async {
+            let response = call_raw(router, request("GET", "/boom", None)).await;
+            assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+            let request_id = response
+                .headers()
+                .get("x-request-id")
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or_else(|| panic!("internal response must have a request ID"))
+                .to_owned();
+            let bytes = to_bytes(response.into_body(), 1024 * 1024)
+                .await
+                .unwrap_or_else(|error| panic!("response body failed: {error}"));
+            let body: JsonValue = serde_json::from_slice(&bytes)
+                .unwrap_or_else(|error| panic!("response JSON failed: {error}"));
+            assert_eq!(body["error"]["details"]["requestId"], request_id);
         });
     }
 

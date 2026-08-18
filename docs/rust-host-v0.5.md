@@ -19,9 +19,11 @@ language host. It does not switch production traffic yet.
   adapters, and scenario runner;
 - `ail-http`: Axum/Tokio HTTP/1.1 adapter with bounded targets, headers, bodies,
   responses, concurrency and body-read deadlines; each request loads and pins one
-  active program before execution;
+  active program before execution; host-owned random request IDs, optional
+  constant-time Bearer authentication, and sensitive-header filtering remain
+  outside the guest;
 - `ail-server`: independently deployable TCP process with structured startup and
-  failure output plus graceful Ctrl+C shutdown;
+  failure output plus graceful Ctrl+C shutdown; it refuses non-loopback binds;
 - `ail-provider`: offline and live proposal interfaces, OpenAI Responses and
   DeepSeek Chat request/response validation, bounded Reqwest/Rustls transport,
   HTTPS-only endpoints, redirect refusal, credential zeroization, and stable

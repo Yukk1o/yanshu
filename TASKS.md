@@ -70,4 +70,5 @@
 - [x] Migrate the bounded active-version HTTP host and test-gated Rust deployment command.
 - [x] Migrate OpenAI/DeepSeek provider parsing, bounded HTTPS transport, and explicit service evolution to Rust.
 - [x] Pass locked dependency advisories, bans, licenses, sources, and unsafe inventory audit.
+- [x] Add host-owned request IDs, optional Bearer authentication, sensitive-header filtering, and loopback-only Rust binding.
 - [ ] Pass shadow-traffic, rollback, observability, backup, and release gates.

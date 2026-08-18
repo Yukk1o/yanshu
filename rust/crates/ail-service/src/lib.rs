@@ -74,12 +74,28 @@ pub fn handle_service_request(
     store: &mut MemoryKvStore,
     clock_milliseconds: &BigInt,
 ) -> DispatchResult {
+    handle_service_request_with_id(
+        program,
+        request,
+        store,
+        clock_milliseconds,
+        "req-rust-compat",
+    )
+}
+
+pub fn handle_service_request_with_id(
+    program: &Program,
+    request: &ServiceRequest,
+    store: &mut MemoryKvStore,
+    clock_milliseconds: &BigInt,
+    request_id: &str,
+) -> DispatchResult {
     let mut host = ServiceHost {
         working: store.data.clone(),
         clock_milliseconds: clock_milliseconds.clone(),
         logs: Vec::new(),
     };
-    let result = dispatch_request(program, request, &mut host);
+    let result = dispatch_request_with_id(program, request, &mut host, request_id);
     if result.diagnostic.is_none() {
         store.data = host.working;
     }
@@ -92,15 +108,37 @@ pub fn handle_file_service_request(
     store: &mut FileKvStore,
     clock_milliseconds: &BigInt,
 ) -> DispatchResult {
+    handle_file_service_request_with_id(
+        program,
+        request,
+        store,
+        clock_milliseconds,
+        "req-rust-compat",
+    )
+}
+
+pub fn handle_file_service_request_with_id(
+    program: &Program,
+    request: &ServiceRequest,
+    store: &mut FileKvStore,
+    clock_milliseconds: &BigInt,
+    request_id: &str,
+) -> DispatchResult {
     let mut memory = MemoryKvStore {
         data: store.data.clone(),
     };
-    let result = handle_service_request(program, request, &mut memory, clock_milliseconds);
+    let result = handle_service_request_with_id(
+        program,
+        request,
+        &mut memory,
+        clock_milliseconds,
+        request_id,
+    );
     if result.diagnostic.is_some() {
         return result;
     }
     if let Err(diagnostic) = write_store_file(&store.path, &memory.data) {
-        return internal_dispatch_result(request, &diagnostic, None);
+        return internal_dispatch_result(request, &diagnostic, None, request_id);
     }
     store.data = memory.data;
     result
@@ -110,6 +148,15 @@ pub fn dispatch_request(
     program: &Program,
     request: &ServiceRequest,
     host: &mut dyn CapabilityHost,
+) -> DispatchResult {
+    dispatch_request_with_id(program, request, host, "req-rust-compat")
+}
+
+pub fn dispatch_request_with_id(
+    program: &Program,
+    request: &ServiceRequest,
+    host: &mut dyn CapabilityHost,
+    request_id: &str,
 ) -> DispatchResult {
     let method = request.method.to_uppercase();
     let path_matches = program
@@ -176,7 +223,7 @@ pub fn dispatch_request(
             diagnostic: None,
             handler: Some(route.handler.clone()),
         },
-        Err(diagnostic) => internal_dispatch_result(request, &diagnostic, Some(route)),
+        Err(diagnostic) => internal_dispatch_result(request, &diagnostic, Some(route), request_id),
     }
 }
 
@@ -516,8 +563,8 @@ fn internal_dispatch_result(
     request: &ServiceRequest,
     diagnostic: &Diagnostic,
     route: Option<&Route>,
+    request_id: &str,
 ) -> DispatchResult {
-    let request_id = "req-rust-1";
     DispatchResult {
         response: ServiceResponse {
             status: 500,

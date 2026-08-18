@@ -141,6 +141,12 @@ Axum/Tokio HTTP/1.1 adapter，并由
 header、body、响应和并发上限，使用成熟协议栈处理连接，并在每个请求开始时从兼容版本库
 加载一次活动源码。真实 loopback TCP 测试覆盖监听、请求、解释执行、响应和优雅关闭。
 
+Rust server 只允许 loopback 监听，公网部署必须放在可信 TLS 反向代理后面。设置
+`AI_EVOLVE_HTTP_BEARER_TOKEN` 可启用 Bearer 认证；宿主保存 token 摘要并做常量时间比较，
+`authorization`、`cookie`、`proxy-authorization`、`x-api-key` 和客户端伪造的
+`x-request-id` 不会传给 `.ail` handler。
+每个响应都有 `X-Request-Id`，内部错误公开正文中的 ID 与宿主诊断使用同一个值。
+
 Rust host 当前把同步解释器放到 blocking worker，并以解释器 fuel/depth 作为 guest 的硬
 执行边界。它没有伪造一个无法取消 blocking 写事务的 handler 墙钟超时；生产隔离阶段需要
 把不可取消工作放进可终止的独立进程，之后才能安全提供强墙钟 deadline。
@@ -152,6 +158,7 @@ Rust host 当前把同步解释器放到 blocking worker，并以解释器 fuel/
 | 路由不存在 | 404 |
 | path 存在但 method 不允许 | 405，并返回 `Allow` |
 | 非 JSON request body | 415 |
+| 缺少或错误的 Bearer token | 401，并返回 `WWW-Authenticate: Bearer` |
 | HTTP / JSON 格式错误 | 400 |
 | 请求或 header 超限 | 413 |
 | handler 超时 | 504 |
@@ -163,7 +170,7 @@ Rust host 当前把同步解释器放到 blocking worker，并以解释器 fuel/
 
 这个服务器适合语义验证和本地业务原型，不适合直接暴露公网。生产版至少还需要：
 
-- 反向代理、TLS、认证与授权；
+- 反向代理、TLS、细粒度身份/角色授权；
 - 独立 OS 进程或更强沙箱；
 - PostgreSQL 等正式数据库、连接池、迁移与备份；
 - 内存和响应输出上限的完整治理；

@@ -20,7 +20,7 @@ exception.
 
 ## Current graph
 
-The current Rust host has eight normal direct external dependencies and one
+The current Rust host has ten normal direct external dependencies and one
 test-only dependency:
 
 | Dependency | Purpose | Decision |
@@ -33,6 +33,8 @@ test-only dependency:
 | `tokio 1.53.1` | TCP runtime, bounded async body reads, signals, and graceful shutdown | Exact-pinned with a narrow explicit feature set |
 | `reqwest 0.13.4` | Bounded HTTPS transport for live LLM providers | Exact-pinned; defaults disabled; only blocking control-plane calls and Rustls enabled |
 | `zeroize 1.9.0` | Clear live provider credentials when their owner is dropped | Exact-pinned with only allocation support enabled |
+| `getrandom 0.4.3` | Generate collision-resistant public HTTP request identifiers from the OS source | Exact-pinned low-level safe API; failure is explicit |
+| `subtle 2.6.1` | Constant-time comparison of fixed-size Bearer token digests | Exact-pinned; raw tokens are hashed before comparison |
 | `tower 0.5.3` | In-process HTTP router tests | Dev-only direct dependency; exact-pinned with only `util` enabled |
 
 The host-target graph currently has 112 external packages; the union of enabled

@@ -43,10 +43,14 @@ dependencies = [
  "ail-store",
  "ail-syntax",
  "axum",
+ "getrandom 0.4.3",
  "num-bigint",
  "serde_json",
+ "sha2",
+ "subtle",
  "tokio",
  "tower",
+ "zeroize",
 ]
 
 [[package]]
