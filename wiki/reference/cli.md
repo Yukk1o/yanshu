@@ -188,18 +188,28 @@ serve-active <code-store> <port> <data-store.json>
 
 ## Rust 迁移期 CLI
 
-当前 Rust host 已支持前端、语言/服务一致性语料和版本库生命周期：
+当前 Rust host 已支持前端、语言/服务一致性语料、版本库生命周期、测试门禁部署和
+活动版本 HTTP API：
 
 ```powershell
-cargo run --quiet -p ail-cli -- inspect examples\tasks\service.ail
-cargo run --quiet -p ail-cli -- conformance conformance\v1\manifest.json
-cargo run --quiet -p ail-cli -- test-service `
+cargo run --quiet --locked -p ail-cli -- inspect examples\tasks\service.ail
+cargo run --quiet --locked -p ail-cli -- conformance conformance\v1\manifest.json
+cargo run --quiet --locked -p ail-cli -- test-service `
   examples\tasks\service.ail `
   examples\tasks\scenarios.json
-cargo run --quiet -p ail-cli -- version-conformance `
+cargo run --quiet --locked -p ail-cli -- deploy-service `
+  examples\tasks\service.ail `
+  examples\tasks\scenarios.json `
+  .runtime\tasks-rust\code
+cargo run --quiet --locked -p ail-server -- `
+  .runtime\tasks-rust\code `
+  127.0.0.1:8081 `
+  .runtime\tasks-rust\store.json
+cargo run --quiet --locked -p ail-cli -- version-conformance `
   examples\discount\v1.ail `
   examples\discount\v2.ail
 ```
 
 `scripts/check-rust.ps1` 会把上述结果与 Racket canonical JSON 做精确差分。迁移期仍以
-Racket 服务作为默认宿主；Rust 已能安全切换活动版本，但尚未承接 HTTP 监听。
+Racket 网页服务作为默认宿主；Rust 已能安全切换活动版本并承接 JSON HTTP 监听。
+也可以直接运行 [serve-tasks-rust.ps1](/source/scripts/serve-tasks-rust.ps1.txt)。

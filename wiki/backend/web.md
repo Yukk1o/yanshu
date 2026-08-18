@@ -135,6 +135,16 @@ store snapshot → working copy → handler
 - 请求开始时固定活动程序版本；
 - 对外隐藏内部诊断，只暴露 request ID。
 
+Rust 迁移路径已经使用 [ail-http](/source/rust/crates/ail-http/src/lib.rs.txt) 的
+Axum/Tokio HTTP/1.1 adapter，并由
+[ail-server](/source/rust/crates/ail-server/src/main.rs.txt) 提供独立进程入口。它保留目标、
+header、body、响应和并发上限，使用成熟协议栈处理连接，并在每个请求开始时从兼容版本库
+加载一次活动源码。真实 loopback TCP 测试覆盖监听、请求、解释执行、响应和优雅关闭。
+
+Rust host 当前把同步解释器放到 blocking worker，并以解释器 fuel/depth 作为 guest 的硬
+执行边界。它没有伪造一个无法取消 blocking 写事务的 handler 墙钟超时；生产隔离阶段需要
+把不可取消工作放进可终止的独立进程，之后才能安全提供强墙钟 deadline。
+
 ## 状态码行为
 
 | 情况 | 状态码 |
@@ -158,6 +168,6 @@ store snapshot → working copy → handler
 - PostgreSQL 等正式数据库、连接池、迁移与备份；
 - 内存和响应输出上限的完整治理；
 - 指标、trace、告警、审计、灰度和人工审批；
-- 更完整的 HTTP 协议实现或成熟 Rust HTTP 库。
+- Rust 静态资源交付或独立前端/反向代理部署。
 
 输入校验和错误契约见 [Schema 与统一错误](/backend/schema-errors)。

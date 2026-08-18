@@ -1,0 +1,24 @@
+[package]
+name = "ail-http"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ail-diagnostic = { path = "../ail-diagnostic", version = "=0.5.0" }
+ail-runtime = { path = "../ail-runtime", version = "=0.5.0" }
+ail-service = { path = "../ail-service", version = "=0.5.0" }
+ail-store = { path = "../ail-store", version = "=0.5.0" }
+ail-syntax = { path = "../ail-syntax", version = "=0.5.0" }
+axum.workspace = true
+num-bigint.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tower.workspace = true

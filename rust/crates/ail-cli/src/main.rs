@@ -1,11 +1,15 @@
 #![forbid(unsafe_code)]
 
-use std::{env, fs, process::ExitCode};
+use std::{
+    env, fs,
+    process::ExitCode,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use ail_conformance::run_manifest;
 use ail_diagnostic::{AilResult, Diagnostic};
 use ail_service::run_service_suite;
-use ail_store::run_version_scenario;
+use ail_store::{CandidateRegistration, VersionStore, run_version_scenario, source_hash};
 use ail_syntax::load_program_source;
 use serde_json::{Value, json};
 
@@ -57,6 +61,9 @@ fn run(arguments: Vec<String>) -> AilResult<Value> {
             let passed = report.get("passed").and_then(Value::as_bool) == Some(true);
             Ok(json!({ "ok": passed, "report": report }))
         }
+        [command, program_path, suite_path, store_path] if command == "deploy-service" => {
+            deploy_service(program_path, suite_path, store_path)
+        }
         [command, initial_path, candidate_path] if command == "version-conformance" => {
             let report = run_version_scenario(initial_path, candidate_path)?;
             let passed = report.get("passed").and_then(Value::as_bool) == Some(true);
@@ -70,16 +77,83 @@ fn run(arguments: Vec<String>) -> AilResult<Value> {
                 "inspect <program.ail>",
                 "conformance <manifest.json>",
                 "test-service <program.ail> <scenarios.json>",
+                "deploy-service <program.ail> <scenarios.json> <code-store>",
                 "version-conformance <initial.ail> <candidate.ail>"
             ] }),
         )),
     }
 }
 
+fn deploy_service(program_path: &str, suite_path: &str, store_path: &str) -> AilResult<Value> {
+    let source = fs::read_to_string(program_path).map_err(|error| {
+        Diagnostic::new(
+            "HOST_FILE_READ",
+            "host could not read the source file",
+            json!({ "path": program_path, "kind": error.kind().to_string() }),
+        )
+    })?;
+    let program = load_program_source(&source)?;
+    let report = run_service_suite(&program, suite_path)?;
+    let passed = report.get("passed").and_then(Value::as_bool) == Some(true);
+    let candidate = source_hash(&source);
+    let store = VersionStore::new(store_path);
+    let current = store.active_hash()?;
+    if current.as_deref() == Some(candidate.as_str()) {
+        return Ok(json!({
+            "ok": passed,
+            "store": store_path,
+            "candidate": candidate,
+            "report": report,
+            "alreadyActive": true,
+            "promoted": false,
+            "active": current,
+        }));
+    }
+
+    let provider_metadata = json!({});
+    let registered_at = current_seconds();
+    let registered = store.register_candidate(CandidateRegistration {
+        source: &source,
+        parent: current.as_deref(),
+        provider: "manual-deploy",
+        provider_metadata: &provider_metadata,
+        report: &report,
+        registered_at,
+    })?;
+    let promoted = if passed {
+        store.promote(&registered, current_seconds())?;
+        true
+    } else {
+        false
+    };
+    let active = store.active_hash()?;
+    Ok(json!({
+        "ok": passed,
+        "store": store_path,
+        "candidate": registered,
+        "report": report,
+        "alreadyActive": false,
+        "promoted": promoted,
+        "active": active,
+    }))
+}
+
+fn current_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs())
+}
+
 #[cfg(test)]
 mod tests {
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
     use ail_diagnostic::{AilResult, Diagnostic};
-    use serde_json::Value;
+    use serde_json::{Value, json};
 
     use super::run;
 
@@ -95,5 +169,78 @@ mod tests {
         let result = run(vec!["unknown".to_owned()]);
         let diagnostic = require_error(result);
         assert_eq!(diagnostic.code, "CLI_USAGE");
+    }
+
+    #[test]
+    fn deploys_only_after_the_service_suite_passes() {
+        let temporary = TestDirectory::new();
+        let project_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let program = project_root.join("examples/tasks/service.ail");
+        let suite = project_root.join("examples/tasks/scenarios.json");
+        let failing_suite = temporary.path.join("failing-scenarios.json");
+        let mut failing_document: Value = serde_json::from_str(
+            &fs::read_to_string(&suite)
+                .unwrap_or_else(|error| panic!("scenario read failed: {error}")),
+        )
+        .unwrap_or_else(|error| panic!("scenario JSON failed: {error}"));
+        failing_document["cases"][0]["expectStatus"] = json!(418);
+        fs::write(
+            &failing_suite,
+            serde_json::to_vec(&failing_document)
+                .unwrap_or_else(|error| panic!("scenario encoding failed: {error}")),
+        )
+        .unwrap_or_else(|error| panic!("scenario write failed: {error}"));
+        let failing_store = temporary.path.join("failing-code");
+        let failed = run(vec![
+            "deploy-service".to_owned(),
+            program.display().to_string(),
+            failing_suite.display().to_string(),
+            failing_store.display().to_string(),
+        ])
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(failed["ok"], false);
+        assert_eq!(failed["promoted"], false);
+        assert_eq!(failed["active"], Value::Null);
+
+        let store = temporary.path.join("code");
+        let arguments = vec![
+            "deploy-service".to_owned(),
+            program.display().to_string(),
+            suite.display().to_string(),
+            store.display().to_string(),
+        ];
+
+        let first = run(arguments.clone()).unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(first["ok"], true);
+        assert_eq!(first["promoted"], true);
+        assert_eq!(first["alreadyActive"], false);
+
+        let second = run(arguments).unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(second["ok"], true);
+        assert_eq!(second["promoted"], false);
+        assert_eq!(second["alreadyActive"], true);
+    }
+
+    struct TestDirectory {
+        path: PathBuf,
+    }
+
+    impl TestDirectory {
+        fn new() -> Self {
+            let nonce = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_or(0, |duration| duration.as_nanos());
+            let path = std::env::temp_dir()
+                .join(format!("ai-lang-rust-cli-{}-{nonce}", std::process::id()));
+            fs::create_dir_all(&path)
+                .unwrap_or_else(|error| panic!("temporary directory failed: {error}"));
+            Self { path }
+        }
+    }
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            let _ignored = fs::remove_dir_all(&self.path);
+        }
     }
 }

@@ -32,6 +32,19 @@ JSON KV；关闭后再次启动，任务仍然存在。端口可在启动前通�
 才把 [任务服务](examples/tasks/service.ail) 提升为活动版本。HTTP 请求在开始时
 固定源码版本，因此运行中提升新版本不会改变正在处理的请求。
 
+Rust HTTP 主机也已经可以独立完成测试门禁、部署和监听：
+
+```powershell
+# 终端 1
+.\scripts\serve-tasks-rust.ps1
+
+# 终端 2
+Invoke-RestMethod http://127.0.0.1:8081/tasks
+```
+
+该入口当前提供 JSON API；浏览器测试控制台仍由上面的 Racket 启动脚本提供。
+Rust 绑定地址可通过 `$env:AI_EVOLVE_RUST_HTTP_BIND="127.0.0.1:9001"` 修改。
+
 ## 快速开始
 
 项目使用私有 Minimal Racket 工具链，不修改系统 PATH。
@@ -64,6 +77,9 @@ JSON KV；关闭后再次启动，任务仍然存在。端口可在启动前通�
 .\.toolchains\racket\Racket.exe src\cli.rkt test-service examples\tasks\service.ail examples\tasks\scenarios.json
 .\.toolchains\racket\Racket.exe src\cli.rkt deploy-service examples\tasks\service.ail examples\tasks\scenarios.json .runtime\tasks\code
 .\.toolchains\racket\Racket.exe src\cli.rkt serve-active .runtime\tasks\code 8080 .runtime\tasks\store.json
+
+cargo run --locked -p ail-cli -- deploy-service examples\tasks\service.ail examples\tasks\scenarios.json .runtime\tasks-rust\code
+cargo run --locked -p ail-server -- .runtime\tasks-rust\code 127.0.0.1:8081 .runtime\tasks-rust\store.json
 ```
 
 `run` 的最后一个参数既可以是 JSON 文本，也可以是 JSON 文件路径；Windows
@@ -179,9 +195,9 @@ Rust 版本必须复用 `.ail` 源码、JSON 测试、诊断代码、版本文�
 调用和裸 `eval` 都不属于语言语义。
 
 当前 Rust host 已迁移 Reader、Parser、解释器、Schema、Library Backend、服务能力、
-事务/文件 KV 和版本库。运行 `./scripts/check-rust.ps1` 会同时执行第一方 unsafe
+事务/文件 KV、版本库和活动版本 HTTP API。运行 `./scripts/check-rust.ps1` 会同时执行第一方 unsafe
 门禁、Rust 测试、Clippy，以及语言、任务服务和版本生命周期的 Racket/Rust 精确差分。
-HTTP 与实时 provider 尚未切换到 Rust。
+实时 provider 尚未迁移，默认网页服务也尚未切换到 Rust。
 
 ## 当前安全边界
 

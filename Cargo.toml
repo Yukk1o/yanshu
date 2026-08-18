@@ -7,6 +7,8 @@ members = [
   "rust/crates/ail-conformance",
   "rust/crates/ail-store",
   "rust/crates/ail-service",
+  "rust/crates/ail-http",
+  "rust/crates/ail-server",
   "rust/crates/ail-cli",
 ]
 
@@ -22,6 +24,9 @@ num-bigint = "0.4"
 num-traits = "0.2"
 serde_json = { version = "1.0", features = ["arbitrary_precision"] }
 sha2 = { version = "=0.11.0", default-features = false }
+axum = { version = "=0.8.9", default-features = false, features = ["http1", "tokio"] }
+tokio = { version = "=1.53.1", default-features = false, features = ["io-util", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tower = { version = "=0.5.3", default-features = false, features = ["util"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

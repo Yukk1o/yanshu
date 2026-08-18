@@ -17,8 +17,13 @@ language host. It does not switch production traffic yet.
 - `ail-service`: explicit capability trait, route dispatch, response validation,
   transactional memory KV, Racket-compatible persisted file KV, fixed clock/log
   adapters, and scenario runner;
-- `ail-cli`: Rust `check`, `inspect`, `conformance`, `test-service`, and
-  `version-conformance` commands.
+- `ail-http`: Axum/Tokio HTTP/1.1 adapter with bounded targets, headers, bodies,
+  responses, concurrency and body-read deadlines; each request loads and pins one
+  active program before execution;
+- `ail-server`: independently deployable TCP process with structured startup and
+  failure output plus graceful Ctrl+C shutdown;
+- `ail-cli`: Rust `check`, `inspect`, `conformance`, `test-service`,
+  `deploy-service`, and `version-conformance` commands.
 
 The runtime represents environments and closures with checked arena indices.
 It does not use pointers, native ABI shims, or unsafe self-referential structs.
@@ -38,6 +43,19 @@ first-party unsafe patterns, five full frontend comparisons, the complete
 17-case conformance report, the 11-case task-service report, and a full
 version-store promotion/rollback lifecycle. The Racket and Rust JSON documents
 must be exactly equal after JSON normalization.
+
+The HTTP crate additionally runs through a real loopback TCP socket in its test
+suite, including active-version loading, HTTP/1.1 parsing, guest dispatch,
+response encoding, connection close, and graceful server shutdown. Start the
+complete Rust API path with:
+
+```powershell
+# terminal 1
+.\scripts\serve-tasks-rust.ps1
+
+# terminal 2
+Invoke-RestMethod http://127.0.0.1:8081/tasks
+```
 
 The current corpus covers:
 
@@ -64,9 +82,10 @@ internal unsafe implementations remain inventoried according to
 
 ## Not switched yet
 
-Racket remains the default service and semantic oracle. Rust now hosts the
-capability/service boundary, compatible local persistence, and version storage,
-but the Rust HTTP server does not yet load active versions and LLM providers
-have not migrated. Those layers will migrate only after their host-neutral
-boundary fixtures exist. The cutover sequence remains: CI differential,
-offline replay, shadow execution, canary, then explicit default-host change.
+Racket remains the default browser service and semantic oracle. Rust now hosts
+the capability/service boundary, compatible local persistence, version storage,
+test-gated deployment, and an active-version JSON HTTP server. Static browser
+assets and LLM providers have not migrated, and production still lacks auth,
+metrics/tracing, database persistence, backups, and canary automation. The
+cutover sequence remains: CI differential, offline replay, shadow execution,
+canary, then explicit default-host change.

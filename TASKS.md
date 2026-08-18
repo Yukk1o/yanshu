@@ -67,5 +67,7 @@
 - [x] Migrate Schema, capability traits, transactional memory KV, and service scenarios.
 - [x] Migrate compatible persisted KV with synced same-directory replacement.
 - [x] Migrate the compatible content-addressed version store and rollback lifecycle.
-- [ ] Migrate HTTP and provider layers in stages.
-- [ ] Pass dependency audit, shadow-traffic, rollback, observability, and release gates.
+- [x] Migrate the bounded active-version HTTP host and test-gated Rust deployment command.
+- [ ] Migrate provider layers behind the same candidate boundary.
+- [x] Pass locked dependency advisories, bans, licenses, sources, and unsafe inventory audit.
+- [ ] Pass shadow-traffic, rollback, observability, backup, and release gates.

@@ -20,26 +20,32 @@ exception.
 
 ## Current graph
 
-The current Rust host has three direct external dependencies:
+The current Rust host has six normal direct external dependencies and one
+test-only dependency:
 
 | Dependency | Purpose | Decision |
 | --- | --- | --- |
 | `num-bigint 0.4.8` | Preserve Racket's arbitrary-precision integer semantics | Required until a smaller equivalently tested implementation exists |
+| `num-traits 0.2.19` | Checked numeric conversions used at host boundaries | Small companion dependency of the arbitrary-precision value model |
 | `serde_json 1.0.151` | Stable JSON values, diagnostics, and inspection output | Required for cross-host protocol compatibility |
 | `sha2 0.11.0` | Preserve the Racket version store's SHA-256 content identifiers | Exact-pinned RustCrypto implementation; default features disabled and portable software backend forced |
+| `axum 0.8.9` | Route-independent HTTP/1.1 server adapter | Exact-pinned; default features disabled; only `http1` and `tokio` enabled |
+| `tokio 1.53.1` | TCP runtime, bounded async body reads, signals, and graceful shutdown | Exact-pinned with a narrow explicit feature set |
+| `tower 0.5.3` | In-process HTTP router tests | Dev-only direct dependency; exact-pinned with only `util` enabled |
 
-Locked transitive packages are `autocfg 1.5.1`, `block-buffer 0.12.1`,
-`cfg-if 1.0.4`, `cpufeatures 0.3.0`, `crypto-common 0.2.2`, `digest 0.11.3`,
-`hybrid-array 0.4.14`, `itoa 1.0.18`, `libc 0.2.189`, `memchr 2.8.3`,
-`num-integer 0.1.47`, `num-traits 0.2.19`, `serde_core 1.0.229`,
-`typenum 1.20.1`, and `zmij 1.0.23`. `libc` is target-specific through CPU
-feature detection. All come from crates.io; there are no git dependencies,
-wildcard versions, or duplicated package versions. Declared licenses are
-covered by MIT, Apache-2.0, and Unlicense.
+The resolved workspace graph has 56 reachable external packages when normal,
+development, platform-specific, and build edges are included. The exact list is
+machine-derived from `Cargo.lock` by `scripts/audit-rust.ps1`; keeping a second
+hand-maintained transitive list here would go stale. All packages come from
+crates.io. There are no git dependencies, wildcard versions, or duplicated
+package versions. Declared licenses are covered by MIT, Apache-2.0, Unlicense,
+BSD-3-Clause, and Unicode-3.0.
 
-The initial prototype briefly enabled Serde's derive feature. It was removed
-before this checkpoint because the frontend does not need it, eliminating the
-`proc-macro2`, `quote`, `syn`, `unicode-ident`, and `serde_derive` build chain.
+The syntax/runtime frontend still does not enable Serde derive. Axum's required
+Tokio integration does, however, bring in the `tokio-macros`, `proc-macro2`,
+`quote`, `syn`, and `unicode-ident` build chain. The host does not use procedural
+macros in first-party source, but these locked build dependencies remain inside
+the reviewed supply-chain boundary.
 
 The persisted KV implementation also evaluated `atomic-write-file 0.3.1`.
 It was removed before this checkpoint because it added twelve packages to the
@@ -58,13 +64,14 @@ target or cfg makes a site unreachable.
 
 ## Unsafe inventory status
 
-Source inventory confirms internal unsafe implementations in `block-buffer`,
-`cpufeatures`, `hybrid-array`, `itoa`, `libc`, `memchr`, `num-bigint`,
-`num-traits`, `serde_core`, `serde_json`, `sha2`, and `zmij`. `autocfg`,
-`cfg-if`, `crypto-common`, `digest`, `num-integer`, and `typenum` have no
-matching unsafe implementation in the downloaded source. These internals are
-not callable as unsafe APIs from our code, but they remain part of the trusted
-dependency base.
+Source inventory confirms no matching unsafe implementation in `axum`,
+`axum-core`, `tower`, `tower-layer`, or `tower-service`. Lower transport/runtime
+dependencies including Tokio, Hyper, Mio, Socket2, Bytes, and platform support
+do contain internal unsafe implementations. The script prints a per-package
+matching-line count for the complete resolved graph. This is an inventory aid,
+not proof that every match is reachable or correct; those internals remain part
+of the trusted dependency base even though no unsafe API is called by
+first-party code.
 
 `cargo-deny 0.20.2` has executed successfully against this lockfile: advisories,
 licenses, sources, duplicate versions, and wildcards all pass. This checkpoint

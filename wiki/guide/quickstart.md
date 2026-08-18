@@ -75,6 +75,19 @@ Invoke-RestMethod -Uri http://127.0.0.1:8080/tasks
 
 `completed` 没有传入时，Schema 会补成 `false`；`createdAt` 和 `updatedAt` 来自宿主注入的 `clock` 能力。
 
+要验证 Rust HTTP 主机，可改用：
+
+```powershell
+# 终端 1
+.\scripts\serve-tasks-rust.ps1
+
+# 终端 2
+Invoke-RestMethod http://127.0.0.1:8081/tasks
+```
+
+该脚本同样先执行 11 个场景，再由 Rust CLI 注册并晋升活动版本。当前 Rust 入口只提供
+JSON API；可视化网页仍使用第 3 步的 Racket 同源服务。
+
 ## 5. 看懂第一个命令
 
 直接检查一个纯函数程序：

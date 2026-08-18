@@ -35,6 +35,7 @@ crates/
 ├─ ail-store/        version store、KV traits 与 adapters
 ├─ ail-evolution/    provider、candidate gate、promotion policy
 ├─ ail-http/         基于成熟 HTTP 库的 transport adapter
+├─ ail-server/       活动版本 HTTP 进程入口与优雅关闭
 └─ ail-cli/          与当前 JSON CLI 兼容的 binary
 ```
 
@@ -187,10 +188,15 @@ Capability dispatcher 应采用白名单注册，不能让 guest 通过字符串
 
 ## 阶段 4：HTTP、版本库和 provider
 
-::: tip 版本库已落地，HTTP/provider 待迁移
+::: tip 版本库与 HTTP 已落地，provider 待迁移
 `ail-store` 已兼容 Racket 的 SHA-256 内容地址、元数据、活动指针与事件序列，并增加源码
 完整性校验、hash 路径约束、标准库跨进程文件锁和有界锁超时。Racket/Rust 会执行同一套
 注册、测试门禁、晋升、重启读取与回滚生命周期，canonical JSON 当前零差异。
+
+`ail-http` 使用 Axum/Tokio，把有界 HTTP 请求转换为同一个 `ServiceRequest`；
+`ail-server` 在每次请求开始时从兼容版本库读取并固定活动程序。测试覆盖进程内路由和
+真实 loopback TCP 连接。Rust CLI 的 `deploy-service` 会先跑完 11 个业务场景，只有
+通过才晋升，因此可从空版本目录启动，不依赖 Racket 预部署。
 :::
 
 HTTP 使用成熟 Rust 生态库，而不是逐行移植手写 TCP parser；把请求转换成稳定的 `ServiceRequest` 后再进入宿主无关 service 层。
