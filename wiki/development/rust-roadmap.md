@@ -15,6 +15,13 @@
 - SHA-256 source hash、metadata、active pointer 和 event 格式；
 - 请求级 active version pinning。
 
+Rust 第一方 crate 还有一条不可放宽的实现约束：全部使用
+`#![forbid(unsafe_code)]` 并继承 workspace 的 `unsafe_code = "forbid"`。Library
+Backend 不通过裸指针或手写原生 ABI 接入；优先使用安全 crate API、隔离进程协议或
+WASM Component。第三方依赖中的 unsafe 无法被本项目 lint 自动禁止，因此必须经过
+锁文件、来源、漏洞、许可证和 unsafe inventory 审计。完整政策见
+[rust-safety-policy.md](/source/docs/rust-safety-policy.md.txt)。
+
 这组契约比 Racket 函数名更重要。迁移成功的判据是同一输入得到同一 portable output / diagnostic。
 
 ## 建议的 Rust workspace

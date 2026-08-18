@@ -1,0 +1,28 @@
+{
+  "entry": "analyze",
+  "cases": [
+    {
+      "name": "ascii-text-contract",
+      "args": ["AI language"],
+      "expect": {
+        "characters": 11,
+        "aiPrefixed": true,
+        "languageSuffixed": true,
+        "containsLang": true,
+        "normalized": "machine language"
+      }
+    },
+    {
+      "name": "unicode-length-counts-scalars-not-utf8-bytes",
+      "args": ["AI语言"],
+      "expect": {
+        "characters": 4,
+        "aiPrefixed": true,
+        "languageSuffixed": false,
+        "containsLang": false,
+        "normalized": "machine语言"
+      }
+    }
+  ]
+}
+

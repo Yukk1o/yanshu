@@ -129,6 +129,18 @@ Responses API 的请求结构参见
 响应。完整语义见
 [Business Backend Specification v0.3](docs/business-backend-v0.3.md)。
 
+纯标准库通过版本化契约声明，宿主决定使用 Racket、Rust 或其他一致实现：
+
+```lisp
+(libraries (text 1))
+(text/replace value "AI" "machine")
+```
+
+`text@1` 还提供字符计数、前缀、后缀和包含判断。契约拥有函数集合、类型和
+fuel 成本；后端不能增加隐藏函数或改变版本。可运行案例在
+[examples/libraries](examples/libraries)，完整边界见
+[Library Backend Specification v0.4](docs/library-backend-v0.4.md)。
+
 解释执行具有 fuel 和调用深度限制。客体默认没有文件、网络或数据库访问；
 `log`、事务 `kv` 和 `clock` 都必须显式声明并由宿主注入。
 
@@ -140,6 +152,8 @@ src/reader.rkt           安全读取和源码规模限制
 src/parser.rkt           S 表达式到独立 AST
 src/runtime.rkt          受限树遍历解释器
 src/schema.rkt           有边界的声明式业务数据校验
+src/library-contract.rkt 版本化标准库函数、类型和成本契约
+src/library-backend.rkt  Racket 参考后端；未来由 Rust/Python/WASM 实现
 src/test-suite.rkt       JSON 回归测试协议
 src/service.rkt          路由匹配、响应契约和能力注入
 src/kv-store.rkt         内存/文件事务 JSON KV
@@ -153,6 +167,7 @@ src/evolution-loop.rkt   生成、验证、注册和可选提升的一步闭环
 src/cli.rkt              JSON CLI 和端到端演示
 examples/discount/       初始版本、候选版本和测试案例
 examples/tasks/          完整任务 CRUD 服务与业务场景
+examples/libraries/      text@1 后端无关示例与测试
 web/tasks/               同源响应式测试控制台
 tests/all.rkt             宿主无关语义的起始一致性测试
 ```

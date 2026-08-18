@@ -47,11 +47,11 @@
 ## Change: library-backend-v0.4
 
 - [x] Define versioned library contracts separately from capabilities and implementations.
-- [ ] Parse bounded `libraries` declarations into inspectable AST metadata.
-- [ ] Add a contract-owned function set, type boundary, and fuel estimator.
-- [ ] Add exact-version backend registration with strict implementation matching.
-- [ ] Normalize and bound backend results and redact unexpected backend failures.
-- [ ] Ship and test a `text@1` Racket reference backend.
-- [ ] Thread backend selection through pure and service execution paths.
-- [ ] Teach live providers the library declaration and comment policy.
-- [ ] Verify the complete repository and document the v0.4 checkpoint.
+- [x] Parse bounded `libraries` declarations into inspectable AST metadata.
+- [x] Add a contract-owned function set, type boundary, and fuel estimator.
+- [x] Add exact-version backend registration with strict implementation matching.
+- [x] Normalize and bound backend results and redact unexpected backend failures.
+- [x] Ship and test a `text@1` Racket reference backend.
+- [x] Thread backend selection through pure, service, and HTTP execution paths.
+- [x] Teach live providers the library declaration and comment policy.
+- [x] Verify the complete repository and document the v0.4 checkpoint.

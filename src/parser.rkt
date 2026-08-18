@@ -4,6 +4,7 @@
          racket/string
          "ast.rkt"
          "error.rkt"
+         "library-contract.rkt"
          "schema.rkt")
 
 (provide parse-program
@@ -32,6 +33,7 @@
   (define name #f)
   (define version #f)
   (define capabilities #f)
+  (define libraries #f)
   (define exports #f)
   (define schemas '())
   (define routes '())
@@ -76,6 +78,41 @@
                       "program declares an unsupported capability"
                       (hasheq 'capability (symbol->string capability)))))
        (set! capabilities values)]
+      [(libraries)
+       (when libraries
+         (raise-ail "PROGRAM_DUPLICATE_LIBRARIES"
+                    "program has multiple libraries forms"))
+       (define declarations (cdr form))
+       (when (> (length declarations) maximum-library-count)
+         (raise-ail "PROGRAM_TOO_MANY_LIBRARIES"
+                    "program declares too many libraries"
+                    (hasheq 'maximum maximum-library-count)))
+       (define seen-libraries (make-hasheq))
+       (set!
+        libraries
+        (for/list ([declaration (in-list declarations)])
+          (unless (and (list? declaration)
+                       (= (length declaration) 2)
+                       (valid-library-name? (car declaration))
+                       (exact-positive-integer? (cadr declaration))
+                       (<= (cadr declaration) maximum-library-version))
+            (raise-ail
+             "PROGRAM_INVALID_LIBRARY"
+             "library declaration must be (lowercase-name VERSION)"
+             (hasheq 'library (format "~s" declaration))))
+          (define library-name (car declaration))
+          (define library-version (cadr declaration))
+          (when (hash-has-key? seen-libraries library-name)
+            (raise-ail "PROGRAM_DUPLICATE_LIBRARY"
+                       "program declares a library more than once"
+                       (hasheq 'library (symbol->string library-name))))
+          (hash-set! seen-libraries library-name #t)
+          (unless (find-library-contract library-name library-version)
+            (raise-ail "PROGRAM_UNKNOWN_LIBRARY"
+                       "program declares an unsupported library contract"
+                       (hasheq 'library (symbol->string library-name)
+                               'version library-version)))
+          (library-requirement library-name library-version)))]
       [(schema)
        (unless (and (= (length form) 3) (symbol? (cadr form)))
          (raise-ail "PROGRAM_INVALID_SCHEMA"
@@ -182,9 +219,25 @@
                  "route handler must be exported"
                  (hasheq 'handler
                          (symbol->string (ail-route-handler route))))))
+  (for ([requirement (in-list (or libraries '()))])
+    (define namespace-prefix
+      (string-append (symbol->string (library-requirement-name requirement))
+                     "/"))
+    (for ([binding-name
+           (in-list
+            (append (map ail-schema-name schemas)
+                    (map ail-definition-name definitions)))])
+      (when (string-prefix? (symbol->string binding-name) namespace-prefix)
+        (raise-ail "PROGRAM_LIBRARY_NAMESPACE_CONFLICT"
+                   "guest binding occupies a declared library namespace"
+                   (hasheq
+                    'library
+                    (symbol->string (library-requirement-name requirement))
+                    'binding (symbol->string binding-name))))))
   (ail-program name
                version
                (or capabilities '())
+               (or libraries '())
                (reverse schemas)
                (reverse routes)
                (reverse definitions)

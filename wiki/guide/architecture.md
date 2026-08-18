@@ -78,6 +78,21 @@ trait KvTx {
 
 客体代码拿不到文件句柄、socket、数据库连接或 API key，只能调用声明并注入的 primitive。
 
+纯标准库走另一条同样受控的路径：
+
+```text
+.ail portable API
+      ↓
+versioned library contract（函数、类型、fuel）
+      ↓
+host-selected backend（Racket / Rust / Python sidecar / WASM）
+```
+
+v0.4 的 `text@1` 已验证替换边界。契约由
+[library-contract.rkt](/source/src/library-contract.rkt.txt) 持有，参考实现位于
+[library-backend.rkt](/source/src/library-backend.rkt.txt)；backend 不能自行增加函数、
+改变类型或降低计费。未来 Rust crate 放在最后一层，guest 不直接操作 Cargo。
+
 ### 3. Web 宿主：HTTP、路由、事务
 
 - [http-server.rkt](/source/src/http-server.rkt.txt) 负责 TCP、HTTP 解析、请求限制、超时、JSON 和静态测试页面；

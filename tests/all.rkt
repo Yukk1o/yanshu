@@ -24,6 +24,7 @@
 (define-runtime-path tests-directory ".")
 (define project-root (simplify-path (build-path tests-directory 'up)))
 (define example-root (build-path project-root "examples" "discount"))
+(define library-example-root (build-path project-root "examples" "libraries"))
 (define task-example-path
   (build-path project-root "examples" "tasks" "service.ail"))
 
@@ -306,6 +307,272 @@
                          #:capability-bindings bindings)
          42)))
 
+(define text-library-source
+  (string-append
+   "(program (name text-demo) (version 1) (capabilities) "
+   "(libraries (text 1)) "
+   "(def analyze (fn (value) "
+   "  (list (text/length value) "
+   "        (text/starts-with? value \"AI\") "
+   "        (text/ends-with? value \"语言\") "
+   "        (text/contains? value \"I语\") "
+   "        (text/replace value \"AI\" \"人工智能\")))) "
+   "(def measure (fn (value) (text/length value))) "
+   "(export analyze measure))"))
+
+(define (test-text-implementations length-implementation)
+  (hasheq
+   'text/length length-implementation
+   'text/starts-with? (lambda (_arguments) #f)
+   'text/ends-with? (lambda (_arguments) #f)
+   'text/contains? (lambda (_arguments) #f)
+   'text/replace (lambda (arguments) (car arguments))))
+
+(test "versioned libraries are compiler-owned inspectable metadata"
+      (lambda ()
+        (define program (load-program-source text-library-source))
+        (check-equal (length (ail-program-libraries program)) 1)
+        (define inspected (program->jsexpr program))
+        (check-equal (hash-ref inspected 'libraries)
+                     (list (hasheq 'name "text" 'version 1)))
+        (check-equal
+         (execute-export program 'analyze (list "AI语言"))
+         (list 4 #t #t #t "人工智能语言"))))
+
+(test "text library example passes its portable JSON suite"
+      (lambda ()
+        (define program
+          (load-program-file (build-path library-example-root "text.ail")))
+        (define suite
+          (load-test-suite (build-path library-example-root "tests.json")))
+        (define report (run-test-suite program suite))
+        (check-true (hash-ref report 'passed))
+        (check-equal (hash-ref report 'total) 2)))
+
+(test "library declarations reject unknown duplicate and conflicting contracts"
+      (lambda ()
+        (check-ail-code
+         "PROGRAM_UNKNOWN_LIBRARY"
+         (lambda ()
+           (load-program-source
+            (string-append
+             "(program (name unknown-lib) (version 1) (capabilities) "
+             "(libraries (text 2)) (def run (fn () #t)) (export run))"))))
+        (check-ail-code
+         "PROGRAM_DUPLICATE_LIBRARY"
+         (lambda ()
+           (load-program-source
+            (string-append
+             "(program (name duplicate-lib) (version 1) (capabilities) "
+             "(libraries (text 1) (text 1)) "
+             "(def run (fn () #t)) (export run))"))))
+        (check-ail-code
+         "PROGRAM_LIBRARY_NAMESPACE_CONFLICT"
+         (lambda ()
+           (load-program-source
+            (string-append
+             "(program (name shadow-lib) (version 1) (capabilities) "
+             "(libraries (text 1)) "
+             "(def text/length (fn (value) 0)) "
+             "(export text/length))"))))))
+
+(test "undeclared and unavailable library functions have no ambient authority"
+      (lambda ()
+        (define undeclared
+          (load-program-source
+           (string-append
+            "(program (name no-library) (version 1) (capabilities) "
+            "(def run (fn (value) (text/length value))) (export run))")))
+        (check-ail-code
+         "RUNTIME_UNBOUND_NAME"
+         (lambda () (execute-export undeclared 'run (list "hidden"))))
+        (define declared (load-program-source text-library-source))
+        (check-ail-code
+         "RUNTIME_LIBRARY_UNAVAILABLE"
+         (lambda ()
+           (execute-export declared
+                           'measure
+                           (list "missing")
+                           #:library-backends (hash))))))
+
+(test "host can replace a library backend without changing guest source"
+      (lambda ()
+        (define program (load-program-source text-library-source))
+        (define alternate
+          (library-backend
+           'text
+           1
+           "rust-conformance-test"
+           (test-text-implementations (lambda (_arguments) 9001))))
+        (check-equal
+         (execute-export
+          program
+          'analyze
+          (list "AI语言")
+          #:library-backends (hash (cons 'text 1) alternate))
+         (list 9001 #f #f #f "AI语言"))))
+
+(test "library contract owns types fuel and the exact function set"
+      (lambda ()
+        (define program (load-program-source text-library-source))
+        (check-ail-code
+         "RUNTIME_TYPE"
+         (lambda () (execute-export program 'measure (list 42))))
+        (check-ail-code
+         "RUNTIME_FUEL_EXHAUSTED"
+         (lambda ()
+           (execute-export program
+                           'measure
+                           (list (make-string 1024 #\a))
+                           #:fuel 10)))
+        (define missing-function
+          (library-backend
+           'text
+           1
+           "incomplete"
+           (hash-remove (test-text-implementations
+                         (lambda (_arguments) 1))
+                        'text/contains?)))
+        (check-ail-code
+         "RUNTIME_INVALID_LIBRARY_BACKEND"
+         (lambda ()
+           (execute-export
+            program
+            'measure
+            (list "x")
+            #:library-backends
+            (hash (cons 'text 1) missing-function))))
+        (define extra-function
+          (library-backend
+           'text
+           1
+           "too-wide"
+           (hash-set (test-text-implementations (lambda (_arguments) 1))
+                     'text/secret
+                     (lambda (_arguments) "ambient"))))
+        (check-ail-code
+         "RUNTIME_INVALID_LIBRARY_BACKEND"
+         (lambda ()
+           (execute-export
+            program
+            'measure
+            (list "x")
+            #:library-backends
+            (hash (cons 'text 1) extra-function))))
+        (define wrong-version
+          (library-backend
+           'text
+           2
+           "wrong-version"
+           (test-text-implementations (lambda (_arguments) 1))))
+        (check-ail-code
+         "RUNTIME_INVALID_LIBRARY_BACKEND"
+         (lambda ()
+           (execute-export
+            program
+            'measure
+            (list "x")
+            #:library-backends
+            (hash (cons 'text 1) wrong-version))))
+        (define malformed-version
+          (library-backend
+           'text
+           "1"
+           "malformed-version"
+           (test-text-implementations (lambda (_arguments) 1))))
+        (check-ail-code
+         "RUNTIME_INVALID_LIBRARY_BACKEND"
+         (lambda ()
+           (execute-export
+            program
+            'measure
+            (list "x")
+            #:library-backends
+            (hash (cons 'text 1) malformed-version))))))
+
+(test "library failures are redacted and results stay inside the value boundary"
+      (lambda ()
+        (define program (load-program-source text-library-source))
+        (define failing
+          (library-backend
+           'text
+           1
+           "failing-provider"
+           (test-text-implementations
+            (lambda (_arguments) (error 'backend "secret-token-value")))))
+        (define observed #f)
+        (with-handlers ([exn:fail:ail? (lambda (error) (set! observed error))])
+          (execute-export
+           program
+           'measure
+           (list "x")
+           #:library-backends (hash (cons 'text 1) failing)))
+        (check-true observed)
+        (check-equal (exn:fail:ail-code observed) "RUNTIME_LIBRARY_FAILURE")
+        (check-false (regexp-match? #px"secret-token-value"
+                                    (format "~s" (ail-error->jsexpr observed))))
+        (define invalid-result
+          (library-backend
+           'text
+           1
+           "invalid-result"
+           (test-text-implementations (lambda (_arguments) void))))
+        (check-ail-code
+         "RUNTIME_LIBRARY_INVALID_RESULT"
+         (lambda ()
+           (execute-export
+            program
+            'measure
+            (list "x")
+            #:library-backends
+            (hash (cons 'text 1) invalid-result))))
+        (define oversized-result
+          (library-backend
+           'text
+           1
+           "oversized-result"
+           (hash-set
+            (test-text-implementations (lambda (_arguments) 1))
+            'text/replace
+            (lambda (_arguments) (make-string 1048577 #\x)))))
+        (check-ail-code
+         "RUNTIME_LIBRARY_INVALID_RESULT"
+         (lambda ()
+           (execute-export
+            program
+            'analyze
+            (list "AI语言")
+            #:fuel 50000
+            #:library-backends
+            (hash (cons 'text 1) oversized-result))))))
+
+(test "service execution uses the host-selected library backend"
+      (lambda ()
+        (define program
+          (load-program-source
+           (string-append
+            "(program (name library-service) (version 1) (capabilities) "
+            "(libraries (text 1)) "
+            "(route GET \"/measure\" handler) "
+            "(def handler (fn (request) "
+            "  (api-response 200 (text/length (get request \"path\"))))) "
+            "(export handler))")))
+        (define alternate
+          (library-backend
+           'text
+           1
+           "service-test"
+           (test-text-implementations (lambda (_arguments) 77))))
+        (define result
+          (handle-service-request
+           program
+           (service-request "GET" "/measure" (hash) (hash) '())
+           #:library-backends (hash (cons 'text 1) alternate)))
+        (check-false (dispatch-result-diagnostic result))
+        (check-equal
+         (service-response-body (dispatch-result-response result))
+         77)))
+
 (define task-service-source
   (string-append
    "(program (name task-service) (version 1) (capabilities kv clock) "
@@ -487,6 +754,40 @@
     (error 'send-http-text "server returned a malformed HTTP response"))
   (values (string->number (cadr status-match))
           (string-join (cdr parts) "\r\n\r\n")))
+
+(test "HTTP host preserves the selected library backend"
+      (lambda ()
+        (define program
+          (load-program-source
+           (string-append
+            "(program (name http-library) (version 1) (capabilities) "
+            "(libraries (text 1)) "
+            "(route GET \"/measure\" handler) "
+            "(def handler (fn (request) "
+            "  (api-response 200 (text/length (get request \"path\"))))) "
+            "(export handler))")))
+        (define backend
+          (library-backend
+           'text
+           1
+           "http-test"
+           (test-text-implementations (lambda (_arguments) 88))))
+        (define server
+          (start-http-server
+           (lambda () program)
+           #:port 0
+           #:library-backends (hash (cons 'text 1) backend)))
+        (dynamic-wind
+          void
+          (lambda ()
+            (define-values (status body)
+              (send-http-request
+               (running-http-server-port server)
+               "GET"
+               "/measure"))
+            (check-equal status 200)
+            (check-equal body 88))
+          (lambda () (stop-http-server! server)))))
 
 (test "real TCP server accepts JSON requests and returns persisted service data"
       (lambda ()
@@ -965,6 +1266,12 @@
                            "(schema NAME SCHEMA)"))
         (check-true
          (string-contains? (hash-ref body 'instructions) "api-error"))
+        (check-true
+         (string-contains? (hash-ref body 'instructions)
+                           "(libraries (LOWERCASE-NAME VERSION) ...)"))
+        (check-true
+         (string-contains? (hash-ref body 'instructions)
+                           "explain why"))
         (check-equal (hash-ref captured 'timeout) 17)
         (check-equal
          (hash-ref (hash-ref (hash-ref body 'text) 'format) 'type)

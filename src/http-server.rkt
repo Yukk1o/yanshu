@@ -9,6 +9,7 @@
          racket/tcp
          "ast.rkt"
          "error.rkt"
+         "library-backend.rkt"
          "runtime.rkt"
          "service.rkt"
          "version-store.rkt")
@@ -33,6 +34,9 @@
                            #:max-depth [maximum-depth 256]
                            #:logger [logger void]
                            #:observer [observer void]
+                           #:library-backends
+                           [library-backends
+                            (make-reference-library-backends)]
                            #:static-root [static-root #f])
   (unless (procedure? program-loader)
     (raise-argument-error 'start-http-server "procedure?" program-loader))
@@ -82,6 +86,7 @@
                     output
                     program-loader
                     store
+                    library-backends
                     request-timeout
                     handler-timeout
                     maximum-header-bytes
@@ -112,6 +117,7 @@
                            output
                            program-loader
                            store
+                           library-backends
                            request-timeout
                            handler-timeout
                            maximum-header-bytes
@@ -153,6 +159,7 @@
                                 request
                                 program-loader
                                 store
+                                library-backends
                                 handler-timeout
                                 fuel
                                 maximum-depth
@@ -163,6 +170,7 @@
                                 request
                                 program-loader
                                 store
+                                library-backends
                                 handler-timeout
                                 fuel
                                 maximum-depth
@@ -187,7 +195,8 @@
                                #:store store
                                #:fuel fuel
                                #:max-depth maximum-depth
-                               #:logger logger))))
+                               #:logger logger
+                               #:library-backends library-backends))))
   (define elapsed
     (max 0 (inexact->exact
             (round (- (current-inexact-milliseconds) started)))))

@@ -1,0 +1,18 @@
+; The program declares a portable contract, not a Racket/Rust provider.
+(program
+  (name text-library-demo)
+  (version 1)
+  (capabilities)
+  (libraries (text 1))
+
+  ; Explain the derived facts while keeping the original input immutable.
+  (def analyze
+    (fn (value)
+      (map "characters" (text/length value)
+           "aiPrefixed" (text/starts-with? value "AI")
+           "languageSuffixed" (text/ends-with? value "language")
+           "containsLang" (text/contains? value "lang")
+           "normalized" (text/replace value "AI" "machine"))))
+
+  (export analyze))
+

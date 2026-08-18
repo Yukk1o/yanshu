@@ -76,6 +76,7 @@ The v0.4 reference registry contains `text@1` implemented by Racket:
 | `text/starts-with?` | `String String` | `Bool` | literal prefix test |
 | `text/ends-with?` | `String String` | `Bool` | literal suffix test |
 | `text/contains?` | `String String` | `Bool` | literal substring test |
+| `text/replace` | `String String String` | `String` | literal replace-all |
 
 Rust conformance implementations must use character count rather than UTF-8
 byte length for `text/length`.
@@ -142,4 +143,3 @@ node they describe.
 5. Pure-function and service execution paths use the same backend registry.
 6. Existing language, Web, evolution, persistence, and rollback tests remain
    green.
-
