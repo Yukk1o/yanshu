@@ -14,7 +14,7 @@ AI-Evolve 的值系统刻意保持小而可移植。值既要能被解释器执�
 | List | `(list 1 2 3)` | `Value::List(Vec<Value>)` | 是 |
 | Map | `(map "id" "1")` | `Value::Map(BTreeMap<...>)` 的概念 | key 合法时是 |
 | Ok / Err | `(ok value)`、`(err issues)` | `Result` 风格的 guest 值 | 按 portable codec 编码 |
-| Variant | `(approved 42)` | `Value::Variant { type, variant, fields }` | 是，带 `$type/$variant/fields` |
+| Variant | `(approved 42)` | `Value::Variant { type, variant, fields }` | 是，带 `$type/$variant/fields`；v4 字段有静态类型 |
 | Closure | `(fn (x) (+ x 1))` | 受检查 arena 中的闭包 | 否 |
 | Primitive | `+`、`validate` | 可信宿主操作 | 否 |
 
@@ -97,6 +97,8 @@ v2 的 `checked-quotient` / `checked-remainder` 把除零转换成带稳定 `DIV
 ```
 
 因此两个模块都声明 `approved` 也不会在运行值里混淆。构造器本身和 Closure 一样不可序列化；调用构造器得到的 Variant 可以安全输出，并可由 `match` 解构。
+
+v4 还会在 export 边界递归检查 Variant、List 和 Result。静态 `any` 允许 JSON 动态 lookup，但不允许实际返回值绕过 signature。
 
 ## Nil 与 JSON null 的当前边界
 

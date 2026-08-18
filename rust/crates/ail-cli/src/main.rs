@@ -6,6 +6,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use ail_analysis::{analyze_program, render_rust_review};
 use ail_bundle::{load_bundle, seal_bundle_directory};
 use ail_conformance::run_manifest;
 use ail_diagnostic::{AilResult, Diagnostic};
@@ -48,11 +49,27 @@ fn run(arguments: Vec<String>) -> AilResult<Value> {
         }
         [command, root] if command == "inspect-bundle" => {
             let bundle = load_bundle(root)?;
-            Ok(json!({
+            let mut document = json!({
                 "ok": true,
                 "bundleHash": bundle.bundle_hash,
                 "manifest": bundle.manifest.to_json(),
                 "program": bundle.program.inspect_json(),
+            });
+            if bundle.program.version.to_string() == "4" {
+                let analysis = analyze_program(&bundle.program)?;
+                document["analysis"] = analysis.to_json();
+                document["review"] = render_rust_review(&bundle.program, &analysis).to_json();
+            }
+            Ok(document)
+        }
+        [command, root] if command == "review-bundle" => {
+            let bundle = load_bundle(root)?;
+            let analysis = analyze_program(&bundle.program)?;
+            Ok(json!({
+                "ok": true,
+                "bundleHash": bundle.bundle_hash,
+                "analysis": analysis.to_json(),
+                "review": render_rust_review(&bundle.program, &analysis).to_json(),
             }))
         }
         [command, root, export, arguments_path] if command == "run-bundle" => {
@@ -98,7 +115,27 @@ fn run(arguments: Vec<String>) -> AilResult<Value> {
                 )
             })?;
             let program = load_program_source(&source)?;
-            Ok(json!({ "ok": true, "program": program.inspect_json() }))
+            let mut document = json!({ "ok": true, "program": program.inspect_json() });
+            if program.version.to_string() == "4" {
+                document["analysis"] = analyze_program(&program)?.to_json();
+            }
+            Ok(document)
+        }
+        [command, path] if command == "review" => {
+            let source = fs::read_to_string(path).map_err(|error| {
+                Diagnostic::new(
+                    "HOST_FILE_READ",
+                    "host could not read the source file",
+                    json!({ "path": path, "kind": error.kind().to_string() }),
+                )
+            })?;
+            let program = load_program_source(&source)?;
+            let analysis = analyze_program(&program)?;
+            Ok(json!({
+                "ok": true,
+                "analysis": analysis.to_json(),
+                "review": render_rust_review(&program, &analysis).to_json(),
+            }))
         }
         [command, path] if command == "conformance" => {
             let report = run_manifest(path)?;
@@ -153,9 +190,11 @@ fn run(arguments: Vec<String>) -> AilResult<Value> {
             json!({ "usage": [
                 "seal-bundle <directory> <entry> <module.ail>...",
                 "inspect-bundle <directory>",
+                "review-bundle <directory>",
                 "run-bundle <directory> <export> <arguments.json>",
                 "check <program.ail>",
                 "inspect <program.ail>",
+                "review <program.ail>",
                 "conformance <manifest.json>",
                 "test-service <program.ail> <scenarios.json>",
                 "deploy-service <program.ail> <scenarios.json> <code-store>",
@@ -316,6 +355,31 @@ mod tests {
         let result = run(vec!["unknown".to_owned()]);
         let diagnostic = require_error(result);
         assert_eq!(diagnostic.code, "CLI_USAGE");
+    }
+
+    #[test]
+    fn reviews_and_runs_a_typed_sealed_bundle() {
+        let project_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let bundle = project_root.join("examples/bundles/typed-expense");
+        let arguments = bundle.join("arguments.json");
+        let reviewed = run(vec![
+            "review-bundle".to_owned(),
+            bundle.display().to_string(),
+        ])
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(reviewed["analysis"]["capabilityClosure"], json!(["log"]));
+        assert_eq!(reviewed["review"]["editable"], false);
+        assert_eq!(reviewed["review"]["renderer"], "rust-readonly-v1");
+
+        let executed = run(vec![
+            "run-bundle".to_owned(),
+            bundle.display().to_string(),
+            "evaluate".to_owned(),
+            arguments.display().to_string(),
+        ])
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(executed["result"]["status"], "review");
+        assert_eq!(executed["result"]["amount"], 1200);
     }
 
     #[test]

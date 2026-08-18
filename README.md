@@ -197,6 +197,13 @@ SHA-256 汇成根哈希的密封 Bundle。带 imports 的单文件不能直接�
 [多模块费用审批 Bundle](examples/bundles/expense-approval)，完整契约见
 [v0.7 规格](docs/spec-v0.7.md)。
 
+v4 要求导出函数签名和 typed data field，并用独立的 `export-types` 声明跨模块名义类型；运行前推断内部类型并静态计算每个 export
+的传递 capability 闭包。Bundle format v2 把闭包封进根 hash，加载时重新计算比对；
+宿主输入与 guest 输出也按签名检查。`review` / `review-bundle` 可生成带 source span
+和 effect 的 Rust 风格只读审查视图。示例见
+[typed-expense Bundle](examples/bundles/typed-expense)，契约见
+[v0.8 规格](docs/spec-v0.8.md)。
+
 Web 程序可声明静态 `route`，处理器接收请求 Map 并返回结构化响应 Map。所有版本
 都只有 `#f` 为假。
 

@@ -3,15 +3,17 @@
 这一页只讨论 `.ail` 语言的当前 Rust 实现和后续生态，不定义语言本身。语法、Value、Schema、route、diagnostic 与版本格式应先由语言规格固定，宿主只能实现这些契约。
 
 ::: warning 当前定位
-Rust v0.7 已形成通用语言的安全内核：能独立运行 v1/v2/v3 语言、密封多模块 Bundle、业务场景、版本库、provider 和本地 JSON HTTP server，但尚未生产就绪。workspace 的 crate 仍是 `publish = false`，没有稳定 FFI，也没有 crates.io 发布物。
+Rust v0.8 已形成通用语言的安全内核：能独立运行 v1-v4 语言、密封多模块 Bundle、类型/效果门禁、只读审查、业务场景、版本库、provider 和本地 JSON HTTP server，但尚未生产就绪。workspace 的 crate 仍是 `publish = false`，没有稳定 FFI，也没有 crates.io 发布物。
 :::
 
 ## 当前实现快照
 
 | 层 | 已实现 | 尚未完成 |
 | --- | --- | --- |
-| 语言前端 | 有边界 UTF-8 Reader、v1/v2/v3 AST / Parser、imports、封闭数据、模式匹配、版本门控、source span、JSON inspect | 类型/效果、稳定 AST ID、格式化器 |
-| 模块制品 | 精确 manifest、module/root SHA-256、依赖图、命名空间链接、CLI 密封/检查/运行 | 签名、远端 registry、lockfile、跨包解析 |
+| 语言前端 | 有边界 UTF-8 Reader、v1-v4 AST / Parser、imports、typed 封闭数据、模式匹配、signature、版本门控、source span、JSON inspect | 泛型声明、稳定表达式 AST ID、格式化器 |
+| 静态分析 | 内部类型推断、export 输入/输出门禁、传递 effect/capability 闭包、已知高阶 callback、失败关闭未知 callback | effect polymorphism、增量分析、LSP |
+| 模块制品 | 精确 manifest、module/root SHA-256、依赖图、命名空间链接、format v2 capability closure | 签名、远端 registry、lockfile、跨包解析 |
+| 审查 | Rust 风格只读投影、definition ID、模块/span/type/effect nodes | 结构化编辑明确推迟到 v0.10 之后 |
 | 运行时 | BigInt、闭包、递归、短路条件、有界集合、Result、enum/union Schema、校验成本、`text@1` | 独立内存配额、字节码/WASM、可安全取消的进程级 deadline |
 | 业务服务 | route dispatch、response 校验、事务内存/文件 KV、固定时钟与日志、11 个场景 | 正式数据库 adapter、migration、连接池 |
 | 版本库 | SHA-256、不可变校验、metadata、active、events、原子写、跨进程锁、回滚 | 签名、远端 artifact store、生产审批流 |
@@ -25,7 +27,9 @@ Rust v0.7 已形成通用语言的安全内核：能独立运行 v1/v2/v3 语言
 ```text
 ail-diagnostic
       ▲
-ail-syntax ─► ail-runtime ─► ail-service ─► ail-http ─► ail-server
+ail-syntax ─► ail-analysis ─┬─► ail-runtime ─► ail-service ─► ail-http ─► ail-server
+      │                     └─► ail-bundle ────────────────► ail-cli
+      └──────────────────────────────▲
                     │              │
                     │              └──────► ail-store
                     │                         ▲
@@ -70,7 +74,7 @@ Rust 实现不能为了方便静默改变：
 
 ## crates.io 发布路线
 
-当前 workspace 使用统一版本 `0.7.0`，但 `publish = false`。发布前至少需要：
+当前 workspace 使用统一版本 `0.8.0`，但 `publish = false`。发布前至少需要：
 
 1. 明确哪些 crate 是公共 API，哪些只服务于 binary；
 2. 把 `Program`、`Value`、`Diagnostic`、Library Contract 的兼容性写入 semver 策略；
@@ -133,13 +137,9 @@ trait LibraryBackend {
 
 FFI 不能成为绕过 Parser、fuel、capability 或版本门禁的后门。
 
-## 阶段 5：生成只读审查视图（建议）
+## Rust 风格只读审查视图（v0.8 已实现）
 
-::: warning 尚未实现
-当前 `inspect` 只输出 JSON AST；不会生成 Rust 风格代码，也没有专用审查 UI。
-:::
-
-面向不熟悉 S 表达式的审查者，可以从已验证 AST 单向生成 Rust 风格只读视图：
+面向不熟悉 S 表达式的审查者，分析器会从已验证 AST 单向生成 Rust 风格只读视图：
 
 ```rust
 // Generated review view — read only.
@@ -151,13 +151,13 @@ schema! TaskCreate {
 }
 ```
 
-设计要求：
+当前契约：
 
 1. 视图只读，不能反向作为执行源码；
 2. 每个显示节点能追踪到 `.ail` source span 和稳定 AST ID；
-3. 同屏突出 route、Schema、capability、错误码和写入操作 diff；
-4. 无法等价表达的节点必须显式标记，不能静默简化；
-5. `.ail` AST、suite 和宿主策略仍是唯一执行真相。
+3. machine-readable node 同屏携带 definition、模块、span、type 和 capability；
+4. `.ail` AST、suite 和宿主策略仍是唯一执行真相；
+5. 反向转换与结构化编辑明确推迟到 v0.10 之后。
 
 ## 生产宿主路线
 

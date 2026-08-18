@@ -8,9 +8,9 @@ use num_traits::{ToPrimitive, Zero};
 use serde_json::json;
 
 use crate::{
-    Binding, CondClause, DataTypeDefinition, Datum, DatumKind, Definition, Expression,
-    ExpressionKind, LibraryRequirement, MatchArm, Pattern, PatternKind, Program, Route, Schema,
-    SchemaField, SchemaKind, VariantDefinition,
+    Binding, CondClause, DataField, DataTypeDefinition, Datum, DatumKind, Definition, Expression,
+    ExpressionKind, FunctionSignature, LibraryRequirement, MatchArm, Pattern, PatternKind, Program,
+    Route, Schema, SchemaField, SchemaKind, TypeExpression, VariantDefinition,
 };
 
 const SUPPORTED_CAPABILITIES: &[&str] = &["log", "kv", "clock"];
@@ -75,13 +75,15 @@ const MAXIMUM_SCHEMA_DEPTH: usize = 16;
 const MAXIMUM_OBJECT_FIELDS: usize = 64;
 const MAXIMUM_SCHEMA_COLLECTION_LENGTH: u64 = 10_000;
 const MAXIMUM_LIBRARY_COUNT: usize = 32;
-const MAXIMUM_LANGUAGE_VERSION: u8 = 3;
+const MAXIMUM_LANGUAGE_VERSION: u8 = 4;
 const MAXIMUM_ENUM_VALUES: usize = 64;
 const MAXIMUM_UNION_VARIANTS: usize = 8;
 const MAXIMUM_IMPORTS: usize = 64;
 const MAXIMUM_DATA_TYPES: usize = 64;
 const MAXIMUM_DATA_VARIANTS: usize = 64;
 const MAXIMUM_VARIANT_FIELDS: usize = 64;
+const MAXIMUM_SIGNATURES: usize = 256;
+const MAXIMUM_TYPE_DEPTH: usize = 16;
 
 pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
     let top = datum.list().ok_or_else(|| {
@@ -101,13 +103,16 @@ pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
     let mut libraries = None;
     let mut imports = None;
     let mut exports = None;
+    let mut type_exports = None;
     let mut schemas = Vec::new();
     let mut data_types = Vec::new();
+    let mut signatures = Vec::new();
     let mut routes: Vec<Route> = Vec::new();
     let mut definitions = Vec::new();
     let mut schema_names = HashSet::new();
     let mut data_type_names = HashSet::new();
     let mut constructor_names = HashSet::new();
+    let mut signature_names = HashSet::new();
     let mut definition_names = HashSet::new();
 
     for form_datum in &top[1..] {
@@ -345,6 +350,26 @@ pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
                 }
                 data_types.push(definition);
             }
+            "signature" => {
+                if signatures.len() >= MAXIMUM_SIGNATURES {
+                    return Err(Diagnostic::new(
+                        "PROGRAM_TOO_MANY_SIGNATURES",
+                        "program declares too many function signatures",
+                        json!({ "maximum": MAXIMUM_SIGNATURES }),
+                    )
+                    .at(form_datum.span));
+                }
+                let signature = parse_function_signature(form, form_datum)?;
+                if !signature_names.insert(signature.name.clone()) {
+                    return Err(Diagnostic::new(
+                        "PROGRAM_DUPLICATE_SIGNATURE",
+                        "function signature name is not unique",
+                        json!({ "name": signature.name }),
+                    )
+                    .at(form_datum.span));
+                }
+                signatures.push(signature);
+            }
             "schema" => {
                 if form.len() != 3 || form[1].symbol().is_none() {
                     return Err(at(
@@ -508,6 +533,31 @@ pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
                 )?;
                 exports = Some(values);
             }
+            "export-types" => {
+                if type_exports.is_some() {
+                    return Err(at(
+                        form_datum,
+                        "PROGRAM_DUPLICATE_TYPE_EXPORT",
+                        "program has multiple export-types forms",
+                    ));
+                }
+                let values = symbols(&form[1..])
+                    .filter(|values| !values.is_empty())
+                    .ok_or_else(|| {
+                        at(
+                            form_datum,
+                            "PROGRAM_INVALID_TYPE_EXPORT",
+                            "export-types must contain at least one type name",
+                        )
+                    })?;
+                ensure_unique(
+                    &values,
+                    "PROGRAM_DUPLICATE_TYPE_EXPORT_NAME",
+                    "type export name is listed more than once",
+                    form_datum,
+                )?;
+                type_exports = Some(values);
+            }
             _ => {
                 return Err(Diagnostic::new(
                     "PROGRAM_UNKNOWN_FORM",
@@ -549,6 +599,7 @@ pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
         .at(datum.span)
     })?;
     let imports = imports.unwrap_or_default();
+    let type_exports = type_exports.unwrap_or_default();
     if imports.iter().any(|import| import == &name) {
         return Err(Diagnostic::new(
             "PROGRAM_SELF_IMPORT",
@@ -565,6 +616,88 @@ pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
     if version < BigInt::from(3_u8) && !data_types.is_empty() {
         return Err(program_feature_requires_version("data", &version, 3, datum));
     }
+    if version < BigInt::from(4_u8) && !signatures.is_empty() {
+        return Err(program_feature_requires_version(
+            "signature",
+            &version,
+            4,
+            datum,
+        ));
+    }
+    if version < BigInt::from(4_u8) && !type_exports.is_empty() {
+        return Err(program_feature_requires_version(
+            "export-types",
+            &version,
+            4,
+            datum,
+        ));
+    }
+    for type_name in &type_exports {
+        if !data_type_names.contains(type_name) {
+            return Err(Diagnostic::new(
+                "PROGRAM_UNKNOWN_TYPE_EXPORT",
+                "export-types name does not identify a local data type",
+                json!({ "name": type_name }),
+            )
+            .at(datum.span));
+        }
+    }
+    for data_type in &data_types {
+        for variant in &data_type.variants {
+            for field in &variant.fields {
+                match (&field.type_expression, version >= BigInt::from(4_u8)) {
+                    (Some(_), false) => {
+                        return Err(program_feature_requires_version(
+                            "typed-data-field",
+                            &version,
+                            4,
+                            datum,
+                        ));
+                    }
+                    (None, true) => {
+                        return Err(Diagnostic::new(
+                            "PROGRAM_DATA_FIELD_REQUIRES_TYPE",
+                            "language version 4 data fields require explicit types",
+                            json!({
+                                "type": data_type.name,
+                                "variant": variant.name,
+                                "field": field.name,
+                            }),
+                        )
+                        .at(datum.span));
+                    }
+                    (Some(type_expression), true) => {
+                        ensure_known_type(
+                            type_expression,
+                            &data_type_names,
+                            !imports.is_empty(),
+                            datum,
+                        )?;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    for signature in &signatures {
+        if !definition_names.contains(&signature.name) {
+            return Err(Diagnostic::new(
+                "PROGRAM_UNKNOWN_SIGNATURE",
+                "signature does not name a program definition",
+                json!({ "name": signature.name }),
+            )
+            .at(datum.span));
+        }
+        for parameter in &signature.parameters {
+            ensure_known_type(parameter, &data_type_names, !imports.is_empty(), datum)?;
+        }
+        ensure_known_type(
+            &signature.result,
+            &data_type_names,
+            !imports.is_empty(),
+            datum,
+        )?;
+    }
     for export_name in &exports {
         if !definition_names.contains(export_name) && !constructor_names.contains(export_name) {
             return Err(Diagnostic::new(
@@ -573,6 +706,18 @@ pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
                 json!({ "name": export_name }),
             )
             .at(datum.span));
+        }
+    }
+    if version >= BigInt::from(4_u8) {
+        for export_name in &exports {
+            if definition_names.contains(export_name) && !signature_names.contains(export_name) {
+                return Err(Diagnostic::new(
+                    "PROGRAM_EXPORT_REQUIRES_SIGNATURE",
+                    "language version 4 exported definitions require a function signature",
+                    json!({ "name": export_name }),
+                )
+                .at(datum.span));
+            }
         }
     }
     for route in &routes {
@@ -622,6 +767,8 @@ pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
         imports,
         schemas,
         data_types,
+        signatures,
+        type_exports,
         routes,
         definitions,
         exports,
@@ -673,16 +820,16 @@ fn parse_data_type(form: &[Datum], datum: &Datum) -> AilResult<DataTypeDefinitio
             )
             .at(raw_variant.span));
         }
-        let fields = symbols(&variant[1..]).ok_or_else(|| {
-            Diagnostic::new(
-                "PROGRAM_INVALID_DATA_FIELD",
-                "data variant field names must be symbols",
-                json!({ "variant": name }),
-            )
-            .at(raw_variant.span)
-        })?;
+        let fields = variant[1..]
+            .iter()
+            .map(parse_data_field)
+            .collect::<AilResult<Vec<_>>>()?;
+        let field_names = fields
+            .iter()
+            .map(|field| field.name.clone())
+            .collect::<Vec<_>>();
         ensure_unique(
-            &fields,
+            &field_names,
             "PROGRAM_DUPLICATE_DATA_FIELD",
             "data variant field name is not unique",
             raw_variant,
@@ -696,6 +843,133 @@ fn parse_data_type(form: &[Datum], datum: &Datum) -> AilResult<DataTypeDefinitio
         name: form[1].symbol().unwrap_or_default().to_owned(),
         variants,
     })
+}
+
+fn parse_data_field(datum: &Datum) -> AilResult<DataField> {
+    if let Some(name) = datum.symbol() {
+        return Ok(DataField {
+            name: name.to_owned(),
+            type_expression: None,
+        });
+    }
+    let field = datum.list().unwrap_or_default();
+    if field.len() != 2 || field[0].symbol().is_none() {
+        return Err(Diagnostic::new(
+            "PROGRAM_INVALID_DATA_FIELD",
+            "data field must be a name or (name type)",
+            json!({ "field": datum.display() }),
+        )
+        .at(datum.span));
+    }
+    Ok(DataField {
+        name: field[0].symbol().unwrap_or_default().to_owned(),
+        type_expression: Some(parse_type_expression(&field[1], 0)?),
+    })
+}
+
+fn parse_function_signature(form: &[Datum], datum: &Datum) -> AilResult<FunctionSignature> {
+    if form.len() != 3 || form[1].symbol().is_none() {
+        return Err(at(
+            datum,
+            "PROGRAM_INVALID_SIGNATURE",
+            "signature must be (signature name (fn (parameter-type ...) result-type))",
+        ));
+    }
+    let type_expression = parse_type_expression(&form[2], 0)?;
+    let TypeExpression::Function { parameters, result } = type_expression else {
+        return Err(at(
+            datum,
+            "PROGRAM_INVALID_SIGNATURE",
+            "signature type must be a function type",
+        ));
+    };
+    Ok(FunctionSignature {
+        name: form[1].symbol().unwrap_or_default().to_owned(),
+        parameters,
+        result: *result,
+    })
+}
+
+fn parse_type_expression(datum: &Datum, depth: usize) -> AilResult<TypeExpression> {
+    if depth > MAXIMUM_TYPE_DEPTH {
+        return Err(Diagnostic::new(
+            "PROGRAM_TYPE_TOO_DEEP",
+            "type expression exceeds the maximum nesting depth",
+            json!({ "maximum": MAXIMUM_TYPE_DEPTH }),
+        )
+        .at(datum.span));
+    }
+    if let Some(name) = datum.symbol() {
+        return Ok(TypeExpression::Named(name.to_owned()));
+    }
+    let form = datum.list().unwrap_or_default();
+    match form.first().and_then(Datum::symbol) {
+        Some("list") if form.len() == 2 => Ok(TypeExpression::List(Box::new(
+            parse_type_expression(&form[1], depth + 1)?,
+        ))),
+        Some("result") if form.len() == 3 => Ok(TypeExpression::Result {
+            success: Box::new(parse_type_expression(&form[1], depth + 1)?),
+            error: Box::new(parse_type_expression(&form[2], depth + 1)?),
+        }),
+        Some("fn") if form.len() == 3 => {
+            let parameters = form[1].list().ok_or_else(|| {
+                at(
+                    &form[1],
+                    "PROGRAM_INVALID_TYPE",
+                    "function type parameters must be a proper list",
+                )
+            })?;
+            Ok(TypeExpression::Function {
+                parameters: parameters
+                    .iter()
+                    .map(|parameter| parse_type_expression(parameter, depth + 1))
+                    .collect::<AilResult<Vec<_>>>()?,
+                result: Box::new(parse_type_expression(&form[2], depth + 1)?),
+            })
+        }
+        _ => Err(Diagnostic::new(
+            "PROGRAM_INVALID_TYPE",
+            "unknown or malformed type expression",
+            json!({ "type": datum.display() }),
+        )
+        .at(datum.span)),
+    }
+}
+
+fn ensure_known_type(
+    type_expression: &TypeExpression,
+    data_types: &HashSet<String>,
+    allow_external: bool,
+    datum: &Datum,
+) -> AilResult<()> {
+    match type_expression {
+        TypeExpression::Named(name) => {
+            const BUILTINS: &[&str] = &[
+                "any", "integer", "boolean", "string", "symbol", "nil", "map",
+            ];
+            if BUILTINS.contains(&name.as_str()) || data_types.contains(name) || allow_external {
+                Ok(())
+            } else {
+                Err(Diagnostic::new(
+                    "PROGRAM_UNKNOWN_TYPE",
+                    "type expression names an unknown type",
+                    json!({ "name": name }),
+                )
+                .at(datum.span))
+            }
+        }
+        TypeExpression::List(item) => ensure_known_type(item, data_types, allow_external, datum),
+        TypeExpression::Result { success, error } => {
+            ensure_known_type(success, data_types, allow_external, datum)?;
+            ensure_known_type(error, data_types, allow_external, datum)
+        }
+        TypeExpression::Function { parameters, result } => {
+            for parameter in parameters {
+                ensure_known_type(parameter, data_types, allow_external, datum)?;
+            }
+            ensure_known_type(result, data_types, allow_external, datum)
+        }
+    }
 }
 
 fn parse_schema_specification(datum: &Datum, depth: usize) -> AilResult<SchemaKind> {
@@ -1528,7 +1802,7 @@ mod tests {
     use ail_diagnostic::{AilResult, Diagnostic};
     use serde_json::json;
 
-    use crate::load_program_source;
+    use crate::{TypeExpression, load_program_source};
 
     const CORE: &str = include_str!("../../../../conformance/v1/programs/core.ail");
     const SCHEMA: &str = include_str!("../../../../conformance/v1/programs/schema.ail");
@@ -1627,15 +1901,15 @@ mod tests {
         );
 
         let future = require_error(load_program_source(
-            "(program (name future) (version 4) (def run #t) (export run))",
+            "(program (name future) (version 5) (def run #t) (export run))",
         ));
         assert_eq!(future.code, "PROGRAM_UNSUPPORTED_VERSION");
         assert_eq!(
             future.details.as_ref(),
             &json!({
-                "actualVersion": "4",
+                "actualVersion": "5",
                 "minimumSupportedVersion": 1,
-                "maximumSupportedVersion": 3,
+                "maximumSupportedVersion": 4,
             })
         );
     }
@@ -1738,7 +2012,12 @@ mod tests {
         .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
         assert_eq!(program.imports, ["policy"]);
         assert_eq!(program.data_types[0].name, "decision");
-        assert_eq!(program.data_types[0].variants[0].fields, ["id"]);
+        assert_eq!(program.data_types[0].variants[0].fields[0].name, "id");
+        assert!(
+            program.data_types[0].variants[0].fields[0]
+                .type_expression
+                .is_none()
+        );
 
         let missing_default = require_error(load_program_source(
             r#"(program
@@ -1770,5 +2049,65 @@ mod tests {
             "(program (name old) (version 2) (def run (match 1 (_ #t))) (export run))",
         ));
         assert_eq!(matcher.code, "PROGRAM_FEATURE_REQUIRES_VERSION");
+    }
+
+    #[test]
+    fn parses_and_gates_v4_types_and_signatures() {
+        let program = load_program_source(
+            r#"(program
+                (name typed-decisions)
+                (version 4)
+                (data decision
+                  (approved (amount integer))
+                  (rejected (reason string)))
+                (export-types decision)
+                (signature decide (fn (integer) decision))
+                (def decide (fn (amount) (approved amount)))
+                (export decide approved rejected))"#,
+        )
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(program.signatures[0].name, "decide");
+        assert_eq!(program.type_exports, ["decision"]);
+        assert_eq!(
+            program.data_types[0].variants[0].fields[0]
+                .type_expression
+                .as_ref()
+                .map(TypeExpression::to_json),
+            Some(json!({ "type": "named", "name": "integer" }))
+        );
+
+        let untyped = require_error(load_program_source(
+            "(program (name invalid) (version 4) (data maybe (some value) (none)) (def run (fn () (none))) (signature run (fn () maybe)) (export run))",
+        ));
+        assert_eq!(untyped.code, "PROGRAM_DATA_FIELD_REQUIRES_TYPE");
+
+        let missing_signature = require_error(load_program_source(
+            "(program (name invalid) (version 4) (def run (fn () 1)) (export run))",
+        ));
+        assert_eq!(missing_signature.code, "PROGRAM_EXPORT_REQUIRES_SIGNATURE");
+
+        let old = require_error(load_program_source(
+            "(program (name old) (version 3) (signature run (fn () integer)) (def run (fn () 1)) (export run))",
+        ));
+        assert_eq!(old.code, "PROGRAM_FEATURE_REQUIRES_VERSION");
+
+        let old_type_export = require_error(load_program_source(
+            "(program (name old) (version 3) (data maybe (some value)) (export-types maybe) (def run (fn () 1)) (export run))",
+        ));
+        assert_eq!(old_type_export.code, "PROGRAM_FEATURE_REQUIRES_VERSION");
+
+        let unknown_type_export = require_error(load_program_source(
+            "(program (name invalid) (version 4) (export-types missing) (signature run (fn () integer)) (def run (fn () 1)) (export run))",
+        ));
+        assert_eq!(unknown_type_export.code, "PROGRAM_UNKNOWN_TYPE_EXPORT");
+
+        let imported_type = load_program_source(
+            "(program (name app) (version 4) (imports model) (signature run (fn (external) external)) (def run (fn (value) value)) (export run))",
+        )
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(
+            imported_type.signatures[0].parameters[0].to_json(),
+            json!({ "type": "named", "name": "external" })
+        );
     }
 }

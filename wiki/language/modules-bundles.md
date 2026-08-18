@@ -37,7 +37,7 @@ v3 把“单文件可审计”扩展成“依赖闭包可审计”：源码可�
 
 ## Bundle 是执行边界
 
-`bundle.json` 固定入口、语言版本和每个模块的 SHA-256：
+`bundle.json` 固定入口、语言版本和每个模块的 SHA-256。v3 使用 format 1：
 
 ```json
 {
@@ -52,6 +52,14 @@ v3 把“单文件可审计”扩展成“依赖闭包可审计”：源码可�
 ```
 
 模块必须按名称排序。规范化 manifest 的 SHA-256 就是 Bundle ID；任一源码字节、路径、入口或依赖集合改变，ID 都随之改变。
+
+v4 使用 format 2，并增加由分析器计算的字段：
+
+```json
+{"formatVersion":2,"languageVersion":4,"capabilityClosure":["log"]}
+```
+
+加载时会重新计算并比对 closure；format 1 不能承载 v4，format 2 也不能伪装成旧语言版本。
 
 ```text
 module source ─► module SHA-256 ─┐
@@ -69,12 +77,13 @@ entry + language version ────────┘
 - imports 全部存在、无环，并且每个模块都可从入口到达；
 - 只有入口可以声明 route；
 - imported export 不与本地或另一个依赖的可见名字冲突。
+- v4 导入签名中的名义类型由直接依赖显式 `export-types`，且来源唯一。
 
 失败会返回稳定诊断，不会退回按磁盘现状“尽力运行”。
 
 ## 链接不会扩大权限
 
-链接器按依赖顺序合并 AST，把模块私有 binding、Schema、类型和构造器改写到独立命名空间，只为入口 exports 建立外部别名。链接后的 `Program.imports` 必须为空，解释器拒绝任何未链接 imports。
+链接器按依赖顺序合并 AST，把模块私有 binding、Schema、类型和构造器改写到独立命名空间，只为入口 exports 建立外部别名。值的 `export` 与类型的 `export-types` 是独立白名单；链接后的 `Program.imports` 必须为空，解释器拒绝任何未链接 imports。
 
 capability 仍由源码声明、宿主注入。模块不能获得文件系统、网络、动态库、`eval` 或安装脚本；拆文件只改变组织方式，不改变信任模型。
 

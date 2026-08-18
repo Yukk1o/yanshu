@@ -6,6 +6,7 @@ use std::{
     path::{Component, Path},
 };
 
+use ail_analysis::analyze_program;
 use ail_diagnostic::{AilResult, Diagnostic};
 use ail_syntax::{Program, load_program_source};
 use serde_json::{Map, Value, json};
@@ -14,7 +15,7 @@ use sha2::{Digest, Sha256};
 use crate::{graph::dependency_order, linker::link_programs};
 
 const MANIFEST_FILE: &str = "bundle.json";
-const FORMAT_VERSION: u64 = 1;
+const MAXIMUM_FORMAT_VERSION: u64 = 2;
 const MAXIMUM_MODULES: usize = 256;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,6 +31,7 @@ pub struct BundleManifest {
     pub language_version: u64,
     pub entry: String,
     pub modules: Vec<ModuleManifest>,
+    pub capability_closure: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,12 +44,16 @@ pub struct LoadedBundle {
 impl BundleManifest {
     #[must_use]
     pub fn to_json(&self) -> Value {
-        json!({
+        let mut document = json!({
             "formatVersion": self.format_version,
             "languageVersion": self.language_version,
             "entry": self.entry,
             "modules": self.modules.iter().map(ModuleManifest::to_json).collect::<Vec<_>>(),
-        })
+        });
+        if let Some(capabilities) = &self.capability_closure {
+            document["capabilityClosure"] = json!(capabilities);
+        }
+        document
     }
 
     fn canonical_descriptor(&self) -> String {
@@ -115,14 +121,19 @@ pub fn seal_bundle_directory(
         });
     }
     modules.sort_by(|left, right| left.name.cmp(&right.name));
-    let manifest = BundleManifest {
-        format_version: FORMAT_VERSION,
+    let mut manifest = BundleManifest {
+        format_version: if language_version == Some(4) { 2 } else { 1 },
         language_version: language_version.unwrap_or_default(),
         entry: entry.to_owned(),
         modules,
+        capability_closure: None,
     };
     let programs = read_verified_programs(root, &manifest)?;
-    dependency_order(&programs, entry)?;
+    let order = dependency_order(&programs, entry)?;
+    if manifest.format_version == 2 {
+        let linked = link_programs(&programs, &order, entry)?;
+        manifest.capability_closure = Some(analyze_program(&linked)?.capability_closure);
+    }
     let document = serde_json::to_string_pretty(&manifest.to_json()).map_err(|error| {
         Diagnostic::new(
             "BUNDLE_MANIFEST_ENCODE",
@@ -161,6 +172,19 @@ pub fn load_bundle(root: impl AsRef<Path>) -> AilResult<LoadedBundle> {
     let order = dependency_order(&programs, &manifest.entry)?;
     let bundle_hash = manifest.content_hash();
     let mut program = link_programs(&programs, &order, &manifest.entry)?;
+    if manifest.format_version == 2 {
+        let computed = analyze_program(&program)?.capability_closure;
+        if manifest.capability_closure.as_ref() != Some(&computed) {
+            return Err(Diagnostic::new(
+                "BUNDLE_CAPABILITY_CLOSURE_MISMATCH",
+                "sealed capability closure does not match static analysis",
+                json!({
+                    "sealed": manifest.capability_closure,
+                    "computed": computed,
+                }),
+            ));
+        }
+    }
     program.source = format!("sealed-bundle:{bundle_hash}");
     Ok(LoadedBundle {
         manifest,
@@ -209,17 +233,30 @@ fn read_verified_programs(
 
 fn parse_manifest(document: &Value) -> AilResult<BundleManifest> {
     let object = document.as_object().ok_or_else(invalid_manifest)?;
-    require_exact_fields(
-        object,
-        &["formatVersion", "languageVersion", "entry", "modules"],
-    )?;
     let format_version = required_u64(object, "formatVersion")?;
-    if format_version != FORMAT_VERSION {
+    if !(1..=MAXIMUM_FORMAT_VERSION).contains(&format_version) {
         return Err(Diagnostic::new(
             "BUNDLE_FORMAT_UNSUPPORTED",
             "bundle manifest format version is unsupported",
-            json!({ "actual": format_version, "supported": FORMAT_VERSION }),
+            json!({ "actual": format_version, "minimum": 1, "maximum": MAXIMUM_FORMAT_VERSION }),
         ));
+    }
+    if format_version == 1 {
+        require_exact_fields(
+            object,
+            &["formatVersion", "languageVersion", "entry", "modules"],
+        )?;
+    } else {
+        require_exact_fields(
+            object,
+            &[
+                "formatVersion",
+                "languageVersion",
+                "entry",
+                "modules",
+                "capabilityClosure",
+            ],
+        )?;
     }
     let language_version = required_u64(object, "languageVersion")?;
     let entry = required_string(object, "entry")?.to_owned();
@@ -265,11 +302,45 @@ fn parse_manifest(document: &Value) -> AilResult<BundleManifest> {
             sha256: hash.to_ascii_lowercase(),
         });
     }
+    let capability_closure = if format_version == 2 {
+        let raw = object
+            .get("capabilityClosure")
+            .and_then(Value::as_array)
+            .ok_or_else(invalid_manifest)?;
+        let mut values = Vec::with_capacity(raw.len());
+        let mut previous: Option<&str> = None;
+        for item in raw {
+            let capability = item.as_str().ok_or_else(invalid_manifest)?;
+            if !matches!(capability, "clock" | "kv" | "log")
+                || previous.is_some_and(|value| value >= capability)
+            {
+                return Err(Diagnostic::simple(
+                    "BUNDLE_INVALID_CAPABILITY_CLOSURE",
+                    "capability closure must be uniquely sorted and contain supported capabilities",
+                ));
+            }
+            previous = Some(capability);
+            values.push(capability.to_owned());
+        }
+        Some(values)
+    } else {
+        None
+    };
+    if (format_version == 1 && language_version >= 4)
+        || (format_version == 2 && language_version != 4)
+    {
+        return Err(Diagnostic::new(
+            "BUNDLE_FORMAT_LANGUAGE_MISMATCH",
+            "bundle format does not match its language version",
+            json!({ "formatVersion": format_version, "languageVersion": language_version }),
+        ));
+    }
     Ok(BundleManifest {
         format_version,
         language_version,
         entry,
         modules,
+        capability_closure,
     })
 }
 

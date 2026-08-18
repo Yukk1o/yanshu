@@ -77,6 +77,8 @@ pub struct Program {
     pub capabilities: Vec<String>,
     pub libraries: Vec<LibraryRequirement>,
     pub data_types: Vec<DataTypeDefinition>,
+    pub signatures: Vec<FunctionSignature>,
+    pub type_exports: Vec<String>,
     pub schemas: Vec<Schema>,
     pub routes: Vec<Route>,
     pub definitions: Vec<Definition>,
@@ -93,7 +95,34 @@ pub struct DataTypeDefinition {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VariantDefinition {
     pub name: String,
-    pub fields: Vec<String>,
+    pub fields: Vec<DataField>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DataField {
+    pub name: String,
+    pub type_expression: Option<TypeExpression>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FunctionSignature {
+    pub name: String,
+    pub parameters: Vec<TypeExpression>,
+    pub result: TypeExpression,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TypeExpression {
+    Named(String),
+    List(Box<Self>),
+    Result {
+        success: Box<Self>,
+        error: Box<Self>,
+    },
+    Function {
+        parameters: Vec<Self>,
+        result: Box<Self>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -258,6 +287,20 @@ impl Program {
                     ),
                 );
             }
+            if !self.signatures.is_empty() {
+                fields.insert(
+                    "signatures".to_owned(),
+                    Value::Array(
+                        self.signatures
+                            .iter()
+                            .map(FunctionSignature::to_json)
+                            .collect(),
+                    ),
+                );
+            }
+            if !self.type_exports.is_empty() {
+                fields.insert("typeExports".to_owned(), json!(self.type_exports));
+            }
         }
         document
     }
@@ -290,6 +333,20 @@ impl Program {
                     ),
                 );
             }
+            if !self.signatures.is_empty() {
+                fields.insert(
+                    "signatures".to_owned(),
+                    Value::Array(
+                        self.signatures
+                            .iter()
+                            .map(FunctionSignature::to_json)
+                            .collect(),
+                    ),
+                );
+            }
+            if !self.type_exports.is_empty() {
+                fields.insert("typeExports".to_owned(), json!(self.type_exports));
+            }
         }
         document
     }
@@ -306,7 +363,50 @@ impl DataTypeDefinition {
 
 impl VariantDefinition {
     fn to_json(&self) -> Value {
-        json!({ "name": self.name, "fields": self.fields })
+        json!({
+            "name": self.name,
+            "fields": self.fields.iter().map(DataField::to_json).collect::<Vec<_>>(),
+        })
+    }
+}
+
+impl DataField {
+    fn to_json(&self) -> Value {
+        let mut document = json!({ "name": self.name });
+        if let Some(type_expression) = &self.type_expression {
+            document["type"] = type_expression.to_json();
+        }
+        document
+    }
+}
+
+impl FunctionSignature {
+    fn to_json(&self) -> Value {
+        json!({
+            "name": self.name,
+            "parameters": self.parameters.iter().map(TypeExpression::to_json).collect::<Vec<_>>(),
+            "result": self.result.to_json(),
+        })
+    }
+}
+
+impl TypeExpression {
+    #[must_use]
+    pub fn to_json(&self) -> Value {
+        match self {
+            Self::Named(name) => json!({ "type": "named", "name": name }),
+            Self::List(item) => json!({ "type": "list", "item": item.to_json() }),
+            Self::Result { success, error } => json!({
+                "type": "result",
+                "success": success.to_json(),
+                "error": error.to_json(),
+            }),
+            Self::Function { parameters, result } => json!({
+                "type": "function",
+                "parameters": parameters.iter().map(Self::to_json).collect::<Vec<_>>(),
+                "result": result.to_json(),
+            }),
+        }
     }
 }
 

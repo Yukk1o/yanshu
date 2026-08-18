@@ -1,0 +1,26 @@
+; v4 entry: its exported signature is checked before any execution.
+(program
+  (name typed-expense)
+  (version 4)
+  (imports typed-policy)
+
+  ; `decision` is a nominal type exported by typed-policy, separately from values.
+  (signature describe (fn (decision) map))
+  (def describe
+    (fn (decision)
+      (match decision
+        ((approved value)
+          (map "status" "approved" "amount" value))
+        ((review value reason)
+          (map "status" "review" "amount" value "reason" reason))
+        ((rejected reason)
+          (map "status" "rejected" "reason" reason))
+        (_
+          (map "status" "invalid")))))
+
+  (signature evaluate (fn (integer) map))
+  (def evaluate
+    (fn (amount)
+      (describe (decide amount))))
+
+  (export evaluate))

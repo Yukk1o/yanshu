@@ -4,8 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ail_diagnostic::{AilResult, Diagnostic};
 use ail_syntax::{
-    Binding, CondClause, DataTypeDefinition, Definition, Expression, ExpressionKind,
-    LibraryRequirement, MatchArm, Pattern, PatternKind, Program, Route, Schema, VariantDefinition,
+    Binding, CondClause, DataField, DataTypeDefinition, Definition, Expression, ExpressionKind,
+    FunctionSignature, LibraryRequirement, MatchArm, Pattern, PatternKind, Program, Route, Schema,
+    TypeExpression, VariantDefinition,
 };
 use serde_json::json;
 
@@ -22,6 +23,7 @@ pub(crate) fn link_programs(
         )
     })?;
     let mut exports = BTreeMap::new();
+    let mut type_exports = BTreeMap::new();
     let mut top_bindings = BTreeMap::new();
     for (module_name, program) in programs {
         let bindings = module_bindings(module_name, program);
@@ -35,12 +37,19 @@ pub(crate) fn link_programs(
             })?;
             exports.insert((module_name.clone(), export.clone()), target.clone());
         }
+        for type_export in &program.type_exports {
+            type_exports.insert(
+                (module_name.clone(), type_export.clone()),
+                qualify(module_name, type_export),
+            );
+        }
         top_bindings.insert(module_name.clone(), bindings);
     }
 
     let mut capabilities = BTreeSet::new();
     let mut libraries: BTreeMap<String, LibraryRequirement> = BTreeMap::new();
     let mut data_types = Vec::new();
+    let mut signatures = Vec::new();
     let mut schemas = Vec::new();
     let mut definitions = Vec::new();
     for module_name in order {
@@ -77,22 +86,53 @@ pub(crate) fn link_programs(
         })?;
         let imported = imported_bindings(program, local, &exports)?;
         for data_type in &program.data_types {
+            let mut variants = Vec::with_capacity(data_type.variants.len());
+            for variant in &data_type.variants {
+                let mut fields = Vec::with_capacity(variant.fields.len());
+                for field in &variant.fields {
+                    fields.push(DataField {
+                        name: field.name.clone(),
+                        type_expression: field
+                            .type_expression
+                            .as_ref()
+                            .map(|value| {
+                                resolve_type_expression(value, module_name, program, &type_exports)
+                            })
+                            .transpose()?,
+                    });
+                }
+                variants.push(VariantDefinition {
+                    name: qualify(module_name, &variant.name),
+                    fields,
+                });
+            }
             data_types.push(DataTypeDefinition {
                 name: qualify(module_name, &data_type.name),
-                variants: data_type
-                    .variants
-                    .iter()
-                    .map(|variant| VariantDefinition {
-                        name: qualify(module_name, &variant.name),
-                        fields: variant.fields.clone(),
-                    })
-                    .collect(),
+                variants,
             });
         }
         schemas.extend(program.schemas.iter().map(|schema| Schema {
             name: qualify(module_name, &schema.name),
             kind: schema.kind.clone(),
         }));
+        for signature in &program.signatures {
+            signatures.push(FunctionSignature {
+                name: qualify(module_name, &signature.name),
+                parameters: signature
+                    .parameters
+                    .iter()
+                    .map(|value| {
+                        resolve_type_expression(value, module_name, program, &type_exports)
+                    })
+                    .collect::<AilResult<Vec<_>>>()?,
+                result: resolve_type_expression(
+                    &signature.result,
+                    module_name,
+                    program,
+                    &type_exports,
+                )?,
+            });
+        }
         for definition in &program.definitions {
             definitions.push(Definition {
                 name: qualify(module_name, &definition.name),
@@ -126,6 +166,28 @@ pub(crate) fn link_programs(
                     .map_or_else(default_span, |definition| definition.expression.span),
             },
         });
+        if let Some(signature) = entry_program
+            .signatures
+            .iter()
+            .find(|signature| signature.name == *export)
+        {
+            signatures.push(FunctionSignature {
+                name: export.clone(),
+                parameters: signature
+                    .parameters
+                    .iter()
+                    .map(|value| {
+                        resolve_type_expression(value, entry, entry_program, &type_exports)
+                    })
+                    .collect::<AilResult<Vec<_>>>()?,
+                result: resolve_type_expression(
+                    &signature.result,
+                    entry,
+                    entry_program,
+                    &type_exports,
+                )?,
+            });
+        }
     }
 
     Ok(Program {
@@ -135,6 +197,12 @@ pub(crate) fn link_programs(
         capabilities: capabilities.into_iter().collect(),
         libraries: libraries.into_values().collect(),
         data_types,
+        signatures,
+        type_exports: entry_program
+            .type_exports
+            .iter()
+            .map(|name| qualify(entry, name))
+            .collect(),
         schemas,
         routes: entry_program
             .routes
@@ -149,6 +217,97 @@ pub(crate) fn link_programs(
         exports: entry_program.exports.clone(),
         source: String::new(),
     })
+}
+
+fn resolve_type_expression(
+    type_expression: &TypeExpression,
+    module: &str,
+    program: &Program,
+    type_exports: &BTreeMap<(String, String), String>,
+) -> AilResult<TypeExpression> {
+    match type_expression {
+        TypeExpression::Named(name)
+            if program
+                .data_types
+                .iter()
+                .any(|data_type| data_type.name == *name) =>
+        {
+            Ok(TypeExpression::Named(qualify(module, name)))
+        }
+        TypeExpression::Named(name) if is_builtin_type(name) => {
+            Ok(TypeExpression::Named(name.clone()))
+        }
+        TypeExpression::Named(name) => {
+            let matches = program
+                .imports
+                .iter()
+                .filter_map(|import| {
+                    type_exports
+                        .get(&(import.clone(), name.clone()))
+                        .map(|target| (import, target))
+                })
+                .collect::<Vec<_>>();
+            match matches.as_slice() {
+                [(_, target)] => Ok(TypeExpression::Named((*target).clone())),
+                [] => Err(Diagnostic::new(
+                    "BUNDLE_UNKNOWN_IMPORTED_TYPE",
+                    "type is neither local nor exported by a directly imported module",
+                    json!({ "module": module, "type": name }),
+                )),
+                _ => Err(Diagnostic::new(
+                    "BUNDLE_AMBIGUOUS_IMPORTED_TYPE",
+                    "multiple imported modules export the same visible type name",
+                    json!({
+                        "module": module,
+                        "type": name,
+                        "providers": matches
+                            .iter()
+                            .map(|(provider, _)| (*provider).clone())
+                            .collect::<Vec<_>>(),
+                    }),
+                )),
+            }
+        }
+        TypeExpression::List(item) => Ok(TypeExpression::List(Box::new(resolve_type_expression(
+            item,
+            module,
+            program,
+            type_exports,
+        )?))),
+        TypeExpression::Result { success, error } => Ok(TypeExpression::Result {
+            success: Box::new(resolve_type_expression(
+                success,
+                module,
+                program,
+                type_exports,
+            )?),
+            error: Box::new(resolve_type_expression(
+                error,
+                module,
+                program,
+                type_exports,
+            )?),
+        }),
+        TypeExpression::Function { parameters, result } => Ok(TypeExpression::Function {
+            parameters: parameters
+                .iter()
+                .map(|value| resolve_type_expression(value, module, program, type_exports))
+                .collect::<AilResult<Vec<_>>>()?,
+            result: Box::new(resolve_type_expression(
+                result,
+                module,
+                program,
+                type_exports,
+            )?),
+        }),
+    }
+}
+
+fn is_builtin_type(name: &str) -> bool {
+    matches!(
+        name,
+        "any" | "integer" | "boolean" | "string" | "symbol" | "nil" | "map"
+    )
 }
 
 fn module_bindings(module: &str, program: &Program) -> BTreeMap<String, String> {

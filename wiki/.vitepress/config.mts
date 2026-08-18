@@ -39,6 +39,7 @@ export default defineConfig({
           { text: '语法入门', link: '/language/syntax' },
           { text: '数据模型', link: '/language/data-model' },
           { text: '模块、数据类型与 Bundle', link: '/language/modules-bundles' },
+          { text: '类型、效果与只读审查', link: '/language/types-effects-review' },
           { text: 'Schema 与统一错误', link: '/backend/schema-errors' },
           { text: '标准库与 Library Backend', link: '/language/standard-library' },
           { text: 'Web DSL 与路由', link: '/backend/web' }

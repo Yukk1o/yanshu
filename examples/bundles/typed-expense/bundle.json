@@ -1,0 +1,20 @@
+{
+  "capabilityClosure": [
+    "log"
+  ],
+  "entry": "typed-expense",
+  "formatVersion": 2,
+  "languageVersion": 4,
+  "modules": [
+    {
+      "name": "typed-expense",
+      "path": "app.ail",
+      "sha256": "9349639281453beb0fdc0c2b7c3d8a6b41ac289e5c3c74244bc0dc411a557d94"
+    },
+    {
+      "name": "typed-policy",
+      "path": "policy.ail",
+      "sha256": "b4d2c38640f9e286581fbfee6ad590ff2223a13822f7e650364e161ba723c9df"
+    }
+  ]
+}

@@ -37,6 +37,15 @@
 | [bundle/linker.rs](/source/rust/crates/ail-bundle/src/linker.rs.txt) | private namespace、import export、词法 binding 与入口 alias |
 | [runtime/matcher.rs](/source/rust/crates/ail-runtime/src/matcher.rs.txt) | fuel 计量的递归 pattern binding |
 
+## 类型、效果与只读审查
+
+| 文件 | 看什么 |
+| --- | --- |
+| [analysis/types.rs](/source/rust/crates/ail-analysis/src/types.rs.txt) | 静态 Type 与机器可读表示 |
+| [analysis/infer.rs](/source/rust/crates/ail-analysis/src/infer.rs.txt) | signature seed、统一、primitive contract、pattern 类型 |
+| [analysis/effects.rs](/source/rust/crates/ail-analysis/src/effects.rs.txt) | export 调用闭包、高阶 callback 与 capability 校验 |
+| [analysis/review.rs](/source/rust/crates/ail-analysis/src/review.rs.txt) | 永久只读的 Rust 风格 semantic projection |
+
 Go/Rust 读者最值得先看的类型是 `Program`、`ExpressionKind`、`SchemaKind` 和 `Diagnostic`。它们定义语言可表示什么，比某个 CLI 命令更接近语义核心。
 
 ## 值与执行

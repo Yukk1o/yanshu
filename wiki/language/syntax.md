@@ -37,7 +37,7 @@
 
 ### `(version 1)`
 
-语言内声明的语义版本。当前接受 `1`、`2` 和 `3`：未知版本会以 `PROGRAM_UNSUPPORTED_VERSION` 拒绝；旧版源码使用新版 form 会得到带 `feature / actualVersion / minimumVersion` 的 `PROGRAM_FEATURE_REQUIRES_VERSION`。
+语言内声明的语义版本。当前接受 `1`、`2`、`3` 和 `4`：未知版本会以 `PROGRAM_UNSUPPORTED_VERSION` 拒绝；旧版源码使用新版 form 会得到带 `feature / actualVersion / minimumVersion` 的 `PROGRAM_FEATURE_REQUIRES_VERSION`。
 
 它与部署制品的 SHA-256 不同：`version` 决定“按哪套语言规则解释”，源码 hash 决定“究竟是哪一份不可变代码”。相同语言版本的两个源码内容仍会得到不同制品 ID。
 
@@ -171,6 +171,21 @@ vip
 
 待匹配值只求值一次，分支从上到下尝试。pattern 支持整数、字符串、布尔、变量绑定、嵌套 variant 和 `_`。同一 pattern 不能重复绑定名字，所有 v3 match 必须以 `_` 分支结尾；在 v0.8 能静态证明穷尽之前，不允许把漏匹配推迟为偶发运行期错误。每个 pattern 节点都会消耗 fuel。
 
+## v4 类型：`signature` 与 typed field
+
+```lisp
+(data decision
+  (approved (amount integer))
+  (rejected (reason string)))
+
+(export-types decision)
+(signature decide (fn (integer) decision))
+(def decide (fn (amount) ...))
+(export decide)
+```
+
+v4 每个 data field 都写成 `(name type)`，每个 exported definition 都有 `(signature name (fn (...) result))`。`export-types` 与值的 `export` 分离；只有被直接依赖显式导出的名义类型才能出现在跨模块签名中。Parser 先检查类型名和声明完整性，Bundle 链接器解析类型身份，静态分析器再推断函数体、统一 constructor/match/call 类型并计算效果。详细规则见[类型、效果与只读审查](/language/types-effects-review)。
+
 ## 局部绑定：`let`
 
 ```lisp
@@ -282,7 +297,7 @@ Schema 名称不是普通函数；route handler 必须同时有 `def` 和 `expor
 
 ## 当前不支持
 
-当前没有宏、通用异常捕获、可变变量、并发、递归 Schema、浮点数、日期类型或任意宿主调用。预期业务失败通过显式 Result 表达，不能捕获 fuel、能力或宿主诊断。以 [v0.7 语言规格](/source/docs/spec-v0.7.md.txt) 和 [Rust Parser](/source/rust/crates/ail-syntax/src/parser.rs.txt) 为准，不要因为语法外观相似就假设其它 form 可用。
+当前没有宏、通用异常捕获、可变变量、并发、递归 Schema、浮点数、日期类型或任意宿主调用。预期业务失败通过显式 Result 表达，不能捕获 fuel、能力或宿主诊断。以 [v0.8 语言规格](/source/docs/spec-v0.8.md.txt) 和 [Rust Parser](/source/rust/crates/ail-syntax/src/parser.rs.txt) 为准，不要因为语法外观相似就假设其它 form 可用。
 
 ::: warning Int 必须保持任意精度
 当前 `Int` 语义允许超过 64 位，Rust 实现使用 `num_bigint::BigInt`。除非未来作为版本化语言变更正式引入范围限制，否则不能静默收窄到 `i64`。

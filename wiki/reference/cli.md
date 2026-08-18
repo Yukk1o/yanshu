@@ -33,6 +33,9 @@ cargo run --quiet --locked -p ail-cli -- `
   inspect-bundle examples\bundles\expense-approval
 
 cargo run --quiet --locked -p ail-cli -- `
+  review-bundle examples\bundles\typed-expense
+
+cargo run --quiet --locked -p ail-cli -- `
   run-bundle examples\bundles\expense-approval evaluate examples\bundles\expense-approval\arguments.json
 ```
 
@@ -41,10 +44,13 @@ cargo run --quiet --locked -p ail-cli -- `
 ```text
 seal-bundle <directory> <entry> <module.ail>...
 inspect-bundle <directory>
+review-bundle <directory>
 run-bundle <directory> <export> <arguments.json>
 ```
 
 `seal-bundle` 解析全部模块、验证依赖图，并写入 name-sorted `bundle.json`；返回的 `bundleHash` 是规范 manifest 的 SHA-256。`inspect-bundle` 和 `run-bundle` 都会重新读取并校验每个 module hash，不信任已有 manifest。参数文件必须是 JSON 数组。
+
+`review-bundle` 对完整链接程序运行类型/效果分析，再返回 `rust-readonly-v1` 文本和带 source span 的 machine-readable nodes。它不会写回源码。单文件也可以使用 `review <program.ail>`。
 
 ## `conformance`
 

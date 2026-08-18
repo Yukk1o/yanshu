@@ -7,8 +7,9 @@ mod value;
 
 use std::collections::BTreeMap;
 
+use ail_analysis::analyze_program;
 use ail_diagnostic::{AilResult, Diagnostic};
-use ail_syntax::{Expression, ExpressionKind, Program};
+use ail_syntax::{Expression, ExpressionKind, Program, TypeExpression};
 use num_bigint::BigInt;
 use num_traits::{One, Zero};
 use serde_json::{Value as JsonValue, json};
@@ -81,6 +82,10 @@ fn execute_export_internal(
             json!({ "name": export_name }),
         ));
     }
+    if program.version >= BigInt::from(4_u8) {
+        analyze_program(program)?;
+        validate_export_arguments(program, export_name, &arguments)?;
+    }
     let mut runtime = Runtime::new(options, host);
     let base_environment = runtime.new_environment(None);
     runtime.install_base_environment(program, base_environment);
@@ -115,7 +120,110 @@ fn execute_export_internal(
         runtime.define(module_environment, definition.name.clone(), value);
     }
     let callable = runtime.lookup(module_environment, export_name)?;
-    runtime.apply(callable, arguments, 0)
+    let result = runtime.apply(callable, arguments, 0)?;
+    if program.version >= BigInt::from(4_u8) {
+        validate_export_result(program, export_name, &result)?;
+    }
+    Ok(result)
+}
+
+fn validate_export_arguments(
+    program: &Program,
+    export_name: &str,
+    arguments: &[Value],
+) -> AilResult<()> {
+    let signature = program
+        .signatures
+        .iter()
+        .find(|signature| signature.name == export_name)
+        .ok_or_else(|| {
+            Diagnostic::new(
+                "TYPE_EXPORT_SIGNATURE_MISSING",
+                "exported v4 function has no linked signature",
+                json!({ "name": export_name }),
+            )
+        })?;
+    if signature.parameters.len() != arguments.len() {
+        return Err(arity_error(
+            export_name,
+            signature.parameters.len(),
+            Some(signature.parameters.len()),
+            arguments.len(),
+        ));
+    }
+    for (index, (expected, actual)) in signature.parameters.iter().zip(arguments).enumerate() {
+        if !value_matches_type(actual, expected) {
+            return Err(Diagnostic::new(
+                "TYPE_INPUT_MISMATCH",
+                "host argument does not satisfy the exported function signature",
+                json!({
+                    "name": export_name,
+                    "index": index,
+                    "expected": expected.to_json(),
+                    "actual": actual.kind(),
+                }),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_export_result(program: &Program, export_name: &str, result: &Value) -> AilResult<()> {
+    let signature = program
+        .signatures
+        .iter()
+        .find(|signature| signature.name == export_name)
+        .ok_or_else(|| {
+            Diagnostic::new(
+                "TYPE_EXPORT_SIGNATURE_MISSING",
+                "exported v4 function has no linked signature",
+                json!({ "name": export_name }),
+            )
+        })?;
+    if value_matches_type(result, &signature.result) {
+        Ok(())
+    } else {
+        Err(Diagnostic::new(
+            "TYPE_OUTPUT_MISMATCH",
+            "guest result does not satisfy the exported function signature",
+            json!({
+                "name": export_name,
+                "expected": signature.result.to_json(),
+                "actual": result.kind(),
+            }),
+        ))
+    }
+}
+
+fn value_matches_type(value: &Value, expected: &TypeExpression) -> bool {
+    match expected {
+        TypeExpression::Named(name) => match name.as_str() {
+            "any" => true,
+            "integer" => matches!(value, Value::Int(_)),
+            "boolean" => matches!(value, Value::Bool(_)),
+            "string" => matches!(value, Value::String(_)),
+            "symbol" => matches!(value, Value::Symbol(_)),
+            "nil" => matches!(value, Value::Nil),
+            "map" => matches!(value, Value::Map(_)),
+            user_type => {
+                matches!(value, Value::Variant { type_name, .. } if type_name == user_type)
+            }
+        },
+        TypeExpression::List(item) => match value {
+            Value::Nil => true,
+            Value::List(values) => values.iter().all(|value| value_matches_type(value, item)),
+            _ => false,
+        },
+        TypeExpression::Result { success, error } => match value {
+            Value::Ok(value) => value_matches_type(value, success),
+            Value::Err(value) => value_matches_type(value, error),
+            _ => false,
+        },
+        TypeExpression::Function { .. } => matches!(
+            value,
+            Value::Closure(_) | Value::Primitive(_) | Value::Constructor { .. }
+        ),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1371,6 +1479,69 @@ mod tests {
             ExecutionOptions::default(),
         ));
         assert_eq!(diagnostic.code, "RUNTIME_UNLINKED_IMPORTS");
+    }
+
+    #[test]
+    fn enforces_v4_static_types_before_execution() {
+        let valid = require(load_program_source(
+            r#"(program
+                (name typed-runtime)
+                (version 4)
+                (signature double (fn (integer) integer))
+                (def double (fn (value) (+ value value)))
+                (export double))"#,
+        ));
+        assert_eq!(
+            require(execute_export(
+                &valid,
+                "double",
+                vec![Value::Int(21.into())],
+                ExecutionOptions::default(),
+            )),
+            Value::Int(42.into())
+        );
+        let diagnostic = require_error(execute_export(
+            &valid,
+            "double",
+            vec![Value::String("21".to_owned())],
+            ExecutionOptions::default(),
+        ));
+        assert_eq!(diagnostic.code, "TYPE_INPUT_MISMATCH");
+
+        let invalid = require(load_program_source(
+            r#"(program
+                (name invalid-runtime)
+                (version 4)
+                (signature run (fn (integer) integer))
+                (def run (fn (value) (string-append "value:" value)))
+                (export run))"#,
+        ));
+        let diagnostic = require_error(execute_export(
+            &invalid,
+            "run",
+            vec![Value::Int(1.into())],
+            ExecutionOptions::default(),
+        ));
+        assert_eq!(diagnostic.code, "TYPE_MISMATCH");
+
+        let dynamic_output = require(load_program_source(
+            r#"(program
+                (name dynamic-output)
+                (version 4)
+                (signature run (fn (map) integer))
+                (def run (fn (value) (get value "result")))
+                (export run))"#,
+        ));
+        let diagnostic = require_error(execute_export(
+            &dynamic_output,
+            "run",
+            vec![Value::Map(BTreeMap::from([(
+                MapKey::String("result".to_owned()),
+                Value::String("not-an-integer".to_owned()),
+            )]))],
+            ExecutionOptions::default(),
+        ));
+        assert_eq!(diagnostic.code, "TYPE_OUTPUT_MISMATCH");
     }
 
     #[test]

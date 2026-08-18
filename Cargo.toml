@@ -4,6 +4,7 @@ members = [
   "rust/crates/ail-diagnostic",
   "rust/crates/ail-syntax",
   "rust/crates/ail-runtime",
+  "rust/crates/ail-analysis",
   "rust/crates/ail-bundle",
   "rust/crates/ail-conformance",
   "rust/crates/ail-store",
@@ -17,7 +18,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.7.0"
+version = "0.8.0"
 edition = "2024"
 rust-version = "1.97"
 license = "MIT OR Apache-2.0"
