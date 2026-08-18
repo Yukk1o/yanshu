@@ -1,0 +1,104 @@
+# Business Backend Specification v0.3
+
+## Objective
+
+Move request validation out of hand-written handler branches and into a bounded,
+compiler-owned schema model. Invalid business input is data, not an interpreter
+failure, and every public API error has one stable envelope.
+
+## Schema declarations
+
+Schemas are immutable top-level program members:
+
+```lisp
+(schema task-create
+  (object
+    (required "id" (string 1 64))
+    (required "title" (string 1 120))
+    (optional "completed" boolean #f)))
+```
+
+The v0.3 grammar is deliberately small:
+
+```text
+Schema := any | string | integer | boolean
+        | (string MIN-LENGTH MAX-LENGTH)
+        | (integer MINIMUM MAXIMUM)
+        | (list Schema MIN-LENGTH MAX-LENGTH)
+        | (object Field ...)
+
+Field  := (required "name" Schema)
+        | (optional "name" Schema)
+        | (optional "name" Schema DEFAULT)
+```
+
+Object schemas reject undeclared fields. Optional defaults are validated while
+the program is parsed and are inserted into successful normalized values.
+Schemas cannot recursively refer to one another in this checkpoint. Nesting,
+field counts, collection sizes, and reported issues are bounded by the host.
+
+## Validation contract
+
+`(validate SCHEMA VALUE)` returns an `Ok` containing the normalized value or an
+`Err` containing a list of issues. Business validation never throws a guest
+runtime diagnostic. `(result-value RESULT)` extracts either payload after the
+program has checked `ok?` or `err?`.
+
+Each issue is a map with a JSON Pointer path, stable code, and public message:
+
+```json
+{
+  "path": "/title",
+  "code": "SCHEMA_REQUIRED",
+  "message": "required field is missing"
+}
+```
+
+Validation work consumes interpreter fuel. At most 32 issues are returned, so a
+hostile request cannot create an unbounded error response.
+
+## HTTP response constructors
+
+Two pure host primitives standardize handler responses:
+
+```lisp
+(api-response 201 task)
+(api-error 400 "VALIDATION_FAILED" "request body failed validation" issues)
+```
+
+`api-error` accepts status, stable uppercase code, public message, and optional
+details. It always produces:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_FAILED",
+    "message": "request body failed validation",
+    "details": []
+  }
+}
+```
+
+These constructors are ordinary immutable values; the existing service boundary
+still validates the complete response before a transaction can commit.
+Protocol, routing, timeout, and internal host errors use the same three fields:
+`code`, `message`, and `details`. Internal request IDs live inside `details`, so
+clients never need a second error shape.
+
+## Acceptance
+
+1. Invalid schema declarations fail before the server listens.
+2. Missing, wrong-type, bounded-string, extra-field, and default cases have
+   deterministic issue output.
+3. The task service uses schemas for create and update requests.
+4. Invalid request data returns the unified error envelope over real HTTP.
+5. Existing CRUD, persistence, concurrency, deployment, and evolution tests keep
+   passing.
+
+## Implemented checkpoint
+
+The checkpoint is implemented on `feature/business-backend-v0.3`. The task
+service now declares create/update schemas, its deployment gate runs 11 stateful
+scenarios, and the complete repository suite contains 41 passing tests. A real
+HTTP smoke test verified type errors, additional-field rejection, default
+materialization, successful persistence, and the browser console on loopback.
