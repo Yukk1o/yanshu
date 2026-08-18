@@ -159,11 +159,21 @@ unsafe 门禁与前端差分。
 
 ## 阶段 2：纯解释器
 
+::: tip 已通过 v1 语料
+`ail-runtime` 已实现闭包/递归、顺序 let、任意精度整数、纯 primitives、fuel/depth、
+Schema validator 与 `text@1`。`ail-conformance` 读取与 Racket 相同的 17-case manifest，
+目前整份报告 canonical JSON 零差异。checkpoint 见
+[rust-host-v0.5.md](/source/docs/rust-host-v0.5.md.txt)。
+:::
+
 只实现无 capability 的 pure primitives，跑 discount suite。Evaluator API 应显式接收 `&mut Budget`，每个节点和调用点按现有规则扣 fuel。
 
 避免在 Rust 中使用 panic 表达客体错误；所有预期失败都返回 `Result<Value, Diagnostic>`。
 
 ## 阶段 3：Schema + service + capabilities
+
+Schema AST、normalization、issue 顺序和 fuel 已在 Rust 中落地；本阶段剩余工作是 route、
+service request/response、capability traits、事务 KV 和 11 个有状态任务场景。
 
 加入 Schema AST/validator、route、request/response 和 capability traits。先使用内存 KV adapter 重放 11 个任务场景，再实现与旧文件格式兼容的 adapter。
 

@@ -43,6 +43,25 @@ try {
         }
         Write-Output "ok - frontend parity: $source"
     }
+
+    $manifest = "conformance\v1\manifest.json"
+    $racketOutput = @(& $racketExe $racketCli conformance $manifest)
+    $racketExit = $LASTEXITCODE
+    $rustOutput = @(& $rustExe conformance $manifest)
+    $rustExit = $LASTEXITCODE
+    if ($racketExit -ne $rustExit) {
+        throw "conformance exit code differs: Racket=$racketExit Rust=$rustExit"
+    }
+    $racketJson = ($racketOutput -join "`n") |
+        ConvertFrom-Json |
+        ConvertTo-Json -Depth 100 -Compress
+    $rustJson = ($rustOutput -join "`n") |
+        ConvertFrom-Json |
+        ConvertTo-Json -Depth 100 -Compress
+    if ($racketJson -ne $rustJson) {
+        throw "complete conformance report differs"
+    }
+    Write-Output "ok - complete conformance report parity: 17 cases"
     exit 0
 }
 finally {

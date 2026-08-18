@@ -6,8 +6,20 @@ version = 4
 name = "ail-cli"
 version = "0.5.0"
 dependencies = [
+ "ail-conformance",
  "ail-diagnostic",
  "ail-syntax",
+ "serde_json",
+]
+
+[[package]]
+name = "ail-conformance"
+version = "0.5.0"
+dependencies = [
+ "ail-diagnostic",
+ "ail-runtime",
+ "ail-syntax",
+ "num-bigint",
  "serde_json",
 ]
 
@@ -15,6 +27,17 @@ dependencies = [
 name = "ail-diagnostic"
 version = "0.5.0"
 dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "ail-runtime"
+version = "0.5.0"
+dependencies = [
+ "ail-diagnostic",
+ "ail-syntax",
+ "num-bigint",
+ "num-traits",
  "serde_json",
 ]
 

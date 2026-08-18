@@ -2,6 +2,7 @@
 
 use std::{env, fs, process::ExitCode};
 
+use ail_conformance::run_manifest;
 use ail_diagnostic::{AilResult, Diagnostic};
 use ail_syntax::load_program_source;
 use serde_json::{Value, json};
@@ -10,7 +11,11 @@ fn main() -> ExitCode {
     match run(env::args().skip(1).collect()) {
         Ok(document) => {
             println!("{document}");
-            ExitCode::SUCCESS
+            if document.get("ok").and_then(Value::as_bool) == Some(false) {
+                ExitCode::FAILURE
+            } else {
+                ExitCode::SUCCESS
+            }
         }
         Err(diagnostic) => {
             println!("{}", diagnostic.public_json());
@@ -32,10 +37,19 @@ fn run(arguments: Vec<String>) -> AilResult<Value> {
             let program = load_program_source(&source)?;
             Ok(json!({ "ok": true, "program": program.inspect_json() }))
         }
+        [command, path] if command == "conformance" => {
+            let report = run_manifest(path)?;
+            let passed = report.get("passed").and_then(Value::as_bool) == Some(true);
+            Ok(json!({ "ok": passed, "report": report }))
+        }
         _ => Err(Diagnostic::new(
             "CLI_USAGE",
             "arguments do not match a supported Rust host command",
-            json!({ "usage": ["check <program.ail>", "inspect <program.ail>"] }),
+            json!({ "usage": [
+                "check <program.ail>",
+                "inspect <program.ail>",
+                "conformance <manifest.json>"
+            ] }),
         )),
     }
 }

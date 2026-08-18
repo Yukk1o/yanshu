@@ -12,6 +12,21 @@ Wiki 构建前会执行 `scripts/sync-source.mjs`，把明确白名单中的仓�
 4. [kv-store.rkt](/source/src/kv-store.rkt.txt)：看事务提交边界；
 5. [evolution-loop.rkt](/source/src/evolution-loop.rkt.txt)：看 AI 候选怎样进入测试和版本库。
 
+如果要看正在迁移的 Rust 宿主，按 `ail-diagnostic → ail-syntax → ail-runtime →
+ail-conformance → ail-cli` 阅读；这些 crate 与 Racket oracle 共享同一份 fixtures。
+
+## Rust v0.5 宿主
+
+| 文件 | 负责什么 |
+| --- | --- |
+| [diagnostic/lib.rs](/source/rust/crates/ail-diagnostic/src/lib.rs.txt) | 稳定诊断和源码位置 |
+| [syntax/reader.rs](/source/rust/crates/ail-syntax/src/reader.rs.txt) | 无 unsafe 的有界 Reader |
+| [syntax/parser.rs](/source/rust/crates/ail-syntax/src/parser.rs.txt) | Program/Schema/Expr 静态检查 |
+| [runtime/lib.rs](/source/rust/crates/ail-runtime/src/lib.rs.txt) | arena 环境、闭包、求值、primitive、Library Backend |
+| [runtime/schema.rs](/source/rust/crates/ail-runtime/src/schema.rs.txt) | Schema normalization 和 issues |
+| [conformance/lib.rs](/source/rust/crates/ail-conformance/src/lib.rs.txt) | 共享 manifest runner 和 portable codec |
+| [cli/main.rs](/source/rust/crates/ail-cli/src/main.rs.txt) | Rust check / inspect / conformance CLI |
+
 ## 语言内核
 
 | 文件 | 负责什么 | Rust 迁移目标 |
@@ -62,6 +77,7 @@ Wiki 构建前会执行 `scripts/sync-source.mjs`，把明确白名单中的仓�
 - [v0.2 Web 后端规格](/source/docs/web-backend-v0.2.md.txt)
 - [v0.3 业务 Schema 规格](/source/docs/business-backend-v0.3.md.txt)
 - [v0.4 Library Backend 规格](/source/docs/library-backend-v0.4.md.txt)
+- [Rust Host v0.5 checkpoint](/source/docs/rust-host-v0.5.md.txt)
 - [架构与可移植边界](/source/docs/design.md.txt)
 - [Live provider 说明](/source/docs/live-provider.md.txt)
 

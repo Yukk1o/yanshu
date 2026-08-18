@@ -3,6 +3,8 @@ resolver = "3"
 members = [
   "rust/crates/ail-diagnostic",
   "rust/crates/ail-syntax",
+  "rust/crates/ail-runtime",
+  "rust/crates/ail-conformance",
   "rust/crates/ail-cli",
 ]
 
