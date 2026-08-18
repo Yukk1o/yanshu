@@ -34,6 +34,19 @@ AI-Evolve 的演化规则可以浓缩为一句：**模型有提案权，没有�
 
 “生成成功”“测试通过”“已经晋升”是三个不同状态。
 
+## 两层版本身份
+
+每个候选同时有两个不能混用的字段：
+
+| 身份 | 示例 | 回答的问题 |
+| --- | --- | --- |
+| 语言版本 | `(version 2)` / metadata `languageVersion: 2` | 这份程序按哪套 AST、Schema 和 primitive 语义解释？ |
+| 内容身份 | 64 位 SHA-256 / metadata `hash` | 运行、测试或回滚的究竟是哪一份不可变源码？ |
+
+语言版本相同不代表代码相同；内容 hash 相同则必须逐字节对应同一份 UTF-8 源码。当前 Parser 只接受已实现的 v1/v2，避免 LLM 写出一个未来版本号后让运行时自行猜测语义。
+
+这正是给自动修复循环准备的协议：固定父 hash 与语言版本 → 消费结构化失败和成本 → 生成完整候选 → 得到新 hash → 重新跑同一门禁 → 注册、拒绝或晋升。循环不需要解析人类终端文本，也不能就地覆盖活动源码。
+
 ## 1. Provider 输入与输出
 
 [ail-provider](/source/rust/crates/ail-provider/src/lib.rs.txt) 接收当前版本和结构化观察：
@@ -90,12 +103,14 @@ service runner 见 [ail-service](/source/rust/crates/ail-service/src/lib.rs.txt)
 ```text
 code-store/
 ├─ versions/<hash>.ail       不可变源码
-├─ metadata/<hash>.json      parent、provider、测试报告
+├─ metadata/<hash>.json      languageVersion、parent、provider、测试报告
 ├─ active.json               当前活动 hash
 └─ events.jsonl              registered/promoted/rolled-back
 ```
 
 注册不会覆盖旧源码。读取版本时还会重新校验 hash，防止路径替换或内容损坏。active 是很小的原子指针，不是工作目录里的可变源码。
+
+同一语言版本的源码只要内容变化就生成新 hash；测试失败的候选仍可保留自己的报告与父链证据，但不能成为 active。于是“程序即数据，演化留痕，回滚廉价”是存储约束，不依赖模型自觉。
 
 ## 5. 晋升门禁
 

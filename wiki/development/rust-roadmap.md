@@ -3,15 +3,15 @@
 这一页只讨论 `.ail` 语言的当前 Rust 实现和后续生态，不定义语言本身。语法、Value、Schema、route、diagnostic 与版本格式应先由语言规格固定，宿主只能实现这些契约。
 
 ::: warning 当前定位
-Rust v0.5 已能独立运行语言、业务场景、版本库、provider 和本地 JSON HTTP server，但尚未生产就绪。workspace 的 crate 仍是 `publish = false`，没有稳定 FFI，也没有 crates.io 发布物。
+Rust v0.6 已形成通用语言的安全内核：能独立运行 v1/v2 语言、业务场景、版本库、provider 和本地 JSON HTTP server，但尚未生产就绪。workspace 的 crate 仍是 `publish = false`，没有稳定 FFI，也没有 crates.io 发布物。
 :::
 
 ## 当前实现快照
 
 | 层 | 已实现 | 尚未完成 |
 | --- | --- | --- |
-| 语言前端 | 有边界 UTF-8 Reader、完整 AST / Parser、source span、JSON inspect | 增量解析、稳定 AST ID、格式化器 |
-| 运行时 | BigInt、词法闭包、递归、顺序 let、fuel/depth、primitive、Schema、`text@1` | 独立内存配额、可安全取消的进程级 deadline |
+| 语言前端 | 有边界 UTF-8 Reader、v1/v2 AST / Parser、版本门控、source span、JSON inspect | 模块、用户数据类型、模式匹配、类型/效果、稳定 AST ID、格式化器 |
+| 运行时 | BigInt、闭包、递归、短路条件、有界集合、Result、enum/union Schema、校验成本、`text@1` | 独立内存配额、字节码/WASM、可安全取消的进程级 deadline |
 | 业务服务 | route dispatch、response 校验、事务内存/文件 KV、固定时钟与日志、11 个场景 | 正式数据库 adapter、migration、连接池 |
 | 版本库 | SHA-256、不可变校验、metadata、active、events、原子写、跨进程锁、回滚 | 签名、远端 artifact store、生产审批流 |
 | 运维快照 | 离线 service lock、逐文件 SHA-256 manifest、版本/KV 语义校验、拒绝覆盖恢复 | 加密、签名、异地复制、定期恢复演练 |
@@ -54,9 +54,22 @@ Rust 实现不能为了方便静默改变：
 
 任何破坏性调整都应成为显式语言版本，而不是内部重构的副作用。
 
+## 通用语言主路线
+
+路线顺序是正式约束：后一阶段不能以绕过前一阶段安全设计的方式抢跑。
+
+1. **v0.6**：完成条件、集合、Schema、Result 和真实费用场景；
+2. **v0.7**：模块、用户定义数据类型、模式匹配、密封 Bundle；
+3. **v0.8**：类型与效果系统，静态计算 capability 闭包；
+4. **v0.9**：内容寻址包管理、锁文件、Rust Library Backend；
+5. **v0.10**：有 fuel 计量的字节码 / WASM 编译器；
+6. 之后再考虑结构化并发和人类友好的表层语法。
+
+模块必须与 Bundle 根 hash、模块 hash、依赖闭包和 capability 清单一起交付；不能先引入按路径动态加载。包管理不能运行安装脚本。类型系统不能把 fuel、效果或 capability 从 AST 中藏起来。编译器输出仍须通过独立验证器，不能因为“已经编译”就跳过语言门禁。
+
 ## crates.io 发布路线
 
-当前 workspace 使用统一版本 `0.5.0`，但 `publish = false`。发布前至少需要：
+当前 workspace 使用统一版本 `0.6.0`，但 `publish = false`。发布前至少需要：
 
 1. 明确哪些 crate 是公共 API，哪些只服务于 binary；
 2. 把 `Program`、`Value`、`Diagnostic`、Library Contract 的兼容性写入 semver 策略；

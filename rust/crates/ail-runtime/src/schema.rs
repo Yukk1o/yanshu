@@ -13,6 +13,7 @@ const MAXIMUM_ISSUES: usize = 32;
 pub struct SchemaValidation {
     pub value: Value,
     pub issues: Vec<Value>,
+    pub fuel_consumed: u64,
 }
 
 impl SchemaValidation {
@@ -27,10 +28,12 @@ pub fn validate_schema(
     value: &Value,
     budget: &mut Budget,
 ) -> AilResult<SchemaValidation> {
+    let initial_fuel = budget.remaining_fuel();
     let mut validator = Validator {
         budget,
         issues: Vec::new(),
         truncated: false,
+        issue_count: 0,
     };
     let normalized = validator.visit(specification, value, &[])?;
     if validator.truncated {
@@ -45,6 +48,7 @@ pub fn validate_schema(
     Ok(SchemaValidation {
         value: normalized,
         issues: validator.issues,
+        fuel_consumed: initial_fuel.saturating_sub(validator.budget.remaining_fuel()),
     })
 }
 
@@ -52,6 +56,7 @@ struct Validator<'budget> {
     budget: &'budget mut Budget,
     issues: Vec<Value>,
     truncated: bool,
+    issue_count: usize,
 }
 
 impl Validator<'_> {
@@ -64,6 +69,45 @@ impl Validator<'_> {
         self.budget.consume(1)?;
         match specification {
             SchemaKind::Any => Ok(value.clone()),
+            SchemaKind::Enum { values } => {
+                for allowed in values {
+                    self.budget.consume(1)?;
+                    if Value::from(allowed) == *value {
+                        return Ok(value.clone());
+                    }
+                }
+                self.add_issue(issue(
+                    &pointer(path),
+                    "SCHEMA_ENUM",
+                    "value is not one of the declared enum values",
+                    [(
+                        "allowed",
+                        Value::List(values.iter().map(Value::from).collect()),
+                    )],
+                ));
+                Ok(value.clone())
+            }
+            SchemaKind::Union { variants } => {
+                for variant in variants {
+                    let issue_start = self.issues.len();
+                    let issue_count_start = self.issue_count;
+                    let truncated_start = self.truncated;
+                    let normalized = self.visit(variant, value, path)?;
+                    if self.issue_count == issue_count_start {
+                        return Ok(normalized);
+                    }
+                    self.issues.truncate(issue_start);
+                    self.issue_count = issue_count_start;
+                    self.truncated = truncated_start;
+                }
+                self.add_issue(issue(
+                    &pointer(path),
+                    "SCHEMA_UNION",
+                    "value does not satisfy any union variant",
+                    [("variants", Value::Int(variants.len().into()))],
+                ));
+                Ok(value.clone())
+            }
             SchemaKind::String {
                 minimum_length,
                 maximum_length,
@@ -248,6 +292,7 @@ impl Validator<'_> {
     }
 
     fn add_issue(&mut self, value: Value) {
+        self.issue_count = self.issue_count.saturating_add(1);
         if self.issues.len() < MAXIMUM_ISSUES {
             self.issues.push(value);
         } else {

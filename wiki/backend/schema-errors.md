@@ -29,6 +29,8 @@ any
 string
 integer
 boolean
+(enum LITERAL ...)
+(union SCHEMA SCHEMA ...)
 (string MIN-LENGTH MAX-LENGTH)
 (integer MINIMUM MAXIMUM)
 (list ITEM-SCHEMA MIN-LENGTH MAX-LENGTH)
@@ -40,6 +42,15 @@ FIELD = (required "name" SCHEMA)
 ```
 
 Parser 限制 Schema 数量、嵌套深度、字段数和集合最大长度；默认值在启动前就会验证。当前不支持 Schema 引用与递归。
+
+`enum` 与 `union` 属于语言 v2。枚举允许 1～64 个互不重复的整数、布尔或字符串字面量；联合允许 2～8 个分支，并按源码顺序尝试。失败分支的临时 issue 会丢弃，但尝试成本仍会计入 fuel。
+
+```lisp
+(schema decision-request
+  (object
+    (required "action" (enum "approve" "reject"))
+    (required "externalRef" (union integer (string 1 64)))))
+```
 
 真实实现：[Parser 中的 Schema 语法](/source/rust/crates/ail-syntax/src/parser.rs.txt)、[校验器](/source/rust/crates/ail-runtime/src/schema.rs.txt)、[Schema AST](/source/rust/crates/ail-syntax/src/ast.rs.txt)。
 
@@ -58,6 +69,25 @@ Parser 限制 Schema 数量、嵌套深度、字段数和集合最大长度；�
 校验失败是普通 `Err` 数据，不是解释器异常。这个区分非常重要：用户少传字段应得到 400，而不是内部 500。
 
 每访问一个 Schema 节点都会消耗解释器 fuel，最多返回 32 个 issue，避免恶意 body 生成无限错误列表。
+
+## `validate-report` 量化校验成本
+
+v2 可以在不改变 `validate` 旧契约的前提下取得完整机器报告：
+
+```lisp
+(validate-report decision-request (get request "body"))
+```
+
+```json
+{
+  "valid": false,
+  "value": {"action": "hold"},
+  "issues": [{"path": "/action", "code": "SCHEMA_ENUM"}],
+  "cost": {"fuel": 3}
+}
+```
+
+`cost.fuel` 是这次 Schema 遍历和枚举/联合尝试实际消耗的预算，适合 LLM 修复循环比较候选，而不是用 Schema 文本长度猜校验代价。
 
 ## Issue 格式
 
@@ -78,6 +108,8 @@ Parser 限制 Schema 数量、嵌套深度、字段数和集合最大长度；�
 | `SCHEMA_MIN_LENGTH` / `SCHEMA_MAX_LENGTH` | 字符串或列表长度越界 |
 | `SCHEMA_MINIMUM` / `SCHEMA_MAXIMUM` | 整数范围越界 |
 | `SCHEMA_ADDITIONAL_PROPERTY` | 对象含未声明字段 |
+| `SCHEMA_ENUM` | 值不在声明的枚举白名单中 |
+| `SCHEMA_UNION` | 值不满足任何联合分支 |
 | `SCHEMA_ISSUES_TRUNCATED` | 超过 issue 上限，其余被省略 |
 
 客户端应该以 `code` 和 `path` 做程序判断，把 `message` 当作公共可读说明。
@@ -134,4 +166,4 @@ Parser 限制 Schema 数量、嵌套深度、字段数和集合最大长度；�
 - `/title` → `SCHEMA_MIN_LENGTH`；
 - `/owner` → `SCHEMA_ADDITIONAL_PROPERTY`。
 
-handler 选择 400 `VALIDATION_FAILED`，事务不做任何写入。对应回归场景位于 [scenarios.json](/source/examples/tasks/scenarios.json.txt)，候选版本必须继续通过这些场景才能晋升。
+handler 选择 400 `VALIDATION_FAILED`，事务不做任何写入。基础回归位于[任务场景](/source/examples/tasks/scenarios.json.txt)；v2 的 enum、union、集合总额与安全降级位于[费用审批场景](/source/examples/expenses/scenarios.json.txt)。候选版本必须继续通过完整场景才能晋升。

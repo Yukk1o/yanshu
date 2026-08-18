@@ -1,0 +1,104 @@
+{
+  "clockMs": 1700000000000,
+  "cases": [
+    {
+      "name": "enum-rejects-unknown-action",
+      "method": "POST",
+      "path": "/expenses/decision",
+      "body": {
+        "id": 100,
+        "action": "hold",
+        "externalRef": "EXT-100",
+        "items": [{"category": "travel", "amount": 100}]
+      },
+      "expectStatus": 400,
+      "expectBodyContains": {
+        "error": {
+          "code": "VALIDATION_FAILED",
+          "details": [{"path": "/action", "code": "SCHEMA_ENUM"}]
+        }
+      }
+    },
+    {
+      "name": "approve-and-build-numeric-key",
+      "method": "POST",
+      "path": "/expenses/decision",
+      "body": {
+        "id": 101,
+        "action": "approve",
+        "externalRef": "EXT-101",
+        "items": [
+          {"category": "travel", "amount": 100},
+          {"category": "meals", "amount": 200}
+        ],
+        "monthlyPrior": 1000,
+        "attendees": 2
+      },
+      "expectStatus": 200,
+      "expectBodyContains": {
+        "id": 101,
+        "key": "expense/101",
+        "decision": "approved",
+        "total": 300,
+        "monthlyTotal": 1300,
+        "hospitalityTotal": 0,
+        "perPersonHospitality": 0
+      }
+    },
+    {
+      "name": "zero-attendees-degrades-without-crashing",
+      "method": "POST",
+      "path": "/expenses/decision",
+      "body": {
+        "id": 102,
+        "action": "approve",
+        "externalRef": 900102,
+        "items": [{"category": "hospitality", "amount": 800}],
+        "attendees": 0
+      },
+      "expectStatus": 200,
+      "expectBodyContains": {
+        "decision": "manual-review",
+        "total": 800,
+        "hospitalityTotal": 800,
+        "perPersonHospitality": -1,
+        "externalRef": 900102
+      }
+    },
+    {
+      "name": "monthly-cumulative-triggers-review",
+      "method": "POST",
+      "path": "/expenses/decision",
+      "body": {
+        "id": 103,
+        "action": "approve",
+        "externalRef": "EXT-103",
+        "items": [{"category": "travel", "amount": 3000}],
+        "monthlyPrior": 19000,
+        "attendees": 1
+      },
+      "expectStatus": 200,
+      "expectBodyContains": {
+        "decision": "manual-review",
+        "total": 3000,
+        "monthlyTotal": 22000
+      }
+    },
+    {
+      "name": "explicit-rejection-wins",
+      "method": "POST",
+      "path": "/expenses/decision",
+      "body": {
+        "id": 104,
+        "action": "reject",
+        "externalRef": "EXT-104",
+        "items": [{"category": "travel", "amount": 10}]
+      },
+      "expectStatus": 200,
+      "expectBodyContains": {
+        "decision": "rejected",
+        "total": 10
+      }
+    }
+  ]
+}

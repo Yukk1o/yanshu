@@ -808,6 +808,7 @@ mod tests {
     };
 
     const TASK_SERVICE: &str = include_str!("../../../../examples/tasks/service.ail");
+    const EXPENSE_SERVICE: &str = include_str!("../../../../examples/expenses/service.ail");
 
     fn require<T>(result: AilResult<T>) -> T {
         match result {
@@ -827,6 +828,19 @@ mod tests {
             Some(true)
         );
         assert_eq!(report.get("total").and_then(JsonValue::as_u64), Some(11));
+    }
+
+    #[test]
+    fn rust_service_passes_all_expense_v2_business_scenarios() {
+        let program = require(load_program_source(EXPENSE_SERVICE));
+        let scenarios =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../examples/expenses/scenarios.json");
+        let report = require(run_service_suite(&program, scenarios));
+        assert_eq!(
+            report.get("passed").and_then(JsonValue::as_bool),
+            Some(true)
+        );
+        assert_eq!(report.get("total").and_then(JsonValue::as_u64), Some(5));
     }
 
     #[test]

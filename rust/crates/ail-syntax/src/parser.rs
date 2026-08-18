@@ -8,19 +8,21 @@ use num_traits::{ToPrimitive, Zero};
 use serde_json::json;
 
 use crate::{
-    Binding, Datum, DatumKind, Definition, Expression, ExpressionKind, LibraryRequirement, Program,
-    Route, Schema, SchemaField, SchemaKind,
+    Binding, CondClause, Datum, DatumKind, Definition, Expression, ExpressionKind,
+    LibraryRequirement, Program, Route, Schema, SchemaField, SchemaKind,
 };
 
 const SUPPORTED_CAPABILITIES: &[&str] = &["log", "kv", "clock"];
 const SUPPORTED_METHODS: &[&str] = &["GET", "POST", "PUT", "PATCH", "DELETE"];
-const EXPRESSION_KEYWORDS: &[&str] = &["quote", "if", "let", "fn", "do"];
+const EXPRESSION_KEYWORDS: &[&str] = &["quote", "if", "and", "or", "cond", "let", "fn", "do"];
 const RESERVED_SCHEMA_NAMES: &[&str] = &[
     "+",
     "-",
     "*",
     "quotient",
     "remainder",
+    "checked-quotient",
+    "checked-remainder",
     "=",
     "<",
     "<=",
@@ -33,7 +35,12 @@ const RESERVED_SCHEMA_NAMES: &[&str] = &[
     "list?",
     "map?",
     "string-append",
+    "number->string",
     "list",
+    "list-map",
+    "list-filter",
+    "list-fold",
+    "sum",
     "empty?",
     "length",
     "first",
@@ -50,6 +57,7 @@ const RESERVED_SCHEMA_NAMES: &[&str] = &[
     "result-value",
     "unwrap",
     "validate",
+    "validate-report",
     "api-response",
     "api-error",
     "log",
@@ -64,6 +72,9 @@ const MAXIMUM_SCHEMA_DEPTH: usize = 16;
 const MAXIMUM_OBJECT_FIELDS: usize = 64;
 const MAXIMUM_SCHEMA_COLLECTION_LENGTH: u64 = 10_000;
 const MAXIMUM_LIBRARY_COUNT: usize = 32;
+const MAXIMUM_LANGUAGE_VERSION: u8 = 2;
+const MAXIMUM_ENUM_VALUES: usize = 64;
+const MAXIMUM_UNION_VARIANTS: usize = 8;
 
 pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
     let top = datum.list().ok_or_else(|| {
@@ -410,6 +421,18 @@ pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
         )
         .at(datum.span)
     })?;
+    if version > BigInt::from(MAXIMUM_LANGUAGE_VERSION) {
+        return Err(Diagnostic::new(
+            "PROGRAM_UNSUPPORTED_VERSION",
+            "program requests an unsupported language version",
+            json!({
+                "actualVersion": version.to_string(),
+                "minimumSupportedVersion": 1,
+                "maximumSupportedVersion": MAXIMUM_LANGUAGE_VERSION,
+            }),
+        )
+        .at(datum.span));
+    }
     let exports = exports.ok_or_else(|| {
         Diagnostic::simple(
             "PROGRAM_MISSING_EXPORT",
@@ -446,6 +469,12 @@ pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
         }
     }
     let libraries = libraries.unwrap_or_default();
+    for schema in &schemas {
+        ensure_schema_version(&schema.kind, &version, datum)?;
+    }
+    for definition in &definitions {
+        ensure_expression_version(&definition.expression, &version)?;
+    }
     for requirement in &libraries {
         let namespace = format!("{}/", requirement.name);
         for binding_name in schema_names.iter().chain(definition_names.iter()) {
@@ -504,6 +533,56 @@ fn parse_schema_specification(datum: &Datum, depth: usize) -> AilResult<SchemaKi
         return Err(invalid_schema(datum, "unknown schema specification"));
     };
     match form[0].symbol() {
+        Some("enum") => {
+            if !(2..=MAXIMUM_ENUM_VALUES + 1).contains(&form.len()) {
+                return Err(Diagnostic::new(
+                    "PROGRAM_INVALID_SCHEMA_SPECIFICATION",
+                    "enum must contain between 1 and 64 unique scalar values",
+                    json!({ "schema": datum.display(), "maximum": MAXIMUM_ENUM_VALUES }),
+                )
+                .at(datum.span));
+            }
+            let mut values = Vec::with_capacity(form.len() - 1);
+            let mut seen = HashSet::new();
+            for value in &form[1..] {
+                if !matches!(
+                    &value.kind,
+                    DatumKind::Integer(_) | DatumKind::Bool(_) | DatumKind::String(_)
+                ) {
+                    return Err(invalid_schema(
+                        datum,
+                        "enum values must be integer, boolean, or string literals",
+                    ));
+                }
+                if !seen.insert(value.display()) {
+                    return Err(Diagnostic::new(
+                        "PROGRAM_SCHEMA_DUPLICATE_ENUM_VALUE",
+                        "enum value is not unique",
+                        json!({ "value": value.display() }),
+                    )
+                    .at(value.span));
+                }
+                values.push(value.clone());
+            }
+            Ok(SchemaKind::Enum { values })
+        }
+        Some("union") => {
+            let variant_count = form.len().saturating_sub(1);
+            if !(2..=MAXIMUM_UNION_VARIANTS).contains(&variant_count) {
+                return Err(Diagnostic::new(
+                    "PROGRAM_INVALID_SCHEMA_SPECIFICATION",
+                    "union must contain between 2 and 8 schema variants",
+                    json!({ "schema": datum.display(), "maximum": MAXIMUM_UNION_VARIANTS }),
+                )
+                .at(datum.span));
+            }
+            Ok(SchemaKind::Union {
+                variants: form[1..]
+                    .iter()
+                    .map(|variant| parse_schema_specification(variant, depth + 1))
+                    .collect::<AilResult<Vec<_>>>()?,
+            })
+        }
         Some("string") => {
             let minimum = exact_integer(form.get(1));
             let maximum = exact_integer(form.get(2));
@@ -665,6 +744,19 @@ fn parse_expression(datum: &Datum) -> AilResult<Expression> {
                         alternative: Box::new(parse_expression(&form[3])?),
                     }
                 }
+                Some("and") => ExpressionKind::And(
+                    form[1..]
+                        .iter()
+                        .map(parse_expression)
+                        .collect::<AilResult<Vec<_>>>()?,
+                ),
+                Some("or") => ExpressionKind::Or(
+                    form[1..]
+                        .iter()
+                        .map(parse_expression)
+                        .collect::<AilResult<Vec<_>>>()?,
+                ),
+                Some("cond") => parse_cond(form, datum)?,
                 Some("let") => {
                     if form.len() != 3 {
                         return Err(invalid_special_form("let", datum));
@@ -758,6 +850,157 @@ fn parse_expression(datum: &Datum) -> AilResult<Expression> {
     })
 }
 
+fn parse_cond(form: &[Datum], datum: &Datum) -> AilResult<ExpressionKind> {
+    let raw_clauses = &form[1..];
+    let Some(raw_alternative) = raw_clauses.last() else {
+        return Err(Diagnostic::simple(
+            "PARSE_COND_MISSING_ELSE",
+            "cond must end with an explicit else clause",
+        )
+        .at(datum.span));
+    };
+    let alternative = raw_alternative.list().unwrap_or_default();
+    if alternative.len() != 2 || alternative[0].symbol() != Some("else") {
+        return Err(Diagnostic::simple(
+            "PARSE_COND_MISSING_ELSE",
+            "cond must end with an explicit else clause",
+        )
+        .at(raw_alternative.span));
+    }
+
+    let mut clauses = Vec::with_capacity(raw_clauses.len().saturating_sub(1));
+    for raw_clause in &raw_clauses[..raw_clauses.len().saturating_sub(1)] {
+        let clause = raw_clause.list().unwrap_or_default();
+        if clause.len() != 2 || clause[0].symbol() == Some("else") {
+            return Err(Diagnostic::new(
+                "PARSE_INVALID_COND_CLAUSE",
+                "cond clauses must be (condition expression), with else only at the end",
+                json!({ "clause": raw_clause.display() }),
+            )
+            .at(raw_clause.span));
+        }
+        clauses.push(CondClause {
+            condition: parse_expression(&clause[0])?,
+            expression: parse_expression(&clause[1])?,
+        });
+    }
+    Ok(ExpressionKind::Cond {
+        clauses,
+        alternative: Box::new(parse_expression(&alternative[1])?),
+    })
+}
+
+fn ensure_expression_version(expression: &Expression, version: &BigInt) -> AilResult<()> {
+    let minimum = match &expression.kind {
+        ExpressionKind::And(_) => Some(("and", 2_u8)),
+        ExpressionKind::Or(_) => Some(("or", 2_u8)),
+        ExpressionKind::Cond { .. } => Some(("cond", 2_u8)),
+        _ => None,
+    };
+    if let Some((feature, minimum_version)) = minimum
+        && version < &BigInt::from(minimum_version)
+    {
+        return Err(Diagnostic::new(
+            "PROGRAM_FEATURE_REQUIRES_VERSION",
+            "program uses a feature from a newer language version",
+            json!({
+                "feature": feature,
+                "actualVersion": version.to_u64().unwrap_or_default(),
+                "minimumVersion": minimum_version,
+            }),
+        )
+        .at(expression.span));
+    }
+
+    match &expression.kind {
+        ExpressionKind::If {
+            condition,
+            consequent,
+            alternative,
+        } => {
+            ensure_expression_version(condition, version)?;
+            ensure_expression_version(consequent, version)?;
+            ensure_expression_version(alternative, version)
+        }
+        ExpressionKind::And(expressions)
+        | ExpressionKind::Or(expressions)
+        | ExpressionKind::Do(expressions) => {
+            for item in expressions {
+                ensure_expression_version(item, version)?;
+            }
+            Ok(())
+        }
+        ExpressionKind::Cond {
+            clauses,
+            alternative,
+        } => {
+            for clause in clauses {
+                ensure_expression_version(&clause.condition, version)?;
+                ensure_expression_version(&clause.expression, version)?;
+            }
+            ensure_expression_version(alternative, version)
+        }
+        ExpressionKind::Let { bindings, body } => {
+            for binding in bindings {
+                ensure_expression_version(&binding.expression, version)?;
+            }
+            ensure_expression_version(body, version)
+        }
+        ExpressionKind::Function { body, .. } => ensure_expression_version(body, version),
+        ExpressionKind::Call { callee, arguments } => {
+            ensure_expression_version(callee, version)?;
+            for argument in arguments {
+                ensure_expression_version(argument, version)?;
+            }
+            Ok(())
+        }
+        ExpressionKind::Literal(_) | ExpressionKind::Variable(_) | ExpressionKind::Quote(_) => {
+            Ok(())
+        }
+    }
+}
+
+fn ensure_schema_version(schema: &SchemaKind, version: &BigInt, datum: &Datum) -> AilResult<()> {
+    let feature = match schema {
+        SchemaKind::Enum { .. } => Some("enum"),
+        SchemaKind::Union { .. } => Some("union"),
+        _ => None,
+    };
+    if let Some(feature) = feature
+        && version < &BigInt::from(2_u8)
+    {
+        return Err(Diagnostic::new(
+            "PROGRAM_FEATURE_REQUIRES_VERSION",
+            "program uses a feature from a newer language version",
+            json!({
+                "feature": feature,
+                "actualVersion": version.to_u64().unwrap_or_default(),
+                "minimumVersion": 2,
+            }),
+        )
+        .at(datum.span));
+    }
+    match schema {
+        SchemaKind::Union { variants } => {
+            for variant in variants {
+                ensure_schema_version(variant, version, datum)?;
+            }
+        }
+        SchemaKind::List { item, .. } => ensure_schema_version(item, version, datum)?,
+        SchemaKind::Object { fields } => {
+            for field in fields {
+                ensure_schema_version(&field.specification, version, datum)?;
+            }
+        }
+        SchemaKind::Any
+        | SchemaKind::Enum { .. }
+        | SchemaKind::String { .. }
+        | SchemaKind::Integer { .. }
+        | SchemaKind::Boolean => {}
+    }
+    Ok(())
+}
+
 fn exact_integer(datum: Option<&Datum>) -> Option<&BigInt> {
     match datum.map(|value| &value.kind) {
         Some(DatumKind::Integer(value)) => Some(value),
@@ -810,6 +1053,10 @@ fn portable_default(datum: &Datum) -> bool {
 fn schema_accepts(schema: &SchemaKind, datum: &Datum) -> bool {
     match (schema, &datum.kind) {
         (SchemaKind::Any, _) => true,
+        (SchemaKind::Enum { values }, _) => values.iter().any(|value| value.kind == datum.kind),
+        (SchemaKind::Union { variants }, _) => variants
+            .iter()
+            .any(|variant| schema_accepts(variant, datum)),
         (
             SchemaKind::String {
                 minimum_length,
@@ -1044,5 +1291,110 @@ mod tests {
         let expression = &program.definitions[0].expression;
         assert!(expression.span.start.offset < expression.span.end.offset);
         assert!(expression.span.start.line >= 1);
+    }
+
+    #[test]
+    fn gates_v2_forms_and_unknown_versions() {
+        let v1 = require_error(load_program_source(
+            "(program (name old) (version 1) (def run (and #t #t)) (export run))",
+        ));
+        assert_eq!(v1.code, "PROGRAM_FEATURE_REQUIRES_VERSION");
+        assert_eq!(
+            v1.details.as_ref(),
+            &json!({ "feature": "and", "actualVersion": 1, "minimumVersion": 2 })
+        );
+
+        let future = require_error(load_program_source(
+            "(program (name future) (version 3) (def run #t) (export run))",
+        ));
+        assert_eq!(future.code, "PROGRAM_UNSUPPORTED_VERSION");
+        assert_eq!(
+            future.details.as_ref(),
+            &json!({
+                "actualVersion": "3",
+                "minimumSupportedVersion": 1,
+                "maximumSupportedVersion": 2,
+            })
+        );
+    }
+
+    #[test]
+    fn requires_an_explicit_final_cond_else_clause() {
+        let diagnostic = require_error(load_program_source(
+            "(program (name rules) (version 2) (def run (cond (#t 1))) (export run))",
+        ));
+        assert_eq!(diagnostic.code, "PARSE_COND_MISSING_ELSE");
+
+        let program = load_program_source(
+            "(program (name rules) (version 2) (def run (cond (#f 1) (else 2))) (export run))",
+        )
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(
+            program.definitions[0].expression.to_json(),
+            json!({
+                "type": "cond",
+                "clauses": [{
+                    "condition": { "type": "literal", "value": false },
+                    "expression": { "type": "literal", "value": 1 },
+                }],
+                "alternative": { "type": "literal", "value": 2 },
+            })
+        );
+    }
+
+    #[test]
+    fn parses_and_versions_enum_and_union_schemas() {
+        let old = require_error(load_program_source(
+            r#"(program
+                (name old-schema)
+                (version 1)
+                (schema action (enum "approve" "reject"))
+                (def run #t)
+                (export run))"#,
+        ));
+        assert_eq!(old.code, "PROGRAM_FEATURE_REQUIRES_VERSION");
+        assert_eq!(
+            old.details.as_ref(),
+            &json!({ "feature": "enum", "actualVersion": 1, "minimumVersion": 2 })
+        );
+
+        let program = load_program_source(
+            r#"(program
+                (name decisions)
+                (version 2)
+                (schema action (enum "approve" "reject"))
+                (schema identity (union integer string))
+                (def run #t)
+                (export run))"#,
+        )
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        let schemas = program
+            .inspect_json()
+            .get("schemas")
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(
+            schemas,
+            json!([
+                {
+                    "name": "action",
+                    "schema": { "type": "enum", "values": ["approve", "reject"] },
+                },
+                {
+                    "name": "identity",
+                    "schema": {
+                        "type": "union",
+                        "variants": [
+                            { "type": "integer", "minimum": false, "maximum": false },
+                            {
+                                "type": "string",
+                                "minimumLength": 0,
+                                "maximumLength": false,
+                            },
+                        ],
+                    },
+                },
+            ])
+        );
     }
 }

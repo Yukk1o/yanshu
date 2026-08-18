@@ -74,7 +74,7 @@ fn execute_export_internal(
     }
     let mut runtime = Runtime::new(options, host);
     let base_environment = runtime.new_environment(None);
-    runtime.install_base_environment(base_environment);
+    runtime.install_base_environment(program, base_environment);
     let module_environment = runtime.new_environment(Some(base_environment));
     runtime.install_libraries(program, module_environment)?;
     runtime.install_capabilities(program, module_environment)?;
@@ -183,6 +183,39 @@ impl<'host> Runtime<'host> {
                     self.evaluate(alternative, environment, depth)
                 }
             }
+            ExpressionKind::And(expressions) => {
+                let mut result = Value::Bool(true);
+                for item in expressions {
+                    result = self.evaluate(item, environment, depth)?;
+                    if !result.truthy() {
+                        return Ok(result);
+                    }
+                }
+                Ok(result)
+            }
+            ExpressionKind::Or(expressions) => {
+                for item in expressions {
+                    let result = self.evaluate(item, environment, depth)?;
+                    if result.truthy() {
+                        return Ok(result);
+                    }
+                }
+                Ok(Value::Bool(false))
+            }
+            ExpressionKind::Cond {
+                clauses,
+                alternative,
+            } => {
+                for clause in clauses {
+                    if self
+                        .evaluate(&clause.condition, environment, depth)?
+                        .truthy()
+                    {
+                        return self.evaluate(&clause.expression, environment, depth);
+                    }
+                }
+                self.evaluate(alternative, environment, depth)
+            }
             ExpressionKind::Let { bindings, body } => {
                 let local = self.new_environment(Some(environment));
                 for binding in bindings {
@@ -245,7 +278,7 @@ impl<'host> Runtime<'host> {
             }
             Value::Primitive(primitive) => {
                 check_arity(primitive, arguments.len())?;
-                self.apply_primitive(primitive, arguments)
+                self.apply_primitive(primitive, arguments, depth)
             }
             value => Err(Diagnostic::new(
                 "RUNTIME_NOT_CALLABLE",
@@ -255,7 +288,7 @@ impl<'host> Runtime<'host> {
         }
     }
 
-    fn install_base_environment(&mut self, environment: usize) {
+    fn install_base_environment(&mut self, program: &Program, environment: usize) {
         use PrimitiveOperation as Operation;
         let primitives = [
             primitive("+", 0, None, Operation::Add),
@@ -297,6 +330,21 @@ impl<'host> Runtime<'host> {
         ];
         for item in primitives {
             self.define(environment, item.name.to_owned(), Value::Primitive(item));
+        }
+        if program.version >= BigInt::from(2_u8) {
+            let primitives = [
+                primitive("number->string", 1, Some(1), Operation::NumberToString),
+                primitive("validate-report", 2, Some(2), Operation::ValidateReport),
+                primitive("list-map", 2, Some(2), Operation::ListMap),
+                primitive("list-filter", 2, Some(2), Operation::ListFilter),
+                primitive("list-fold", 3, Some(3), Operation::ListFold),
+                primitive("sum", 1, Some(1), Operation::Sum),
+                primitive("checked-quotient", 2, Some(2), Operation::CheckedQuotient),
+                primitive("checked-remainder", 2, Some(2), Operation::CheckedRemainder),
+            ];
+            for item in primitives {
+                self.define(environment, item.name.to_owned(), Value::Primitive(item));
+            }
         }
     }
 
@@ -385,7 +433,12 @@ impl<'host> Runtime<'host> {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn apply_primitive(&mut self, primitive: Primitive, arguments: Vec<Value>) -> AilResult<Value> {
+    fn apply_primitive(
+        &mut self,
+        primitive: Primitive,
+        arguments: Vec<Value>,
+        depth: usize,
+    ) -> AilResult<Value> {
         use PrimitiveOperation as Operation;
         match primitive.operation {
             Operation::Add => {
@@ -414,24 +467,52 @@ impl<'host> Runtime<'host> {
                     Ok(Value::Int(result))
                 }
             }
-            Operation::Quotient | Operation::Remainder => {
+            Operation::Quotient
+            | Operation::Remainder
+            | Operation::CheckedQuotient
+            | Operation::CheckedRemainder => {
                 let numerator = expect_integer(primitive.name, &arguments[0])?;
                 let denominator = expect_integer(primitive.name, &arguments[1])?;
                 if denominator.is_zero() {
+                    if matches!(
+                        primitive.operation,
+                        Operation::CheckedQuotient | Operation::CheckedRemainder
+                    ) {
+                        return Ok(Value::Err(Box::new(string_map([
+                            ("code", Value::String("DIVIDE_BY_ZERO".to_owned())),
+                            ("operation", Value::String(primitive.name.to_owned())),
+                        ]))));
+                    }
                     return Err(Diagnostic::simple(
                         "RUNTIME_DIVIDE_BY_ZERO",
-                        if primitive.operation == Operation::Quotient {
+                        if matches!(
+                            primitive.operation,
+                            Operation::Quotient | Operation::CheckedQuotient
+                        ) {
                             "quotient denominator cannot be zero"
                         } else {
                             "remainder denominator cannot be zero"
                         },
                     ));
                 }
-                Ok(Value::Int(if primitive.operation == Operation::Quotient {
-                    numerator / denominator
+                let value = Value::Int(
+                    if matches!(
+                        primitive.operation,
+                        Operation::Quotient | Operation::CheckedQuotient
+                    ) {
+                        numerator / denominator
+                    } else {
+                        numerator % denominator
+                    },
+                );
+                if matches!(
+                    primitive.operation,
+                    Operation::CheckedQuotient | Operation::CheckedRemainder
+                ) {
+                    Ok(Value::Ok(Box::new(value)))
                 } else {
-                    numerator % denominator
-                }))
+                    Ok(value)
+                }
             }
             Operation::Equal => Ok(Value::Bool(arguments[0] == arguments[1])),
             Operation::Less
@@ -464,7 +545,52 @@ impl<'host> Runtime<'host> {
                 }
                 Ok(Value::String(result))
             }
+            Operation::NumberToString => Ok(Value::String(
+                expect_integer(primitive.name, &arguments[0])?.to_string(),
+            )),
             Operation::List => Ok(list_value(arguments)),
+            Operation::ListMap => {
+                let callable = arguments[0].clone();
+                let values = expect_list(primitive.name, &arguments[1])?.to_vec();
+                let mut mapped = Vec::with_capacity(values.len());
+                for value in values {
+                    self.budget.consume(1)?;
+                    mapped.push(self.apply(callable.clone(), vec![value], depth + 1)?);
+                }
+                Ok(list_value(mapped))
+            }
+            Operation::ListFilter => {
+                let callable = arguments[0].clone();
+                let values = expect_list(primitive.name, &arguments[1])?.to_vec();
+                let mut filtered = Vec::with_capacity(values.len());
+                for value in values {
+                    self.budget.consume(1)?;
+                    let keep = self.apply(callable.clone(), vec![value.clone()], depth + 1)?;
+                    if keep.truthy() {
+                        filtered.push(value);
+                    }
+                }
+                Ok(list_value(filtered))
+            }
+            Operation::ListFold => {
+                let callable = arguments[0].clone();
+                let mut accumulator = arguments[1].clone();
+                let values = expect_list(primitive.name, &arguments[2])?.to_vec();
+                for value in values {
+                    self.budget.consume(1)?;
+                    accumulator =
+                        self.apply(callable.clone(), vec![accumulator, value], depth + 1)?;
+                }
+                Ok(accumulator)
+            }
+            Operation::Sum => {
+                let mut total = BigInt::zero();
+                for value in expect_list(primitive.name, &arguments[0])? {
+                    self.budget.consume(1)?;
+                    total += expect_integer(primitive.name, value)?;
+                }
+                Ok(Value::Int(total))
+            }
             Operation::IsEmpty => Ok(Value::Bool(
                 expect_list(primitive.name, &arguments[0])?.is_empty(),
             )),
@@ -533,6 +659,21 @@ impl<'host> Runtime<'host> {
                 } else {
                     Ok(Value::Err(Box::new(Value::List(validation.issues))))
                 }
+            }
+            Operation::ValidateReport => {
+                let Value::Schema { specification, .. } = &arguments[0] else {
+                    return Err(type_error(primitive.name, "Schema", &arguments[0]));
+                };
+                let validation = validate_schema(specification, &arguments[1], &mut self.budget)?;
+                Ok(string_map([
+                    ("valid", Value::Bool(validation.valid())),
+                    ("value", validation.value),
+                    ("issues", Value::List(validation.issues)),
+                    (
+                        "cost",
+                        string_map([("fuel", Value::Int(validation.fuel_consumed.into()))]),
+                    ),
+                ]))
             }
             Operation::Ok => Ok(Value::Ok(Box::new(arguments[0].clone()))),
             Operation::Err => Ok(Value::Err(Box::new(arguments[0].clone()))),
@@ -1091,5 +1232,251 @@ mod tests {
             },
         ));
         assert_eq!(unavailable.code, "RUNTIME_LIBRARY_UNAVAILABLE");
+    }
+
+    #[test]
+    fn evaluates_v2_short_circuit_forms_and_number_conversion() {
+        let program = require(load_program_source(
+            r#"(program
+                (name business-rules)
+                (version 2)
+                (def and-short (fn () (and #f (quotient 1 0))))
+                (def or-short (fn () (or 9 (quotient 1 0))))
+                (def choose (fn (amount)
+                  (cond
+                    ((< amount 0) "invalid")
+                    ((>= amount 1000) "review")
+                    (else (string-append "auto:" (number->string amount))))))
+                (export and-short or-short choose))"#,
+        ));
+        assert_eq!(
+            require(execute_export(
+                &program,
+                "and-short",
+                vec![],
+                ExecutionOptions::default(),
+            )),
+            Value::Bool(false)
+        );
+        assert_eq!(
+            require(execute_export(
+                &program,
+                "or-short",
+                vec![],
+                ExecutionOptions::default(),
+            )),
+            Value::Int(9.into())
+        );
+        assert_eq!(
+            require(execute_export(
+                &program,
+                "choose",
+                vec![Value::Int(42.into())],
+                ExecutionOptions::default(),
+            )),
+            Value::String("auto:42".to_owned())
+        );
+    }
+
+    #[test]
+    fn validates_enum_and_union_with_machine_readable_cost() {
+        let program = require(load_program_source(
+            r#"(program
+                (name typed-decisions)
+                (version 2)
+                (schema action (enum "approve" "reject"))
+                (schema identity (union integer string))
+                (def check-action (fn (value) (validate-report action value)))
+                (def check-identity (fn (value) (validate-report identity value)))
+                (export check-action check-identity))"#,
+        ));
+
+        let rejected = require(execute_export(
+            &program,
+            "check-action",
+            vec![Value::String("hold".to_owned())],
+            ExecutionOptions::default(),
+        ));
+        let Value::Map(report) = rejected else {
+            panic!("expected validation report");
+        };
+        assert_eq!(
+            report.get(&MapKey::String("valid".to_owned())),
+            Some(&Value::Bool(false))
+        );
+        assert_eq!(
+            report
+                .get(&MapKey::String("cost".to_owned()))
+                .and_then(|value| match value {
+                    Value::Map(cost) => cost.get(&MapKey::String("fuel".to_owned())),
+                    _ => None,
+                }),
+            Some(&Value::Int(3.into()))
+        );
+        let issue_code = report
+            .get(&MapKey::String("issues".to_owned()))
+            .and_then(|value| match value {
+                Value::List(issues) => issues.first(),
+                _ => None,
+            })
+            .and_then(|value| match value {
+                Value::Map(issue) => issue.get(&MapKey::String("code".to_owned())),
+                _ => None,
+            });
+        assert_eq!(issue_code, Some(&Value::String("SCHEMA_ENUM".to_owned())));
+
+        let accepted = require(execute_export(
+            &program,
+            "check-identity",
+            vec![Value::String("expense-42".to_owned())],
+            ExecutionOptions::default(),
+        ));
+        let Value::Map(report) = accepted else {
+            panic!("expected validation report");
+        };
+        assert_eq!(
+            report.get(&MapKey::String("valid".to_owned())),
+            Some(&Value::Bool(true))
+        );
+        assert_eq!(
+            report
+                .get(&MapKey::String("cost".to_owned()))
+                .and_then(|value| match value {
+                    Value::Map(cost) => cost.get(&MapKey::String("fuel".to_owned())),
+                    _ => None,
+                }),
+            Some(&Value::Int(3.into()))
+        );
+    }
+
+    #[test]
+    fn transforms_and_aggregates_lists_with_fuel_charged_per_item() {
+        let program = require(load_program_source(
+            r#"(program
+                (name expense-collections)
+                (version 2)
+                (def total (fn (items) (sum items)))
+                (def boosted (fn (items)
+                  (list-map (fn (amount) (+ amount 10)) items)))
+                (def positive (fn (items)
+                  (list-filter (fn (amount) (> amount 0)) items)))
+                (def folded (fn (items)
+                  (list-fold (fn (total amount) (+ total amount)) 0 items)))
+                (export total boosted positive folded))"#,
+        ));
+        let items = Value::List(vec![
+            Value::Int(1.into()),
+            Value::Int(2.into()),
+            Value::Int(3.into()),
+        ]);
+        assert_eq!(
+            require(execute_export(
+                &program,
+                "total",
+                vec![items.clone()],
+                ExecutionOptions::default(),
+            )),
+            Value::Int(6.into())
+        );
+        assert_eq!(
+            require(execute_export(
+                &program,
+                "boosted",
+                vec![items.clone()],
+                ExecutionOptions::default(),
+            )),
+            Value::List(vec![
+                Value::Int(11.into()),
+                Value::Int(12.into()),
+                Value::Int(13.into()),
+            ])
+        );
+        assert_eq!(
+            require(execute_export(
+                &program,
+                "positive",
+                vec![Value::List(vec![
+                    Value::Int((-1).into()),
+                    Value::Int(0.into()),
+                    Value::Int(2.into()),
+                ])],
+                ExecutionOptions::default(),
+            )),
+            Value::List(vec![Value::Int(2.into())])
+        );
+        assert_eq!(
+            require(execute_export(
+                &program,
+                "folded",
+                vec![items],
+                ExecutionOptions::default(),
+            )),
+            Value::Int(6.into())
+        );
+
+        let exhausted = require_error(execute_export(
+            &program,
+            "total",
+            vec![Value::List(
+                (0..200).map(|value| Value::Int(value.into())).collect(),
+            )],
+            ExecutionOptions {
+                fuel: 100,
+                ..ExecutionOptions::default()
+            },
+        ));
+        assert_eq!(exhausted.code, "RUNTIME_FUEL_EXHAUSTED");
+    }
+
+    #[test]
+    fn degrades_only_explicit_business_results() {
+        let program = require(load_program_source(
+            r#"(program
+                (name recoverable-arithmetic)
+                (version 2)
+                (def ratio (fn (amount count)
+                  (let ((attempt (checked-quotient amount count)))
+                    (if (ok? attempt) (result-value attempt) -1))))
+                (def checked (fn (amount count)
+                  (checked-remainder amount count)))
+                (def raw (fn (amount count) (quotient amount count)))
+                (export ratio checked raw))"#,
+        ));
+        assert_eq!(
+            require(execute_export(
+                &program,
+                "ratio",
+                vec![Value::Int(100.into()), Value::Int(0.into())],
+                ExecutionOptions::default(),
+            )),
+            Value::Int((-1).into())
+        );
+        assert_eq!(
+            require(execute_export(
+                &program,
+                "checked",
+                vec![Value::Int(10.into()), Value::Int(3.into())],
+                ExecutionOptions::default(),
+            )),
+            Value::Ok(Box::new(Value::Int(1.into())))
+        );
+        let raw = require_error(execute_export(
+            &program,
+            "raw",
+            vec![Value::Int(1.into()), Value::Int(0.into())],
+            ExecutionOptions::default(),
+        ));
+        assert_eq!(raw.code, "RUNTIME_DIVIDE_BY_ZERO");
+
+        let fuel = require_error(execute_export(
+            &program,
+            "ratio",
+            vec![Value::Int(100.into()), Value::Int(2.into())],
+            ExecutionOptions {
+                fuel: 2,
+                ..ExecutionOptions::default()
+            },
+        ));
+        assert_eq!(fuel.code, "RUNTIME_FUEL_EXHAUSTED");
     }
 }

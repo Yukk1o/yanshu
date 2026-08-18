@@ -37,7 +37,9 @@
 
 ### `(version 1)`
 
-语言内声明的正整数版本。它与部署制品的 SHA-256 不同：相同语言版本的两个源码内容仍会得到不同制品 ID。
+语言内声明的语义版本。当前只接受 `1` 和 `2`：未知版本会以 `PROGRAM_UNSUPPORTED_VERSION` 拒绝；v1 源码使用 v2 form 会得到带 `feature / actualVersion / minimumVersion` 的 `PROGRAM_FEATURE_REQUIRES_VERSION`。
+
+它与部署制品的 SHA-256 不同：`version` 决定“按哪套语言规则解释”，源码 hash 决定“究竟是哪一份不可变代码”。相同语言版本的两个源码内容仍会得到不同制品 ID。
 
 ### `(capabilities)`
 
@@ -112,6 +114,22 @@ vip
 ```
 
 `quotient` 是整数除法，除数为零会产生解释器诊断。
+
+## v2 业务条件：`and`、`or`、`cond`
+
+```lisp
+(and (> total 0) (< total 10000))
+(or (= action "reject") (> monthly-total 20000))
+
+(cond
+  ((= action "reject") "rejected")
+  ((> total 10000) "manual-review")
+  (else "approved"))
+```
+
+`and` / `or` 从左到右短路，并返回实际选中的操作数；空的 `(and)` 是 `#t`，空的 `(or)` 是 `#f`。它们是特殊 form，不是普通函数，因此被短路的表达式绝不会求值。
+
+`cond` 必须以显式 `(else expression)` 结尾，且 `else` 只能出现在最后。这个限制让业务分支是穷尽的，也让 LLM 与审查者不必猜“没有命中时返回什么”。三者只在 `(version 2)` 可用。
 
 ## 局部绑定：`let`
 
@@ -190,14 +208,14 @@ Schema 名称不是普通函数；route handler 必须同时有 `def` 和 `expor
 
 ## 纯 Primitive 速查
 
-- 算术：`+`、`-`、`*`、`quotient`、`remainder`；
+- 算术：`+`、`-`、`*`、`quotient`、`remainder`；v2 另有返回 Result 的 `checked-quotient`、`checked-remainder`；
 - 比较：`=`、`<`、`<=`、`>`、`>=`、`not`；
 - 类型判断：`integer?`、`boolean?`、`string?`、`list?`、`map?`；
-- List：`list`、`empty?`、`length`、`first`、`rest`；
+- List：`list`、`empty?`、`length`、`first`、`rest`；v2 另有 `list-map`、`list-filter`、`list-fold`、`sum`；
 - Map：`map`、`get`、`get-or`、`has-key?`、`assoc`；
-- String：`string-append`；
+- String：`string-append`；v2 另有 `number->string`；
 - Result：`ok`、`err`、`ok?`、`err?`、`result-value`、`unwrap`；
-- Web：`validate`、`api-response`、`api-error`。
+- Web：`validate`、`api-response`、`api-error`；v2 另有带 fuel 成本的 `validate-report`。
 
 真实安装表见 [ail-runtime](/source/rust/crates/ail-runtime/src/lib.rs.txt)。
 
@@ -224,7 +242,7 @@ Schema 名称不是普通函数；route handler 必须同时有 `def` 和 `expor
 
 ## 当前不支持
 
-当前没有宏、异常捕获、可变变量、并发、用户模块导入、递归 Schema、浮点数、日期类型、用户自定义类型或任意宿主调用。以 [语言规格](/source/docs/spec-v0.1.md.txt) 和 [Rust Parser](/source/rust/crates/ail-syntax/src/parser.rs.txt) 为准，不要因为语法外观相似就假设其它 form 可用。
+当前没有宏、通用异常捕获、可变变量、并发、用户模块导入、递归 Schema、浮点数、日期类型、用户自定义类型或任意宿主调用。v2 预期业务失败通过显式 Result 表达，不能捕获 fuel、能力或宿主诊断。以 [v0.6 语言规格](/source/docs/spec-v0.6.md.txt) 和 [Rust Parser](/source/rust/crates/ail-syntax/src/parser.rs.txt) 为准，不要因为语法外观相似就假设其它 form 可用。
 
 ::: warning Int 必须保持任意精度
 当前 `Int` 语义允许超过 64 位，Rust 实现使用 `num_bigint::BigInt`。除非未来作为版本化语言变更正式引入范围限制，否则不能静默收窄到 `i64`。

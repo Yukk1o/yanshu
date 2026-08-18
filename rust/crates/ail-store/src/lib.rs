@@ -491,6 +491,7 @@ mod tests {
 
     const INITIAL_SOURCE: &str = include_str!("../../../../examples/discount/v1.ail");
     const CANDIDATE_SOURCE: &str = include_str!("../../../../examples/discount/v2.ail");
+    const BUSINESS_V2_SOURCE: &str = include_str!("../../../../examples/expenses/service.ail");
     const INITIAL_HASH: &str = "2f16c05a312992b3e424b57743fe6283023901dabb3a1a2e57b9cc8e75726329";
     const CANDIDATE_HASH: &str = "1c238ff3c4ae7bc292f06801a114f9029de243ff3d0a1aeaf808d7a483bd97b4";
 
@@ -532,6 +533,33 @@ mod tests {
         );
         assert_eq!(source_hash(INITIAL_SOURCE), INITIAL_HASH);
         assert_eq!(source_hash(CANDIDATE_SOURCE), CANDIDATE_HASH);
+    }
+
+    #[test]
+    fn stores_language_version_separately_from_content_identity() {
+        let temporary = TestDirectory::new();
+        let store = VersionStore::new(&temporary.path);
+        let passing = json!({ "passed": true });
+        let first =
+            require(store.register_candidate(registration(BUSINESS_V2_SOURCE, None, &passing, 1)));
+        let changed_source = BUSINESS_V2_SOURCE.replace(
+            "(name expense-approval)",
+            "(name expense-approval-candidate)",
+        );
+        let second =
+            require(store.register_candidate(registration(&changed_source, None, &passing, 2)));
+
+        assert_ne!(first, second);
+        assert_eq!(
+            require(store.version_metadata(&first)).get("languageVersion"),
+            Some(&json!(2))
+        );
+        assert_eq!(
+            require(store.version_metadata(&second)).get("languageVersion"),
+            Some(&json!(2))
+        );
+        assert_eq!(first, source_hash(BUSINESS_V2_SOURCE));
+        assert_eq!(second, source_hash(&changed_source));
     }
 
     #[test]

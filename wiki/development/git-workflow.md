@@ -10,7 +10,8 @@ main (v0.1.0)
        ├─ feature/web-backend-runtime      已合并为 v0.2 检查点
        ├─ feature/business-backend-v0.3   已合并
        ├─ feature/library-backend-v0.4    已合并
-       └─ feature/rust-host-v0.5          当前实现线
+       ├─ feature/rust-host-v0.5          Rust 主实现检查点
+       └─ feature/general-language-v0.6   通用语言安全内核
 ```
 
 - `main`：始终是经过测试、可发布的检查点，并用 `v*` annotated tag 标记；

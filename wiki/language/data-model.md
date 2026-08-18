@@ -57,7 +57,8 @@ AI-Evolve 的值系统刻意保持小而可移植。值既要能被解释器执�
 
 常用集合操作：
 
-- List：`list`、`empty?`、`length`、`first`、`rest`；
+- List v1：`list`、`empty?`、`length`、`first`、`rest`；
+- List v2：`list-map`、`list-filter`、`list-fold`、`sum`；每访问一个元素都额外消耗 fuel，回调继续按正常表达式计费；
 - Map：`map`、`get`、`get-or`、`has-key?`、`assoc`；
 - 类型判断：`integer?`、`boolean?`、`string?`、`list?`、`map?`。
 
@@ -79,6 +80,8 @@ AI-Evolve 的值系统刻意保持小而可移植。值既要能被解释器执�
 | 资源不存在 | `api-error 404 ...` | 稳定业务错误 |
 | primitive 参数类型错误 | 解释器 diagnostic | 宿主转成不泄漏细节的 500 |
 | fuel 耗尽 | 解释器 diagnostic | 请求失败且事务丢弃 |
+
+v2 的 `checked-quotient` / `checked-remainder` 把除零转换成带稳定 `DIVIDE_BY_ZERO` code 的 `Err`，业务可以检查后回退。普通 `quotient`、类型错误、fuel 耗尽、能力越权和宿主失败仍然 fail-loud；语言没有一个能把这些系统诊断全部吞掉的 `try/catch`。
 
 ## Nil 与 JSON null 的当前边界
 

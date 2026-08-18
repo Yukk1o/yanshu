@@ -3,9 +3,10 @@
 > 更习惯 Go / Rust、暂时看不懂 Lisp？从 [中文 Wiki](wiki/README.md) 开始，
 > 其中包含 5 分钟上手、逐段语法翻译、架构/源码地图和 AI 改动审查清单。
 
-一个用于验证“运行中的软件生成候选后继版本”的小型原型。宿主暂时使用
-Racket，客体程序使用项目自己的受限 Lisp；解释器不会把客体代码交给
-Racket `eval`。
+一个用于验证“运行中的软件生成候选后继版本”的 Rust-first 通用语言原型。当前
+实现还是安全内核阶段；Reader、Parser、AST、解释器、Web 服务、
+版本库、LLM provider、影子执行与运维工具都已有第一方 Rust 实现，并全局禁止
+第一方 `unsafe`。冻结的旧前端只服务于 v1 差分验证，不再承接 v2 语言开发。
 
 当前闭环：
 
@@ -69,9 +70,18 @@ $env:AI_EVOLVE_SHADOW_MAX_CONCURRENCY="4"
 
 ## 快速开始
 
-项目使用私有 Minimal Racket 工具链，不修改系统 PATH。
+主实现只需要仓库声明的 Rust 工具链：
 
 ```powershell
+.\scripts\check-rust.ps1
+cargo run --locked -p ail-cli -- test-service examples\expenses\service.ail examples\expenses\scenarios.json
+```
+
+Rust conformance 固定 v1 兼容语义。需要额外运行冻结旧前端的差分证据时，显式启用；它会按需使用仓库私有工具链，不修改系统 PATH：
+
+```powershell
+$env:AI_EVOLVE_CHECK_V1_REFERENCE="1"
+.\scripts\check-rust.ps1
 .\scripts\bootstrap.ps1
 .\scripts\test.ps1
 .\scripts\demo.ps1
@@ -172,9 +182,15 @@ Rust transport 强制 HTTPS、拒绝重定向、限制请求/响应大小和墙�
   (export calculate-discount))
 ```
 
-目前支持 `quote`、`if`、顺序 `let`、`fn`、`do` 和函数调用，以及整数、
-字符串、布尔、符号、列表、Map、`Ok`/`Err`。Web 程序可声明静态
-`route`，处理器接收请求 Map 并返回结构化响应 Map。只有 `#f` 为假。
+v1 支持 `quote`、`if`、顺序 `let`、`fn`、`do` 和函数调用，以及整数、
+字符串、布尔、符号、列表、Map、`Ok`/`Err`。v2 增加真正短路的
+`and/or`、穷尽式 `cond`、`number->string`、有界 `list-map/list-filter/list-fold/sum`、
+`enum/union` Schema、带 fuel 成本的 `validate-report`，以及只返回业务 Result 的
+`checked-quotient/checked-remainder`。完整示例见
+[费用审批服务](examples/expenses/service.ail)及其[五个场景](examples/expenses/scenarios.json)。
+
+Web 程序可声明静态 `route`，处理器接收请求 Map 并返回结构化响应 Map。所有版本
+都只有 `#f` 为假。
 
 业务输入可以声明为编译器持有的 Schema：
 

@@ -1,0 +1,77 @@
+(program
+  (name expense-approval)
+  (version 2)
+  (capabilities kv)
+
+  ;; 业务输入白名单：动作、类别和外部引用都由 Schema 声明。
+  (schema decision-request
+    (object
+      (required "id" (integer 1 999999999))
+      (required "action" (enum "approve" "reject"))
+      (required "externalRef" (union integer (string 1 64)))
+      (required "items"
+        (list
+          (object
+            (required "category" (enum "travel" "meals" "hospitality"))
+            (required "amount" (integer 0 1000000)))
+          1
+          100))
+      (optional "monthlyPrior" (integer 0 10000000) 0)
+      (optional "attendees" (integer 0 10000) 0)))
+
+  (route POST "/expenses/decision" decide-expense)
+
+  (def decide-expense
+    (fn (request)
+      (let ((validation (validate-report decision-request (get request "body"))))
+        (if (get validation "valid")
+            (let ((body (get validation "value"))
+                  (id (get body "id"))
+                  (action (get body "action"))
+                  (items (get body "items"))
+                  (amounts (list-map (fn (item) (get item "amount")) items))
+                  (total (sum amounts))
+                  (monthly-total (+ (get body "monthlyPrior") total))
+                  (hospitality-items
+                    (list-filter
+                      (fn (item) (= (get item "category") "hospitality"))
+                      items))
+                  (hospitality-total
+                    (list-fold
+                      (fn (current item) (+ current (get item "amount")))
+                      0
+                      hospitality-items))
+                  (per-person-result
+                    (checked-quotient hospitality-total (get body "attendees")))
+                  (per-person
+                    (if (ok? per-person-result)
+                        (result-value per-person-result)
+                        -1))
+                  (decision
+                    (cond
+                      ((= action "reject") "rejected")
+                      ((or (> total 10000) (> monthly-total 20000)) "manual-review")
+                      ((and (> hospitality-total 0)
+                            (or (= (get body "attendees") 0)
+                                (> per-person 500)))
+                       "manual-review")
+                      (else "approved")))
+                  (key (string-append "expense/" (number->string id)))
+                  (record
+                    (map "id" id
+                         "key" key
+                         "decision" decision
+                         "total" total
+                         "monthlyTotal" monthly-total
+                         "hospitalityTotal" hospitality-total
+                         "perPersonHospitality" per-person
+                         "externalRef" (get body "externalRef")
+                         "validationFuel" (get (get validation "cost") "fuel"))))
+              (do (kv-put key record)
+                  (api-response 200 record)))
+            (api-error 400
+                       "VALIDATION_FAILED"
+                       "request body failed schema validation"
+                       (get validation "issues"))))))
+
+  (export decide-expense))

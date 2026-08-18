@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "ail-cli"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ail-conformance",
  "ail-diagnostic",
@@ -18,7 +18,7 @@ dependencies = [
 
 [[package]]
 name = "ail-conformance"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ail-diagnostic",
  "ail-runtime",
@@ -29,14 +29,14 @@ dependencies = [
 
 [[package]]
 name = "ail-diagnostic"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "ail-http"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ail-diagnostic",
  "ail-rollout",
@@ -57,7 +57,7 @@ dependencies = [
 
 [[package]]
 name = "ail-ops"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ail-diagnostic",
  "ail-service",
@@ -68,7 +68,7 @@ dependencies = [
 
 [[package]]
 name = "ail-provider"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ail-diagnostic",
  "reqwest",
@@ -78,7 +78,7 @@ dependencies = [
 
 [[package]]
 name = "ail-rollout"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ail-diagnostic",
  "ail-service",
@@ -90,7 +90,7 @@ dependencies = [
 
 [[package]]
 name = "ail-runtime"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ail-diagnostic",
  "ail-syntax",
@@ -101,7 +101,7 @@ dependencies = [
 
 [[package]]
 name = "ail-server"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ail-diagnostic",
  "ail-http",
@@ -113,7 +113,7 @@ dependencies = [
 
 [[package]]
 name = "ail-service"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ail-diagnostic",
  "ail-runtime",
@@ -126,7 +126,7 @@ dependencies = [
 
 [[package]]
 name = "ail-store"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ail-diagnostic",
  "ail-syntax",
@@ -136,7 +136,7 @@ dependencies = [
 
 [[package]]
 name = "ail-syntax"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ail-diagnostic",
  "num-bigint",

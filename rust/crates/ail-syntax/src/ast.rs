@@ -104,6 +104,12 @@ pub struct Schema {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SchemaKind {
     Any,
+    Enum {
+        values: Vec<Datum>,
+    },
+    Union {
+        variants: Vec<Self>,
+    },
     String {
         minimum_length: BigInt,
         maximum_length: Option<BigInt>,
@@ -153,6 +159,12 @@ pub enum ExpressionKind {
         consequent: Box<Expression>,
         alternative: Box<Expression>,
     },
+    And(Vec<Expression>),
+    Or(Vec<Expression>),
+    Cond {
+        clauses: Vec<CondClause>,
+        alternative: Box<Expression>,
+    },
     Let {
         bindings: Vec<Binding>,
         body: Box<Expression>,
@@ -166,6 +178,12 @@ pub enum ExpressionKind {
         callee: Box<Expression>,
         arguments: Vec<Expression>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CondClause {
+    pub condition: Expression,
+    pub expression: Expression,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -227,6 +245,14 @@ impl SchemaKind {
     fn to_json(&self) -> Value {
         match self {
             Self::Any => json!({ "type": "any" }),
+            Self::Enum { values } => json!({
+                "type": "enum",
+                "values": values.iter().map(Datum::portable_json).collect::<Vec<_>>(),
+            }),
+            Self::Union { variants } => json!({
+                "type": "union",
+                "variants": variants.iter().map(Self::to_json).collect::<Vec<_>>(),
+            }),
             Self::String {
                 minimum_length,
                 maximum_length,
@@ -300,6 +326,22 @@ impl Expression {
                 "consequent": consequent.to_json(),
                 "alternative": alternative.to_json(),
             }),
+            ExpressionKind::And(expressions) => json!({
+                "type": "and",
+                "expressions": expressions.iter().map(Self::to_json).collect::<Vec<_>>(),
+            }),
+            ExpressionKind::Or(expressions) => json!({
+                "type": "or",
+                "expressions": expressions.iter().map(Self::to_json).collect::<Vec<_>>(),
+            }),
+            ExpressionKind::Cond {
+                clauses,
+                alternative,
+            } => json!({
+                "type": "cond",
+                "clauses": clauses.iter().map(CondClause::to_json).collect::<Vec<_>>(),
+                "alternative": alternative.to_json(),
+            }),
             ExpressionKind::Let { bindings, body } => json!({
                 "type": "let",
                 "bindings": bindings.iter().map(Binding::to_json).collect::<Vec<_>>(),
@@ -326,6 +368,15 @@ impl Expression {
 impl Binding {
     fn to_json(&self) -> Value {
         json!({ "name": self.name, "expression": self.expression.to_json() })
+    }
+}
+
+impl CondClause {
+    fn to_json(&self) -> Value {
+        json!({
+            "condition": self.condition.to_json(),
+            "expression": self.expression.to_json(),
+        })
     }
 }
 

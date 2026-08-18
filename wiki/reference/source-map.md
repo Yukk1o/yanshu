@@ -5,16 +5,17 @@
 ## 推荐阅读顺序
 
 1. [discount/v2.ail](/source/examples/discount/v2.ail.txt)：最小纯函数程序；
-2. [service.ail](/source/examples/tasks/service.ail.txt)：Schema、route、capability 与事务 handler；
-3. [ail-syntax AST](/source/rust/crates/ail-syntax/src/ast.rs.txt)：Program / Expression / Schema 的数据结构；
-4. [ail-syntax Reader](/source/rust/crates/ail-syntax/src/reader.rs.txt) 与 [Parser](/source/rust/crates/ail-syntax/src/parser.rs.txt)：源码怎样成为 AST；
-5. [ail-runtime](/source/rust/crates/ail-runtime/src/lib.rs.txt)：解释器、primitive 与 Library Backend；
-6. [ail-service](/source/rust/crates/ail-service/src/lib.rs.txt)：route、capability 和事务；
-7. [ail-store](/source/rust/crates/ail-store/src/lib.rs.txt)：候选、active 与回滚；
-8. [ail-provider](/source/rust/crates/ail-provider/src/lib.rs.txt)：LLM 只能怎样提出候选；
-9. [ail-http](/source/rust/crates/ail-http/src/lib.rs.txt)：请求身份、版本固定与观测；
-10. [ail-rollout](/source/rust/crates/ail-rollout/src/lib.rs.txt)：隔离影子采样、比较与观测；
-11. [ail-ops](/source/rust/crates/ail-ops/src/lib.rs.txt)：服务锁、备份校验与恢复。
+2. [费用审批 service.ail](/source/examples/expenses/service.ail.txt)：v2 条件、集合、enum/union、成本与业务 Result；
+3. [任务 service.ail](/source/examples/tasks/service.ail.txt)：Schema、route、capability 与事务 handler；
+4. [ail-syntax AST](/source/rust/crates/ail-syntax/src/ast.rs.txt)：Program / Expression / Schema 的数据结构；
+5. [ail-syntax Reader](/source/rust/crates/ail-syntax/src/reader.rs.txt) 与 [Parser](/source/rust/crates/ail-syntax/src/parser.rs.txt)：源码怎样成为 AST；
+6. [ail-runtime](/source/rust/crates/ail-runtime/src/lib.rs.txt)：解释器、primitive 与 Library Backend；
+7. [ail-service](/source/rust/crates/ail-service/src/lib.rs.txt)：route、capability 和事务；
+8. [ail-store](/source/rust/crates/ail-store/src/lib.rs.txt)：候选、active 与回滚；
+9. [ail-provider](/source/rust/crates/ail-provider/src/lib.rs.txt)：LLM 只能怎样提出候选；
+10. [ail-http](/source/rust/crates/ail-http/src/lib.rs.txt)：请求身份、版本固定与观测；
+11. [ail-rollout](/source/rust/crates/ail-rollout/src/lib.rs.txt)：隔离影子采样、比较与观测；
+12. [ail-ops](/source/rust/crates/ail-ops/src/lib.rs.txt)：服务锁、备份校验与恢复。
 
 ## 语言前端
 
@@ -46,6 +47,8 @@ Go/Rust 读者最值得先看的类型是 `Program`、`ExpressionKind`、`Schema
 | [service/lib.rs](/source/rust/crates/ail-service/src/lib.rs.txt) | method/path 匹配、request Map、response 校验、capability trait、事务 KV |
 | [service.ail](/source/examples/tasks/service.ail.txt) | 真实 Schema、route 与五个 CRUD handler |
 | [scenarios.json](/source/examples/tasks/scenarios.json.txt) | 11 个有状态业务契约 |
+| [费用审批 service.ail](/source/examples/expenses/service.ail.txt) | v2 的可读业务规则与有界集合处理 |
+| [费用审批 scenarios.json](/source/examples/expenses/scenarios.json.txt) | enum 白名单、金额累计、数字 key 与除零降级 |
 
 一次请求的语义顺序：固定 Program → 匹配 route → 创建 working copy → 调用 export → 验证 response → commit 或 discard。
 
