@@ -12,6 +12,8 @@ language host. It does not switch production traffic yet.
   closures, sequential `let`, bounded evaluation, pure primitives, Schema
   normalization, and the `text@1` reference backend;
 - `ail-conformance`: the same v1 JSON manifest/fixture codec used by Racket;
+- `ail-service`: explicit capability trait, route dispatch, response validation,
+  transactional memory KV, fixed clock/log adapters, and scenario runner;
 - `ail-cli`: Rust `check`, `inspect`, and `conformance` commands.
 
 The runtime represents environments and closures with checked arena indices.
@@ -29,8 +31,8 @@ Run:
 
 The gate checks formatting, all Rust tests, Clippy with warnings denied,
 first-party unsafe patterns, five full frontend comparisons, and the complete
-17-case conformance report. The Racket and Rust conformance JSON documents must
-be exactly equal after JSON normalization.
+17-case conformance report, and the 11-case task-service report. The Racket and
+Rust JSON documents must be exactly equal after JSON normalization.
 
 The current corpus covers:
 
@@ -53,8 +55,9 @@ internal unsafe implementations remain inventoried according to
 
 ## Not switched yet
 
-Racket remains the default service and semantic oracle. Rust does not yet host
-capabilities, routes, transactional KV, the HTTP server, version storage, or LLM
-providers. Those layers will migrate only after their host-neutral scenario and
-file-format fixtures exist. The cutover sequence remains: CI differential,
-offline replay, shadow execution, canary, then explicit default-host change.
+Racket remains the default service and semantic oracle. Rust now hosts the
+in-memory capability/service boundary, but not persisted KV, the HTTP server,
+version storage, or LLM providers. Those layers will migrate only after their
+host-neutral scenario and file-format fixtures exist. The cutover sequence
+remains: CI differential, offline replay, shadow execution, canary, then
+explicit default-host change.

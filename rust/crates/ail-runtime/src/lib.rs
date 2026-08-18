@@ -13,7 +13,7 @@ use num_traits::{One, Zero};
 use serde_json::{Value as JsonValue, json};
 
 pub use budget::Budget;
-pub use value::{MapKey, Primitive, PrimitiveOperation, Value, bigint_json};
+pub use value::{MapKey, Primitive, PrimitiveOperation, Value, bigint_json, json_to_value};
 
 use schema::validate_schema;
 
@@ -40,6 +40,31 @@ pub fn execute_export(
     arguments: Vec<Value>,
     options: ExecutionOptions,
 ) -> AilResult<Value> {
+    execute_export_internal(program, export_name, arguments, options, None)
+}
+
+pub trait CapabilityHost {
+    fn supports(&self, capability: &str) -> bool;
+    fn invoke(&mut self, operation: &str, arguments: &[Value]) -> AilResult<Value>;
+}
+
+pub fn execute_export_with_host(
+    program: &Program,
+    export_name: &str,
+    arguments: Vec<Value>,
+    options: ExecutionOptions,
+    host: &mut dyn CapabilityHost,
+) -> AilResult<Value> {
+    execute_export_internal(program, export_name, arguments, options, Some(host))
+}
+
+fn execute_export_internal(
+    program: &Program,
+    export_name: &str,
+    arguments: Vec<Value>,
+    options: ExecutionOptions,
+    host: Option<&mut dyn CapabilityHost>,
+) -> AilResult<Value> {
     if !program.exports.iter().any(|name| name == export_name) {
         return Err(Diagnostic::new(
             "RUNTIME_NOT_EXPORTED",
@@ -47,11 +72,12 @@ pub fn execute_export(
             json!({ "name": export_name }),
         ));
     }
-    let mut runtime = Runtime::new(options);
+    let mut runtime = Runtime::new(options, host);
     let base_environment = runtime.new_environment(None);
     runtime.install_base_environment(base_environment);
     let module_environment = runtime.new_environment(Some(base_environment));
     runtime.install_libraries(program, module_environment)?;
+    runtime.install_capabilities(program, module_environment)?;
     for schema in &program.schemas {
         runtime.define(
             module_environment,
@@ -83,20 +109,22 @@ struct Closure {
     environment: usize,
 }
 
-struct Runtime {
+struct Runtime<'host> {
     budget: Budget,
     options: ExecutionOptions,
     environments: Vec<Environment>,
     closures: Vec<Closure>,
+    host: Option<&'host mut dyn CapabilityHost>,
 }
 
-impl Runtime {
-    fn new(options: ExecutionOptions) -> Self {
+impl<'host> Runtime<'host> {
+    fn new(options: ExecutionOptions, host: Option<&'host mut dyn CapabilityHost>) -> Self {
         Self {
             budget: Budget::new(options.fuel, options.maximum_depth),
             options,
             environments: Vec::new(),
             closures: Vec::new(),
+            host,
         }
     }
 
@@ -303,6 +331,59 @@ impl Runtime {
         Ok(())
     }
 
+    fn install_capabilities(&mut self, program: &Program, environment: usize) -> AilResult<()> {
+        use PrimitiveOperation as Operation;
+        for capability in &program.capabilities {
+            match capability.as_str() {
+                "log" => {
+                    let item = primitive("log", 1, Some(1), Operation::Log);
+                    self.define(environment, item.name.to_owned(), Value::Primitive(item));
+                }
+                "clock" => {
+                    self.require_capability("clock")?;
+                    let item = primitive("now-ms", 0, Some(0), Operation::NowMilliseconds);
+                    self.define(environment, item.name.to_owned(), Value::Primitive(item));
+                }
+                "kv" => {
+                    self.require_capability("kv")?;
+                    let operations = [
+                        primitive("kv-get", 2, Some(2), Operation::KvGet),
+                        primitive("kv-put", 2, Some(2), Operation::KvPut),
+                        primitive("kv-delete", 1, Some(1), Operation::KvDelete),
+                        primitive("kv-list", 1, Some(1), Operation::KvList),
+                    ];
+                    for item in operations {
+                        self.define(environment, item.name.to_owned(), Value::Primitive(item));
+                    }
+                }
+                _ => {
+                    return Err(Diagnostic::new(
+                        "RUNTIME_CAPABILITY_UNAVAILABLE",
+                        "host did not provide a declared capability",
+                        json!({ "capability": capability }),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn require_capability(&self, capability: &str) -> AilResult<()> {
+        if self
+            .host
+            .as_deref()
+            .is_some_and(|host| host.supports(capability))
+        {
+            Ok(())
+        } else {
+            Err(Diagnostic::new(
+                "RUNTIME_CAPABILITY_UNAVAILABLE",
+                "host did not provide a declared capability",
+                json!({ "capability": capability }),
+            ))
+        }
+    }
+
     #[allow(clippy::too_many_lines)]
     fn apply_primitive(&mut self, primitive: Primitive, arguments: Vec<Value>) -> AilResult<Value> {
         use PrimitiveOperation as Operation;
@@ -479,12 +560,41 @@ impl Runtime {
                 ]))
             }
             Operation::ApiError => build_api_error(&arguments),
+            Operation::Log => {
+                if self
+                    .host
+                    .as_deref()
+                    .is_some_and(|host| host.supports("log"))
+                {
+                    self.invoke_capability("log", &arguments)
+                } else {
+                    Ok(Value::Nil)
+                }
+            }
+            Operation::NowMilliseconds
+            | Operation::KvGet
+            | Operation::KvPut
+            | Operation::KvDelete
+            | Operation::KvList => self.invoke_capability(primitive.name, &arguments),
             Operation::TextLength
             | Operation::TextStartsWith
             | Operation::TextEndsWith
             | Operation::TextContains
             | Operation::TextReplace => self.apply_text_primitive(primitive, &arguments),
         }
+    }
+
+    fn invoke_capability(&mut self, operation: &str, arguments: &[Value]) -> AilResult<Value> {
+        self.host.as_deref_mut().map_or_else(
+            || {
+                Err(Diagnostic::new(
+                    "RUNTIME_CAPABILITY_UNAVAILABLE",
+                    "host did not provide a declared capability",
+                    json!({ "capability": operation }),
+                ))
+            },
+            |host| host.invoke(operation, arguments),
+        )
     }
 
     fn apply_text_primitive(

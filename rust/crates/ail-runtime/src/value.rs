@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, str::FromStr};
 
 use ail_diagnostic::{AilResult, Diagnostic};
 use ail_syntax::{Datum, DatumKind, SchemaKind};
@@ -78,6 +78,12 @@ pub enum PrimitiveOperation {
     Unwrap,
     ApiResponse,
     ApiError,
+    Log,
+    NowMilliseconds,
+    KvGet,
+    KvPut,
+    KvDelete,
+    KvList,
     TextLength,
     TextStartsWith,
     TextEndsWith,
@@ -198,4 +204,34 @@ impl From<&Datum> for Value {
 pub fn bigint_json(value: &BigInt) -> JsonValue {
     serde_json::from_str(&value.to_string())
         .unwrap_or_else(|_| JsonValue::String(value.to_string()))
+}
+
+pub fn json_to_value(value: &JsonValue) -> AilResult<Value> {
+    match value {
+        JsonValue::Null => Ok(Value::Nil),
+        JsonValue::Bool(value) => Ok(Value::Bool(*value)),
+        JsonValue::String(value) => Ok(Value::String(value.clone())),
+        JsonValue::Number(value) => BigInt::from_str(&value.to_string())
+            .map(Value::Int)
+            .map_err(|_| {
+                Diagnostic::new(
+                    "INPUT_UNSUPPORTED_JSON",
+                    "JSON input cannot be converted to a guest value",
+                    json!({ "value": value }),
+                )
+            }),
+        JsonValue::Array(values) if values.is_empty() => Ok(Value::Nil),
+        JsonValue::Array(values) => values
+            .iter()
+            .map(json_to_value)
+            .collect::<AilResult<Vec<_>>>()
+            .map(Value::List),
+        JsonValue::Object(values) => {
+            let mut mapping = BTreeMap::new();
+            for (key, item) in values {
+                mapping.insert(MapKey::String(key.clone()), json_to_value(item)?);
+            }
+            Ok(Value::Map(mapping))
+        }
+    }
 }

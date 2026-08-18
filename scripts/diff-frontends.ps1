@@ -62,6 +62,26 @@ try {
         throw "complete conformance report differs"
     }
     Write-Output "ok - complete conformance report parity: 17 cases"
+
+    $serviceProgram = "examples\tasks\service.ail"
+    $serviceSuite = "examples\tasks\scenarios.json"
+    $racketOutput = @(& $racketExe $racketCli test-service $serviceProgram $serviceSuite)
+    $racketExit = $LASTEXITCODE
+    $rustOutput = @(& $rustExe test-service $serviceProgram $serviceSuite)
+    $rustExit = $LASTEXITCODE
+    if ($racketExit -ne $rustExit) {
+        throw "service suite exit code differs: Racket=$racketExit Rust=$rustExit"
+    }
+    $racketJson = ($racketOutput -join "`n") |
+        ConvertFrom-Json |
+        ConvertTo-Json -Depth 100 -Compress
+    $rustJson = ($rustOutput -join "`n") |
+        ConvertFrom-Json |
+        ConvertTo-Json -Depth 100 -Compress
+    if ($racketJson -ne $rustJson) {
+        throw "service scenario report differs"
+    }
+    Write-Output "ok - task service report parity: 11 scenarios"
     exit 0
 }
 finally {

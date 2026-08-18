@@ -185,3 +185,18 @@ serve-active <code-store> <port> <data-store.json>
 | 2 | CLI 参数不符合任何命令格式 |
 
 自动化脚本应同时检查 exit code 和 JSON 中的 `ok` 字段。
+
+## Rust 迁移期 CLI
+
+当前 Rust host 已支持只读前端、一致性语料和内存服务场景：
+
+```powershell
+cargo run --quiet -p ail-cli -- inspect examples\tasks\service.ail
+cargo run --quiet -p ail-cli -- conformance conformance\v1\manifest.json
+cargo run --quiet -p ail-cli -- test-service `
+  examples\tasks\service.ail `
+  examples\tasks\scenarios.json
+```
+
+`scripts/check-rust.ps1` 会把上述结果与 Racket canonical JSON 做精确差分。迁移期仍以
+Racket 服务作为默认宿主，Rust CLI 尚未承接 HTTP 监听与活动版本切换。

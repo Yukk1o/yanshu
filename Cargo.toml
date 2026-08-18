@@ -5,6 +5,7 @@ members = [
   "rust/crates/ail-syntax",
   "rust/crates/ail-runtime",
   "rust/crates/ail-conformance",
+  "rust/crates/ail-service",
   "rust/crates/ail-cli",
 ]
 

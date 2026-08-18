@@ -64,5 +64,6 @@
 - [x] Implement Rust diagnostics, Reader, source spans, AST, and program parser.
 - [x] Implement the bounded Rust evaluator and `text@1` Library Backend.
 - [x] Run Racket and Rust against the same canonical fixtures with zero differences.
-- [ ] Migrate schema, service, store, HTTP, version, and provider layers in stages.
+- [x] Migrate Schema, capability traits, transactional memory KV, and service scenarios.
+- [ ] Migrate persisted KV, HTTP, version store, and provider layers in stages.
 - [ ] Pass dependency audit, shadow-traffic, rollback, observability, and release gates.

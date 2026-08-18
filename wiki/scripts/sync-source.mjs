@@ -73,6 +73,7 @@ const publishedFiles = [
   'rust/crates/ail-runtime/src/lib.rs',
   'rust/crates/ail-runtime/src/schema.rs',
   'rust/crates/ail-runtime/src/value.rs',
+  'rust/crates/ail-service/src/lib.rs',
   'rust/crates/ail-syntax/src/ast.rs',
   'rust/crates/ail-syntax/src/lib.rs',
   'rust/crates/ail-syntax/src/parser.rs',

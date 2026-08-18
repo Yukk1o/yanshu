@@ -4,6 +4,7 @@ use std::{env, fs, process::ExitCode};
 
 use ail_conformance::run_manifest;
 use ail_diagnostic::{AilResult, Diagnostic};
+use ail_service::run_service_suite;
 use ail_syntax::load_program_source;
 use serde_json::{Value, json};
 
@@ -42,6 +43,19 @@ fn run(arguments: Vec<String>) -> AilResult<Value> {
             let passed = report.get("passed").and_then(Value::as_bool) == Some(true);
             Ok(json!({ "ok": passed, "report": report }))
         }
+        [command, program_path, suite_path] if command == "test-service" => {
+            let source = fs::read_to_string(program_path).map_err(|error| {
+                Diagnostic::new(
+                    "HOST_FILE_READ",
+                    "host could not read the source file",
+                    json!({ "path": program_path, "kind": error.kind().to_string() }),
+                )
+            })?;
+            let program = load_program_source(&source)?;
+            let report = run_service_suite(&program, suite_path)?;
+            let passed = report.get("passed").and_then(Value::as_bool) == Some(true);
+            Ok(json!({ "ok": passed, "report": report }))
+        }
         _ => Err(Diagnostic::new(
             "CLI_USAGE",
             "arguments do not match a supported Rust host command",
@@ -49,6 +63,7 @@ fn run(arguments: Vec<String>) -> AilResult<Value> {
                 "check <program.ail>",
                 "inspect <program.ail>",
                 "conformance <manifest.json>"
+                ,"test-service <program.ail> <scenarios.json>"
             ] }),
         )),
     }
