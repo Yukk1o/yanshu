@@ -3,13 +3,26 @@
 version = 4
 
 [[package]]
-name = "ail-cli"
-version = "0.6.0"
+name = "ail-bundle"
+version = "0.7.0"
 dependencies = [
+ "ail-diagnostic",
+ "ail-runtime",
+ "ail-syntax",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "ail-cli"
+version = "0.7.0"
+dependencies = [
+ "ail-bundle",
  "ail-conformance",
  "ail-diagnostic",
  "ail-ops",
  "ail-provider",
+ "ail-runtime",
  "ail-service",
  "ail-store",
  "ail-syntax",
@@ -18,7 +31,7 @@ dependencies = [
 
 [[package]]
 name = "ail-conformance"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ail-diagnostic",
  "ail-runtime",
@@ -29,14 +42,14 @@ dependencies = [
 
 [[package]]
 name = "ail-diagnostic"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "ail-http"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ail-diagnostic",
  "ail-rollout",
@@ -57,7 +70,7 @@ dependencies = [
 
 [[package]]
 name = "ail-ops"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ail-diagnostic",
  "ail-service",
@@ -68,7 +81,7 @@ dependencies = [
 
 [[package]]
 name = "ail-provider"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ail-diagnostic",
  "reqwest",
@@ -78,7 +91,7 @@ dependencies = [
 
 [[package]]
 name = "ail-rollout"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ail-diagnostic",
  "ail-service",
@@ -90,7 +103,7 @@ dependencies = [
 
 [[package]]
 name = "ail-runtime"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ail-diagnostic",
  "ail-syntax",
@@ -101,7 +114,7 @@ dependencies = [
 
 [[package]]
 name = "ail-server"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ail-diagnostic",
  "ail-http",
@@ -113,7 +126,7 @@ dependencies = [
 
 [[package]]
 name = "ail-service"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ail-diagnostic",
  "ail-runtime",
@@ -126,7 +139,7 @@ dependencies = [
 
 [[package]]
 name = "ail-store"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ail-diagnostic",
  "ail-syntax",
@@ -136,7 +149,7 @@ dependencies = [
 
 [[package]]
 name = "ail-syntax"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ail-diagnostic",
  "num-bigint",

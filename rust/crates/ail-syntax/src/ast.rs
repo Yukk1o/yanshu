@@ -73,13 +73,27 @@ impl Datum {
 pub struct Program {
     pub name: String,
     pub version: BigInt,
+    pub imports: Vec<String>,
     pub capabilities: Vec<String>,
     pub libraries: Vec<LibraryRequirement>,
+    pub data_types: Vec<DataTypeDefinition>,
     pub schemas: Vec<Schema>,
     pub routes: Vec<Route>,
     pub definitions: Vec<Definition>,
     pub exports: Vec<String>,
     pub source: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DataTypeDefinition {
+    pub name: String,
+    pub variants: Vec<VariantDefinition>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VariantDefinition {
+    pub name: String,
+    pub fields: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -165,6 +179,10 @@ pub enum ExpressionKind {
         clauses: Vec<CondClause>,
         alternative: Box<Expression>,
     },
+    Match {
+        value: Box<Expression>,
+        arms: Vec<MatchArm>,
+    },
     Let {
         bindings: Vec<Binding>,
         body: Box<Expression>,
@@ -187,6 +205,26 @@ pub struct CondClause {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchArm {
+    pub pattern: Pattern,
+    pub expression: Expression,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pattern {
+    pub kind: PatternKind,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PatternKind {
+    Wildcard,
+    Binding(String),
+    Literal(Datum),
+    Variant { name: String, fields: Vec<Pattern> },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Binding {
     pub name: String,
     pub expression: Expression,
@@ -195,7 +233,7 @@ pub struct Binding {
 impl Program {
     #[must_use]
     pub fn summary_json(&self) -> Value {
-        json!({
+        let mut document = json!({
             "name": self.name,
             "version": bigint_json(&self.version),
             "capabilities": self.capabilities,
@@ -204,12 +242,29 @@ impl Program {
             "routes": self.routes.iter().map(Route::to_json).collect::<Vec<_>>(),
             "definitions": self.definitions.iter().map(|definition| definition.name.clone()).collect::<Vec<_>>(),
             "exports": self.exports,
-        })
+        });
+        if let Value::Object(fields) = &mut document {
+            if !self.imports.is_empty() {
+                fields.insert("imports".to_owned(), json!(self.imports));
+            }
+            if !self.data_types.is_empty() {
+                fields.insert(
+                    "dataTypes".to_owned(),
+                    Value::Array(
+                        self.data_types
+                            .iter()
+                            .map(DataTypeDefinition::to_json)
+                            .collect(),
+                    ),
+                );
+            }
+        }
+        document
     }
 
     #[must_use]
     pub fn inspect_json(&self) -> Value {
-        json!({
+        let mut document = json!({
             "type": "program",
             "name": self.name,
             "version": bigint_json(&self.version),
@@ -219,7 +274,39 @@ impl Program {
             "routes": self.routes.iter().map(Route::to_json).collect::<Vec<_>>(),
             "definitions": self.definitions.iter().map(Definition::to_json).collect::<Vec<_>>(),
             "exports": self.exports,
+        });
+        if let Value::Object(fields) = &mut document {
+            if !self.imports.is_empty() {
+                fields.insert("imports".to_owned(), json!(self.imports));
+            }
+            if !self.data_types.is_empty() {
+                fields.insert(
+                    "dataTypes".to_owned(),
+                    Value::Array(
+                        self.data_types
+                            .iter()
+                            .map(DataTypeDefinition::to_json)
+                            .collect(),
+                    ),
+                );
+            }
+        }
+        document
+    }
+}
+
+impl DataTypeDefinition {
+    fn to_json(&self) -> Value {
+        json!({
+            "name": self.name,
+            "variants": self.variants.iter().map(VariantDefinition::to_json).collect::<Vec<_>>(),
         })
+    }
+}
+
+impl VariantDefinition {
+    fn to_json(&self) -> Value {
+        json!({ "name": self.name, "fields": self.fields })
     }
 }
 
@@ -342,6 +429,11 @@ impl Expression {
                 "clauses": clauses.iter().map(CondClause::to_json).collect::<Vec<_>>(),
                 "alternative": alternative.to_json(),
             }),
+            ExpressionKind::Match { value, arms } => json!({
+                "type": "match",
+                "value": value.to_json(),
+                "arms": arms.iter().map(MatchArm::to_json).collect::<Vec<_>>(),
+            }),
             ExpressionKind::Let { bindings, body } => json!({
                 "type": "let",
                 "bindings": bindings.iter().map(Binding::to_json).collect::<Vec<_>>(),
@@ -377,6 +469,33 @@ impl CondClause {
             "condition": self.condition.to_json(),
             "expression": self.expression.to_json(),
         })
+    }
+}
+
+impl MatchArm {
+    fn to_json(&self) -> Value {
+        json!({
+            "pattern": self.pattern.to_json(),
+            "expression": self.expression.to_json(),
+        })
+    }
+}
+
+impl Pattern {
+    #[must_use]
+    pub fn to_json(&self) -> Value {
+        match &self.kind {
+            PatternKind::Wildcard => json!({ "type": "wildcard" }),
+            PatternKind::Binding(name) => json!({ "type": "binding", "name": name }),
+            PatternKind::Literal(value) => {
+                json!({ "type": "literal", "value": value.portable_json() })
+            }
+            PatternKind::Variant { name, fields } => json!({
+                "type": "variant",
+                "name": name,
+                "fields": fields.iter().map(Self::to_json).collect::<Vec<_>>(),
+            }),
+        }
     }
 }
 

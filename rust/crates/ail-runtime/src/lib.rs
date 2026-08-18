@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod budget;
+mod matcher;
 mod schema;
 mod value;
 
@@ -15,6 +16,7 @@ use serde_json::{Value as JsonValue, json};
 pub use budget::Budget;
 pub use value::{MapKey, Primitive, PrimitiveOperation, Value, bigint_json, json_to_value};
 
+use matcher::bindings_for_pattern;
 use schema::validate_schema;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,6 +67,13 @@ fn execute_export_internal(
     options: ExecutionOptions,
     host: Option<&mut dyn CapabilityHost>,
 ) -> AilResult<Value> {
+    if !program.imports.is_empty() {
+        return Err(Diagnostic::new(
+            "RUNTIME_UNLINKED_IMPORTS",
+            "program imports must be linked from a sealed bundle before execution",
+            json!({ "imports": program.imports }),
+        ));
+    }
     if !program.exports.iter().any(|name| name == export_name) {
         return Err(Diagnostic::new(
             "RUNTIME_NOT_EXPORTED",
@@ -87,6 +96,19 @@ fn execute_export_internal(
                 specification: schema.kind.clone(),
             },
         );
+    }
+    for data_type in &program.data_types {
+        for variant in &data_type.variants {
+            runtime.define(
+                module_environment,
+                variant.name.clone(),
+                Value::Constructor {
+                    type_name: data_type.name.clone(),
+                    variant: variant.name.clone(),
+                    arity: variant.fields.len(),
+                },
+            );
+        }
     }
     for definition in &program.definitions {
         let value = runtime.evaluate(&definition.expression, module_environment, 0)?;
@@ -216,6 +238,24 @@ impl<'host> Runtime<'host> {
                 }
                 self.evaluate(alternative, environment, depth)
             }
+            ExpressionKind::Match { value, arms } => {
+                let value = self.evaluate(value, environment, depth)?;
+                for arm in arms {
+                    if let Some(bindings) =
+                        bindings_for_pattern(&arm.pattern, &value, &mut self.budget)?
+                    {
+                        let local = self.new_environment(Some(environment));
+                        for (name, value) in bindings {
+                            self.define(local, name, value);
+                        }
+                        return self.evaluate(&arm.expression, local, depth);
+                    }
+                }
+                Err(Diagnostic::simple(
+                    "RUNTIME_MATCH_NOT_EXHAUSTIVE",
+                    "match did not select an arm",
+                ))
+            }
             ExpressionKind::Let { bindings, body } => {
                 let local = self.new_environment(Some(environment));
                 for binding in bindings {
@@ -279,6 +319,20 @@ impl<'host> Runtime<'host> {
             Value::Primitive(primitive) => {
                 check_arity(primitive, arguments.len())?;
                 self.apply_primitive(primitive, arguments, depth)
+            }
+            Value::Constructor {
+                type_name,
+                variant,
+                arity,
+            } => {
+                if arity != arguments.len() {
+                    return Err(arity_error(&variant, arity, Some(arity), arguments.len()));
+                }
+                Ok(Value::Variant {
+                    type_name,
+                    variant,
+                    fields: arguments,
+                })
             }
             value => Err(Diagnostic::new(
                 "RUNTIME_NOT_CALLABLE",
@@ -1276,6 +1330,47 @@ mod tests {
             )),
             Value::String("auto:42".to_owned())
         );
+    }
+
+    #[test]
+    fn constructs_and_matches_v3_user_data() {
+        let program = require(load_program_source(
+            r#"(program
+                (name decisions)
+                (version 3)
+                (data decision (approved id) (rejected reason))
+                (def approve (fn (id) (approved id)))
+                (def describe (fn (decision)
+                  (match decision
+                    ((approved id) (string-append "approved:" id))
+                    ((rejected reason) (string-append "rejected:" reason))
+                    (_ "unknown"))))
+                (def run (fn (id) (describe (approve id))))
+                (export run))"#,
+        ));
+        assert_eq!(
+            require(execute_export(
+                &program,
+                "run",
+                vec![Value::String("expense-42".to_owned())],
+                ExecutionOptions::default(),
+            )),
+            Value::String("approved:expense-42".to_owned())
+        );
+    }
+
+    #[test]
+    fn refuses_to_execute_an_unlinked_module() {
+        let program = require(load_program_source(
+            "(program (name app) (version 3) (imports helper) (def run #t) (export run))",
+        ));
+        let diagnostic = require_error(execute_export(
+            &program,
+            "run",
+            vec![],
+            ExecutionOptions::default(),
+        ));
+        assert_eq!(diagnostic.code, "RUNTIME_UNLINKED_IMPORTS");
     }
 
     #[test]

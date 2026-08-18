@@ -5,8 +5,9 @@ mod parser;
 mod reader;
 
 pub use ast::{
-    Binding, CondClause, Datum, DatumKind, Definition, Expression, ExpressionKind,
-    LibraryRequirement, Program, Route, Schema, SchemaField, SchemaKind,
+    Binding, CondClause, DataTypeDefinition, Datum, DatumKind, Definition, Expression,
+    ExpressionKind, LibraryRequirement, MatchArm, Pattern, PatternKind, Program, Route, Schema,
+    SchemaField, SchemaKind, VariantDefinition,
 };
 pub use parser::parse_program;
 pub use reader::{ReaderLimits, read_source};

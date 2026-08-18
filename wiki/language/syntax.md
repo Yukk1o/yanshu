@@ -37,7 +37,7 @@
 
 ### `(version 1)`
 
-语言内声明的语义版本。当前只接受 `1` 和 `2`：未知版本会以 `PROGRAM_UNSUPPORTED_VERSION` 拒绝；v1 源码使用 v2 form 会得到带 `feature / actualVersion / minimumVersion` 的 `PROGRAM_FEATURE_REQUIRES_VERSION`。
+语言内声明的语义版本。当前接受 `1`、`2` 和 `3`：未知版本会以 `PROGRAM_UNSUPPORTED_VERSION` 拒绝；旧版源码使用新版 form 会得到带 `feature / actualVersion / minimumVersion` 的 `PROGRAM_FEATURE_REQUIRES_VERSION`。
 
 它与部署制品的 SHA-256 不同：`version` 决定“按哪套语言规则解释”，源码 hash 决定“究竟是哪一份不可变代码”。相同语言版本的两个源码内容仍会得到不同制品 ID。
 
@@ -72,7 +72,7 @@ fn calculate_discount(price: BigInt, user_type: &str) -> BigInt {
 
 ### `(export NAME)`
 
-只有显式导出的定义能被 CLI 或 route 调用。它像 `pub fn` 白名单，而不是按命名约定自动公开。
+只有显式导出的定义或 v3 数据构造器能被其它模块看到。CLI 入口和 route handler 仍应导出可调用定义。它像 `pub` 白名单，而不是按命名约定自动公开。
 
 真实程序见 [discount/v2.ail](/source/examples/discount/v2.ail.txt)。
 
@@ -130,6 +130,46 @@ vip
 `and` / `or` 从左到右短路，并返回实际选中的操作数；空的 `(and)` 是 `#t`，空的 `(or)` 是 `#f`。它们是特殊 form，不是普通函数，因此被短路的表达式绝不会求值。
 
 `cond` 必须以显式 `(else expression)` 结尾，且 `else` 只能出现在最后。这个限制让业务分支是穷尽的，也让 LLM 与审查者不必猜“没有命中时返回什么”。三者只在 `(version 2)` 可用。
+
+## v3 模块：`imports`
+
+```lisp
+(program
+  (name expense-app)
+  (version 3)
+  (imports policy money)
+  ...)
+```
+
+`imports` 只声明直接模块依赖，不读取路径，也不运行安装脚本。单独执行带 imports 的文件会得到 `RUNTIME_UNLINKED_IMPORTS`；宿主必须先从密封 Bundle 验证所有模块 hash、依赖闭包和命名空间。
+
+模块只能看到依赖显式 `export` 的绑定。私有名字在链接时改写为 `module/name`，两个模块内部都叫 `validate` 也不会碰撞。完整规则见[模块、数据类型与 Bundle](/language/modules-bundles)。
+
+## v3 用户数据类型：`data`
+
+```lisp
+(data decision
+  (approved amount)
+  (review amount reason)
+  (rejected reason))
+
+(approved 120)
+(review 1200 "manual approval required")
+```
+
+每个 variant 同时声明一个定长构造器。构造器是可调用值，字段保持声明顺序；名字不能与另一个构造器、Schema 或 definition 冲突。类型和 variant 集合在当前语言版本内封闭，不存在运行时追加构造器。
+
+## v3 模式匹配：`match`
+
+```lisp
+(match (decide amount)
+  ((approved value) (map "status" "approved" "amount" value))
+  ((review value reason) (map "status" "review" "reason" reason))
+  ((rejected reason) (map "status" "rejected" "reason" reason))
+  (_ (map "status" "invalid")))
+```
+
+待匹配值只求值一次，分支从上到下尝试。pattern 支持整数、字符串、布尔、变量绑定、嵌套 variant 和 `_`。同一 pattern 不能重复绑定名字，所有 v3 match 必须以 `_` 分支结尾；在 v0.8 能静态证明穷尽之前，不允许把漏匹配推迟为偶发运行期错误。每个 pattern 节点都会消耗 fuel。
 
 ## 局部绑定：`let`
 
@@ -242,7 +282,7 @@ Schema 名称不是普通函数；route handler 必须同时有 `def` 和 `expor
 
 ## 当前不支持
 
-当前没有宏、通用异常捕获、可变变量、并发、用户模块导入、递归 Schema、浮点数、日期类型、用户自定义类型或任意宿主调用。v2 预期业务失败通过显式 Result 表达，不能捕获 fuel、能力或宿主诊断。以 [v0.6 语言规格](/source/docs/spec-v0.6.md.txt) 和 [Rust Parser](/source/rust/crates/ail-syntax/src/parser.rs.txt) 为准，不要因为语法外观相似就假设其它 form 可用。
+当前没有宏、通用异常捕获、可变变量、并发、递归 Schema、浮点数、日期类型或任意宿主调用。预期业务失败通过显式 Result 表达，不能捕获 fuel、能力或宿主诊断。以 [v0.7 语言规格](/source/docs/spec-v0.7.md.txt) 和 [Rust Parser](/source/rust/crates/ail-syntax/src/parser.rs.txt) 为准，不要因为语法外观相似就假设其它 form 可用。
 
 ::: warning Int 必须保持任意精度
 当前 `Int` 语义允许超过 64 位，Rust 实现使用 `num_bigint::BigInt`。除非未来作为版本化语言变更正式引入范围限制，否则不能静默收窄到 `i64`。

@@ -6,10 +6,12 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use ail_bundle::{load_bundle, seal_bundle_directory};
 use ail_conformance::run_manifest;
 use ail_diagnostic::{AilResult, Diagnostic};
 use ail_ops::{create_backup, restore_backup, verify_backup};
 use ail_provider::{EvolutionProvider, EvolutionRequest, configured_live_provider};
+use ail_runtime::{ExecutionOptions, execute_export, json_to_value};
 use ail_service::run_service_suite;
 use ail_store::{CandidateRegistration, VersionStore, run_version_scenario, source_hash};
 use ail_syntax::load_program_source;
@@ -34,6 +36,59 @@ fn main() -> ExitCode {
 
 fn run(arguments: Vec<String>) -> AilResult<Value> {
     match arguments.as_slice() {
+        [command, root, entry, module_paths @ ..]
+            if command == "seal-bundle" && !module_paths.is_empty() =>
+        {
+            let manifest = seal_bundle_directory(root, entry, module_paths)?;
+            Ok(json!({
+                "ok": true,
+                "bundleHash": manifest.content_hash(),
+                "manifest": manifest.to_json(),
+            }))
+        }
+        [command, root] if command == "inspect-bundle" => {
+            let bundle = load_bundle(root)?;
+            Ok(json!({
+                "ok": true,
+                "bundleHash": bundle.bundle_hash,
+                "manifest": bundle.manifest.to_json(),
+                "program": bundle.program.inspect_json(),
+            }))
+        }
+        [command, root, export, arguments_path] if command == "run-bundle" => {
+            let source = fs::read_to_string(arguments_path).map_err(|error| {
+                Diagnostic::new(
+                    "HOST_FILE_READ",
+                    "host could not read the bundle arguments file",
+                    json!({ "path": arguments_path, "kind": error.kind().to_string() }),
+                )
+            })?;
+            let document: Value = serde_json::from_str(&source).map_err(|error| {
+                Diagnostic::new(
+                    "CLI_ARGUMENTS_JSON",
+                    "bundle arguments file is not valid JSON",
+                    json!({ "line": error.line(), "column": error.column() }),
+                )
+            })?;
+            let arguments = document.as_array().ok_or_else(|| {
+                Diagnostic::simple(
+                    "CLI_ARGUMENTS_SHAPE",
+                    "bundle arguments file must contain one JSON array",
+                )
+            })?;
+            let values = arguments
+                .iter()
+                .map(json_to_value)
+                .collect::<AilResult<Vec<_>>>()?;
+            let bundle = load_bundle(root)?;
+            let result =
+                execute_export(&bundle.program, export, values, ExecutionOptions::default())?;
+            Ok(json!({
+                "ok": true,
+                "bundleHash": bundle.bundle_hash,
+                "result": result.to_json()?,
+            }))
+        }
         [command, path] if matches!(command.as_str(), "check" | "inspect") => {
             let source = fs::read_to_string(path).map_err(|error| {
                 Diagnostic::new(
@@ -96,6 +151,9 @@ fn run(arguments: Vec<String>) -> AilResult<Value> {
             "CLI_USAGE",
             "arguments do not match a supported Rust host command",
             json!({ "usage": [
+                "seal-bundle <directory> <entry> <module.ail>...",
+                "inspect-bundle <directory>",
+                "run-bundle <directory> <export> <arguments.json>",
                 "check <program.ail>",
                 "inspect <program.ail>",
                 "conformance <manifest.json>",

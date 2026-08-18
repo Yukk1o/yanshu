@@ -23,6 +23,29 @@ check <program.ail>
 inspect <program.ail>
 ```
 
+## 密封、检查与运行 Bundle
+
+```powershell
+cargo run --quiet --locked -p ail-cli -- `
+  seal-bundle examples\bundles\expense-approval expense-app app.ail policy.ail
+
+cargo run --quiet --locked -p ail-cli -- `
+  inspect-bundle examples\bundles\expense-approval
+
+cargo run --quiet --locked -p ail-cli -- `
+  run-bundle examples\bundles\expense-approval evaluate examples\bundles\expense-approval\arguments.json
+```
+
+格式：
+
+```text
+seal-bundle <directory> <entry> <module.ail>...
+inspect-bundle <directory>
+run-bundle <directory> <export> <arguments.json>
+```
+
+`seal-bundle` 解析全部模块、验证依赖图，并写入 name-sorted `bundle.json`；返回的 `bundleHash` 是规范 manifest 的 SHA-256。`inspect-bundle` 和 `run-bundle` 都会重新读取并校验每个 module hash，不信任已有 manifest。参数文件必须是 JSON 数组。
+
 ## `conformance`
 
 ```powershell

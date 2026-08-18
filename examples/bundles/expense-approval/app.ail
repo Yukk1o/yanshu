@@ -1,0 +1,19 @@
+; The entry module sees only policy exports, then exposes a JSON-safe result.
+(program
+  (name expense-app)
+  (version 3)
+  (imports policy)
+
+  (def evaluate
+    (fn (amount)
+      (match (decide amount)
+        ((approved value)
+          (map "status" "approved" "amount" value))
+        ((review value reason)
+          (map "status" "review" "amount" value "reason" reason))
+        ((rejected reason)
+          (map "status" "rejected" "reason" reason))
+        (_
+          (map "status" "invalid")))))
+
+  (export evaluate))

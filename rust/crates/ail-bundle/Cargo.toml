@@ -1,5 +1,5 @@
 [package]
-name = "ail-conformance"
+name = "ail-bundle"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,7 +11,9 @@ workspace = true
 
 [dependencies]
 ail-diagnostic = { path = "../ail-diagnostic", version = "=0.7.0" }
-ail-runtime = { path = "../ail-runtime", version = "=0.7.0" }
 ail-syntax = { path = "../ail-syntax", version = "=0.7.0" }
-num-bigint.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+ail-runtime = { path = "../ail-runtime", version = "=0.7.0" }

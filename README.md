@@ -75,6 +75,8 @@ $env:AI_EVOLVE_SHADOW_MAX_CONCURRENCY="4"
 ```powershell
 .\scripts\check-rust.ps1
 cargo run --locked -p ail-cli -- test-service examples\expenses\service.ail examples\expenses\scenarios.json
+cargo run --locked -p ail-cli -- inspect-bundle examples\bundles\expense-approval
+cargo run --locked -p ail-cli -- run-bundle examples\bundles\expense-approval evaluate examples\bundles\expense-approval\arguments.json
 ```
 
 Rust conformance 固定 v1 兼容语义。需要额外运行冻结旧前端的差分证据时，显式启用；它会按需使用仓库私有工具链，不修改系统 PATH：
@@ -188,6 +190,12 @@ v1 支持 `quote`、`if`、顺序 `let`、`fn`、`do` 和函数调用，以及�
 `enum/union` Schema、带 fuel 成本的 `validate-report`，以及只返回业务 Result 的
 `checked-quotient/checked-remainder`。完整示例见
 [费用审批服务](examples/expenses/service.ail)及其[五个场景](examples/expenses/scenarios.json)。
+
+v3 增加显式 `imports`、用户定义的封闭数据类型、带绑定的 `match`，以及由模块
+SHA-256 汇成根哈希的密封 Bundle。带 imports 的单文件不能直接执行；宿主必须先验证
+完整依赖图并链接命名空间。可运行示例见
+[多模块费用审批 Bundle](examples/bundles/expense-approval)，完整契约见
+[v0.7 规格](docs/spec-v0.7.md)。
 
 Web 程序可声明静态 `route`，处理器接收请求 Map 并返回结构化响应 Map。所有版本
 都只有 `#f` 为假。

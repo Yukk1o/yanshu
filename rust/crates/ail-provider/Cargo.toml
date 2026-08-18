@@ -10,7 +10,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-ail-diagnostic = { path = "../ail-diagnostic", version = "=0.6.0" }
+ail-diagnostic = { path = "../ail-diagnostic", version = "=0.7.0" }
 reqwest.workspace = true
 serde_json.workspace = true
 zeroize.workspace = true

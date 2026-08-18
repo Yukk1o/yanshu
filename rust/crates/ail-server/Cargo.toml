@@ -10,9 +10,9 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-ail-diagnostic = { path = "../ail-diagnostic", version = "=0.6.0" }
-ail-http = { path = "../ail-http", version = "=0.6.0" }
-ail-ops = { path = "../ail-ops", version = "=0.6.0" }
-ail-rollout = { path = "../ail-rollout", version = "=0.6.0" }
+ail-diagnostic = { path = "../ail-diagnostic", version = "=0.7.0" }
+ail-http = { path = "../ail-http", version = "=0.7.0" }
+ail-ops = { path = "../ail-ops", version = "=0.7.0" }
+ail-rollout = { path = "../ail-rollout", version = "=0.7.0" }
 serde_json.workspace = true
 tokio.workspace = true

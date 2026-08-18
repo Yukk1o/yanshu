@@ -6,16 +6,17 @@
 
 1. [discount/v2.ail](/source/examples/discount/v2.ail.txt)：最小纯函数程序；
 2. [费用审批 service.ail](/source/examples/expenses/service.ail.txt)：v2 条件、集合、enum/union、成本与业务 Result；
-3. [任务 service.ail](/source/examples/tasks/service.ail.txt)：Schema、route、capability 与事务 handler；
-4. [ail-syntax AST](/source/rust/crates/ail-syntax/src/ast.rs.txt)：Program / Expression / Schema 的数据结构；
-5. [ail-syntax Reader](/source/rust/crates/ail-syntax/src/reader.rs.txt) 与 [Parser](/source/rust/crates/ail-syntax/src/parser.rs.txt)：源码怎样成为 AST；
-6. [ail-runtime](/source/rust/crates/ail-runtime/src/lib.rs.txt)：解释器、primitive 与 Library Backend；
-7. [ail-service](/source/rust/crates/ail-service/src/lib.rs.txt)：route、capability 和事务；
-8. [ail-store](/source/rust/crates/ail-store/src/lib.rs.txt)：候选、active 与回滚；
-9. [ail-provider](/source/rust/crates/ail-provider/src/lib.rs.txt)：LLM 只能怎样提出候选；
-10. [ail-http](/source/rust/crates/ail-http/src/lib.rs.txt)：请求身份、版本固定与观测；
-11. [ail-rollout](/source/rust/crates/ail-rollout/src/lib.rs.txt)：隔离影子采样、比较与观测；
-12. [ail-ops](/source/rust/crates/ail-ops/src/lib.rs.txt)：服务锁、备份校验与恢复。
+3. [多模块费用审批](/source/examples/bundles/expense-approval/app.ail.txt)：v3 imports、data、match 与密封 Bundle；
+4. [任务 service.ail](/source/examples/tasks/service.ail.txt)：Schema、route、capability 与事务 handler；
+5. [ail-syntax AST](/source/rust/crates/ail-syntax/src/ast.rs.txt)：Program / Expression / Schema 的数据结构；
+6. [ail-syntax Reader](/source/rust/crates/ail-syntax/src/reader.rs.txt) 与 [Parser](/source/rust/crates/ail-syntax/src/parser.rs.txt)：源码怎样成为 AST；
+7. [ail-runtime](/source/rust/crates/ail-runtime/src/lib.rs.txt)：解释器、primitive 与 Library Backend；
+8. [ail-service](/source/rust/crates/ail-service/src/lib.rs.txt)：route、capability 和事务；
+9. [ail-store](/source/rust/crates/ail-store/src/lib.rs.txt)：候选、active 与回滚；
+10. [ail-provider](/source/rust/crates/ail-provider/src/lib.rs.txt)：LLM 只能怎样提出候选；
+11. [ail-http](/source/rust/crates/ail-http/src/lib.rs.txt)：请求身份、版本固定与观测；
+12. [ail-rollout](/source/rust/crates/ail-rollout/src/lib.rs.txt)：隔离影子采样、比较与观测；
+13. [ail-ops](/source/rust/crates/ail-ops/src/lib.rs.txt)：服务锁、备份校验与恢复。
 
 ## 语言前端
 
@@ -26,6 +27,15 @@
 | [ast.rs](/source/rust/crates/ail-syntax/src/ast.rs.txt) | `Program`、`ExpressionKind`、`SchemaKind`、source span、inspect JSON |
 | [parser.rs](/source/rust/crates/ail-syntax/src/parser.rs.txt) | 顶层 form、命名、capability、library、Schema、route 和 expression 校验 |
 | [diagnostic/lib.rs](/source/rust/crates/ail-diagnostic/src/lib.rs.txt) | 公共 code/message/details 与私有 span |
+
+## 模块与 Bundle
+
+| 文件 | 看什么 |
+| --- | --- |
+| [bundle/manifest.rs](/source/rust/crates/ail-bundle/src/manifest.rs.txt) | manifest 精确解析、路径 containment、module/root SHA-256 |
+| [bundle/graph.rs](/source/rust/crates/ail-bundle/src/graph.rs.txt) | missing import、cycle 与 unreachable 检查 |
+| [bundle/linker.rs](/source/rust/crates/ail-bundle/src/linker.rs.txt) | private namespace、import export、词法 binding 与入口 alias |
+| [runtime/matcher.rs](/source/rust/crates/ail-runtime/src/matcher.rs.txt) | fuel 计量的递归 pattern binding |
 
 Go/Rust 读者最值得先看的类型是 `Program`、`ExpressionKind`、`SchemaKind` 和 `Diagnostic`。它们定义语言可表示什么，比某个 CLI 命令更接近语义核心。
 

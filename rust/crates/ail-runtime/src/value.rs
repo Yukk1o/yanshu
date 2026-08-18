@@ -24,6 +24,16 @@ pub enum Value {
     Map(BTreeMap<MapKey, Self>),
     Ok(Box<Self>),
     Err(Box<Self>),
+    Variant {
+        type_name: String,
+        variant: String,
+        fields: Vec<Self>,
+    },
+    Constructor {
+        type_name: String,
+        variant: String,
+        arity: usize,
+    },
     Schema {
         name: String,
         specification: SchemaKind,
@@ -129,6 +139,8 @@ impl Value {
             Self::Map(_) => "Map",
             Self::Ok(_) => "Ok",
             Self::Err(_) => "Err",
+            Self::Variant { .. } => "Variant",
+            Self::Constructor { .. } => "Constructor",
             Self::Schema { .. } => "Schema",
             Self::Closure(_) => "Function",
             Self::Primitive(_) => "Primitive",
@@ -160,6 +172,19 @@ impl Value {
             Self::Map(_) => "#hash(...)".to_owned(),
             Self::Ok(value) => format!("#(ok {})", value.display()),
             Self::Err(value) => format!("#(err {})", value.display()),
+            Self::Variant {
+                type_name,
+                variant,
+                fields,
+            } => format!(
+                "({}/{variant}{})",
+                type_name,
+                fields
+                    .iter()
+                    .map(|field| format!(" {}", field.display()))
+                    .collect::<String>()
+            ),
+            Self::Constructor { variant, .. } => format!("#<constructor:{variant}>"),
             Self::Schema { name, .. } => format!("#<schema:{name}>"),
             Self::Closure(_) => "#<function>".to_owned(),
             Self::Primitive(primitive) => format!("#<primitive:{}>", primitive.name),
@@ -187,6 +212,18 @@ impl Value {
             }
             Self::Ok(value) => Ok(json!({ "ok": value.to_json()? })),
             Self::Err(value) => Ok(json!({ "error": value.to_json()? })),
+            Self::Variant {
+                type_name,
+                variant,
+                fields,
+            } => Ok(json!({
+                "$type": type_name,
+                "$variant": variant,
+                "fields": fields
+                    .iter()
+                    .map(Self::to_json)
+                    .collect::<AilResult<Vec<_>>>()?,
+            })),
             _ => Err(Diagnostic::new(
                 "RUNTIME_UNSERIALIZABLE_VALUE",
                 "runtime value cannot be encoded as JSON",

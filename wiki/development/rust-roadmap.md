@@ -3,14 +3,15 @@
 这一页只讨论 `.ail` 语言的当前 Rust 实现和后续生态，不定义语言本身。语法、Value、Schema、route、diagnostic 与版本格式应先由语言规格固定，宿主只能实现这些契约。
 
 ::: warning 当前定位
-Rust v0.6 已形成通用语言的安全内核：能独立运行 v1/v2 语言、业务场景、版本库、provider 和本地 JSON HTTP server，但尚未生产就绪。workspace 的 crate 仍是 `publish = false`，没有稳定 FFI，也没有 crates.io 发布物。
+Rust v0.7 已形成通用语言的安全内核：能独立运行 v1/v2/v3 语言、密封多模块 Bundle、业务场景、版本库、provider 和本地 JSON HTTP server，但尚未生产就绪。workspace 的 crate 仍是 `publish = false`，没有稳定 FFI，也没有 crates.io 发布物。
 :::
 
 ## 当前实现快照
 
 | 层 | 已实现 | 尚未完成 |
 | --- | --- | --- |
-| 语言前端 | 有边界 UTF-8 Reader、v1/v2 AST / Parser、版本门控、source span、JSON inspect | 模块、用户数据类型、模式匹配、类型/效果、稳定 AST ID、格式化器 |
+| 语言前端 | 有边界 UTF-8 Reader、v1/v2/v3 AST / Parser、imports、封闭数据、模式匹配、版本门控、source span、JSON inspect | 类型/效果、稳定 AST ID、格式化器 |
+| 模块制品 | 精确 manifest、module/root SHA-256、依赖图、命名空间链接、CLI 密封/检查/运行 | 签名、远端 registry、lockfile、跨包解析 |
 | 运行时 | BigInt、闭包、递归、短路条件、有界集合、Result、enum/union Schema、校验成本、`text@1` | 独立内存配额、字节码/WASM、可安全取消的进程级 deadline |
 | 业务服务 | route dispatch、response 校验、事务内存/文件 KV、固定时钟与日志、11 个场景 | 正式数据库 adapter、migration、连接池 |
 | 版本库 | SHA-256、不可变校验、metadata、active、events、原子写、跨进程锁、回滚 | 签名、远端 artifact store、生产审批流 |
@@ -69,7 +70,7 @@ Rust 实现不能为了方便静默改变：
 
 ## crates.io 发布路线
 
-当前 workspace 使用统一版本 `0.6.0`，但 `publish = false`。发布前至少需要：
+当前 workspace 使用统一版本 `0.7.0`，但 `publish = false`。发布前至少需要：
 
 1. 明确哪些 crate 是公共 API，哪些只服务于 binary；
 2. 把 `Program`、`Value`、`Diagnostic`、Library Contract 的兼容性写入 semver 策略；

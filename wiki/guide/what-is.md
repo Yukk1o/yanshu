@@ -45,6 +45,7 @@ Program {
 | Schema、route、capability 是语言结构 | API、数据与权限变化可以结构化审查 |
 | 稳定诊断 code + JSON 输出 | 工具不必解析人类终端文案 |
 | fuel、深度和输入上限 | 候选不能无限消耗解释器资源 |
+| 模块 hash + 密封 Bundle | 多文件仍然形成一个可验证、可回滚的依赖闭包 |
 | 内容哈希版本 + 显式晋升 | “生成成功”不会自动变成“正在运行” |
 
 ## 语言由哪些部分组成
@@ -84,11 +85,11 @@ Program {
 - 需要模型提出候选、由完整场景验证后再晋升的程序；
 - 研究 AST patch、结构化 diff 和只读审查视图。
 
-完整案例包括覆盖 11 个有状态场景的[任务 CRUD 服务](/source/examples/tasks/service.ail.txt)，以及验证 v2 条件、集合、enum/union、校验成本和业务 Result 的[费用审批服务](/source/examples/expenses/service.ail.txt)。这些是通用语言内核的验收程序，不是最终应用边界。
+完整案例包括覆盖 11 个有状态场景的[任务 CRUD 服务](/source/examples/tasks/service.ail.txt)，验证 v2 条件、集合、enum/union、校验成本和业务 Result 的[费用审批服务](/source/examples/expenses/service.ail.txt)，以及验证 v3 模块、封闭数据、模式匹配和内容密封的[多模块费用审批 Bundle](/language/modules-bundles)。这些是通用语言内核的验收程序，不是最终应用边界。
 
 ## 通用语言目标与当前边界
 
-AI-Evolve 当前仍处于通用语言的安全内核阶段，还不是通用系统语言或公网生产框架。它尚无用户模块、内容寻址包管理、用户定义数据类型、类型与效果系统、编译目标、并发、浮点数及通用文件/网络 API；宿主侧也仍缺少独立进程沙箱、正式数据库/PITR、异地备份、指标告警和 canary 自动化。
+AI-Evolve v0.7 已有用户模块、封闭数据类型、模式匹配和密封 Bundle，但仍处于通用语言的安全内核阶段，还不是通用系统语言或公网生产框架。它尚无类型与效果系统、跨 Bundle 包管理、编译目标、并发、浮点数及通用文件/网络 API；宿主侧也仍缺少独立进程沙箱、正式数据库/PITR、异地备份、指标告警和 canary 自动化。
 
 这些既是阶段性功能缺口，也是不可绕过的设计约束。新能力必须通过版本化语义、密封 Bundle 和明确 capability/effect 引入，不能让模型靠调用未知宿主函数越过边界。目标是安全的通用应用语言，而不是拥有环境权限和任意 `unsafe` 的系统语言。
 

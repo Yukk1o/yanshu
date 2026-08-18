@@ -10,9 +10,9 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-ail-diagnostic = { path = "../ail-diagnostic", version = "=0.6.0" }
-ail-service = { path = "../ail-service", version = "=0.6.0" }
-ail-store = { path = "../ail-store", version = "=0.6.0" }
-ail-syntax = { path = "../ail-syntax", version = "=0.6.0" }
+ail-diagnostic = { path = "../ail-diagnostic", version = "=0.7.0" }
+ail-service = { path = "../ail-service", version = "=0.7.0" }
+ail-store = { path = "../ail-store", version = "=0.7.0" }
+ail-syntax = { path = "../ail-syntax", version = "=0.7.0" }
 serde_json.workspace = true
 sha2.workspace = true

@@ -8,13 +8,16 @@ use num_traits::{ToPrimitive, Zero};
 use serde_json::json;
 
 use crate::{
-    Binding, CondClause, Datum, DatumKind, Definition, Expression, ExpressionKind,
-    LibraryRequirement, Program, Route, Schema, SchemaField, SchemaKind,
+    Binding, CondClause, DataTypeDefinition, Datum, DatumKind, Definition, Expression,
+    ExpressionKind, LibraryRequirement, MatchArm, Pattern, PatternKind, Program, Route, Schema,
+    SchemaField, SchemaKind, VariantDefinition,
 };
 
 const SUPPORTED_CAPABILITIES: &[&str] = &["log", "kv", "clock"];
 const SUPPORTED_METHODS: &[&str] = &["GET", "POST", "PUT", "PATCH", "DELETE"];
-const EXPRESSION_KEYWORDS: &[&str] = &["quote", "if", "and", "or", "cond", "let", "fn", "do"];
+const EXPRESSION_KEYWORDS: &[&str] = &[
+    "quote", "if", "and", "or", "cond", "match", "let", "fn", "do",
+];
 const RESERVED_SCHEMA_NAMES: &[&str] = &[
     "+",
     "-",
@@ -72,9 +75,13 @@ const MAXIMUM_SCHEMA_DEPTH: usize = 16;
 const MAXIMUM_OBJECT_FIELDS: usize = 64;
 const MAXIMUM_SCHEMA_COLLECTION_LENGTH: u64 = 10_000;
 const MAXIMUM_LIBRARY_COUNT: usize = 32;
-const MAXIMUM_LANGUAGE_VERSION: u8 = 2;
+const MAXIMUM_LANGUAGE_VERSION: u8 = 3;
 const MAXIMUM_ENUM_VALUES: usize = 64;
 const MAXIMUM_UNION_VARIANTS: usize = 8;
+const MAXIMUM_IMPORTS: usize = 64;
+const MAXIMUM_DATA_TYPES: usize = 64;
+const MAXIMUM_DATA_VARIANTS: usize = 64;
+const MAXIMUM_VARIANT_FIELDS: usize = 64;
 
 pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
     let top = datum.list().ok_or_else(|| {
@@ -92,11 +99,15 @@ pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
     let mut version = None;
     let mut capabilities = None;
     let mut libraries = None;
+    let mut imports = None;
     let mut exports = None;
     let mut schemas = Vec::new();
+    let mut data_types = Vec::new();
     let mut routes: Vec<Route> = Vec::new();
     let mut definitions = Vec::new();
     let mut schema_names = HashSet::new();
+    let mut data_type_names = HashSet::new();
+    let mut constructor_names = HashSet::new();
     let mut definition_names = HashSet::new();
 
     for form_datum in &top[1..] {
@@ -253,6 +264,87 @@ pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
                 }
                 libraries = Some(requirements);
             }
+            "imports" => {
+                if imports.is_some() {
+                    return Err(at(
+                        form_datum,
+                        "PROGRAM_DUPLICATE_IMPORTS",
+                        "program has multiple imports forms",
+                    ));
+                }
+                if form.len().saturating_sub(1) > MAXIMUM_IMPORTS {
+                    return Err(Diagnostic::new(
+                        "PROGRAM_TOO_MANY_IMPORTS",
+                        "program declares too many module imports",
+                        json!({ "maximum": MAXIMUM_IMPORTS }),
+                    )
+                    .at(form_datum.span));
+                }
+                let values = symbols(&form[1..]).ok_or_else(|| {
+                    at(
+                        form_datum,
+                        "PROGRAM_INVALID_IMPORT",
+                        "module import names must be symbols",
+                    )
+                })?;
+                ensure_unique(
+                    &values,
+                    "PROGRAM_DUPLICATE_IMPORT",
+                    "module is imported more than once",
+                    form_datum,
+                )?;
+                imports = Some(values);
+            }
+            "data" => {
+                let definition = parse_data_type(form, form_datum)?;
+                if data_types.len() >= MAXIMUM_DATA_TYPES {
+                    return Err(Diagnostic::new(
+                        "PROGRAM_TOO_MANY_DATA_TYPES",
+                        "program declares too many data types",
+                        json!({ "maximum": MAXIMUM_DATA_TYPES }),
+                    )
+                    .at(form_datum.span));
+                }
+                if !data_type_names.insert(definition.name.clone()) {
+                    return Err(Diagnostic::new(
+                        "PROGRAM_DUPLICATE_DATA_TYPE",
+                        "data type name is not unique",
+                        json!({ "name": definition.name }),
+                    )
+                    .at(form_datum.span));
+                }
+                for variant in &definition.variants {
+                    if RESERVED_SCHEMA_NAMES.contains(&variant.name.as_str())
+                        || EXPRESSION_KEYWORDS.contains(&variant.name.as_str())
+                    {
+                        return Err(Diagnostic::new(
+                            "PROGRAM_CONSTRUCTOR_RESERVED_NAME",
+                            "constructor name conflicts with a language or capability binding",
+                            json!({ "name": variant.name }),
+                        )
+                        .at(form_datum.span));
+                    }
+                    if !constructor_names.insert(variant.name.clone()) {
+                        return Err(Diagnostic::new(
+                            "PROGRAM_DUPLICATE_CONSTRUCTOR",
+                            "constructor name is not unique",
+                            json!({ "name": variant.name }),
+                        )
+                        .at(form_datum.span));
+                    }
+                    if schema_names.contains(&variant.name)
+                        || definition_names.contains(&variant.name)
+                    {
+                        return Err(Diagnostic::new(
+                            "PROGRAM_DUPLICATE_BINDING",
+                            "constructor, schema, and definition names must be unique",
+                            json!({ "name": variant.name }),
+                        )
+                        .at(form_datum.span));
+                    }
+                }
+                data_types.push(definition);
+            }
             "schema" => {
                 if form.len() != 3 || form[1].symbol().is_none() {
                     return Err(at(
@@ -290,6 +382,14 @@ pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
                     return Err(Diagnostic::new(
                         "PROGRAM_DUPLICATE_BINDING",
                         "schema and definition names must be unique",
+                        json!({ "name": schema_name }),
+                    )
+                    .at(form_datum.span));
+                }
+                if constructor_names.contains(&schema_name) {
+                    return Err(Diagnostic::new(
+                        "PROGRAM_DUPLICATE_BINDING",
+                        "constructor, schema, and definition names must be unique",
                         json!({ "name": schema_name }),
                     )
                     .at(form_datum.span));
@@ -370,6 +470,14 @@ pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
                     )
                     .at(form_datum.span));
                 }
+                if constructor_names.contains(&definition_name) {
+                    return Err(Diagnostic::new(
+                        "PROGRAM_DUPLICATE_BINDING",
+                        "constructor, schema, and definition names must be unique",
+                        json!({ "name": definition_name }),
+                    )
+                    .at(form_datum.span));
+                }
                 definitions.push(Definition {
                     name: definition_name,
                     expression: parse_expression(&form[2])?,
@@ -440,11 +548,28 @@ pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
         )
         .at(datum.span)
     })?;
+    let imports = imports.unwrap_or_default();
+    if imports.iter().any(|import| import == &name) {
+        return Err(Diagnostic::new(
+            "PROGRAM_SELF_IMPORT",
+            "program cannot import itself",
+            json!({ "module": name }),
+        )
+        .at(datum.span));
+    }
+    if version < BigInt::from(3_u8) && !imports.is_empty() {
+        return Err(program_feature_requires_version(
+            "imports", &version, 3, datum,
+        ));
+    }
+    if version < BigInt::from(3_u8) && !data_types.is_empty() {
+        return Err(program_feature_requires_version("data", &version, 3, datum));
+    }
     for export_name in &exports {
-        if !definition_names.contains(export_name) {
+        if !definition_names.contains(export_name) && !constructor_names.contains(export_name) {
             return Err(Diagnostic::new(
                 "PROGRAM_UNKNOWN_EXPORT",
-                "export does not name a program definition",
+                "export does not name a program definition or data constructor",
                 json!({ "name": export_name }),
             )
             .at(datum.span));
@@ -494,11 +619,82 @@ pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
         version,
         capabilities: capabilities.unwrap_or_default(),
         libraries,
+        imports,
         schemas,
+        data_types,
         routes,
         definitions,
         exports,
         source: source.to_owned(),
+    })
+}
+
+fn parse_data_type(form: &[Datum], datum: &Datum) -> AilResult<DataTypeDefinition> {
+    if form.len() < 3 || form[1].symbol().is_none() {
+        return Err(at(
+            datum,
+            "PROGRAM_INVALID_DATA_TYPE",
+            "data type must be (data name (constructor field ... ) ...)",
+        ));
+    }
+    if form.len() - 2 > MAXIMUM_DATA_VARIANTS {
+        return Err(Diagnostic::new(
+            "PROGRAM_TOO_MANY_DATA_VARIANTS",
+            "data type declares too many variants",
+            json!({ "maximum": MAXIMUM_DATA_VARIANTS }),
+        )
+        .at(datum.span));
+    }
+    let mut variants = Vec::with_capacity(form.len() - 2);
+    let mut names = HashSet::new();
+    for raw_variant in &form[2..] {
+        let variant = raw_variant.list().unwrap_or_default();
+        let Some(name) = variant.first().and_then(Datum::symbol) else {
+            return Err(Diagnostic::new(
+                "PROGRAM_INVALID_DATA_VARIANT",
+                "data variant must be (constructor field ...)",
+                json!({ "variant": raw_variant.display() }),
+            )
+            .at(raw_variant.span));
+        };
+        if variant.len().saturating_sub(1) > MAXIMUM_VARIANT_FIELDS {
+            return Err(Diagnostic::new(
+                "PROGRAM_TOO_MANY_VARIANT_FIELDS",
+                "data variant declares too many fields",
+                json!({ "maximum": MAXIMUM_VARIANT_FIELDS }),
+            )
+            .at(raw_variant.span));
+        }
+        if !names.insert(name.to_owned()) {
+            return Err(Diagnostic::new(
+                "PROGRAM_DUPLICATE_DATA_VARIANT",
+                "data variant name is not unique within its type",
+                json!({ "name": name }),
+            )
+            .at(raw_variant.span));
+        }
+        let fields = symbols(&variant[1..]).ok_or_else(|| {
+            Diagnostic::new(
+                "PROGRAM_INVALID_DATA_FIELD",
+                "data variant field names must be symbols",
+                json!({ "variant": name }),
+            )
+            .at(raw_variant.span)
+        })?;
+        ensure_unique(
+            &fields,
+            "PROGRAM_DUPLICATE_DATA_FIELD",
+            "data variant field name is not unique",
+            raw_variant,
+        )?;
+        variants.push(VariantDefinition {
+            name: name.to_owned(),
+            fields,
+        });
+    }
+    Ok(DataTypeDefinition {
+        name: form[1].symbol().unwrap_or_default().to_owned(),
+        variants,
     })
 }
 
@@ -757,6 +953,7 @@ fn parse_expression(datum: &Datum) -> AilResult<Expression> {
                         .collect::<AilResult<Vec<_>>>()?,
                 ),
                 Some("cond") => parse_cond(form, datum)?,
+                Some("match") => parse_match(form, datum)?,
                 Some("let") => {
                     if form.len() != 3 {
                         return Err(invalid_special_form("let", datum));
@@ -890,11 +1087,111 @@ fn parse_cond(form: &[Datum], datum: &Datum) -> AilResult<ExpressionKind> {
     })
 }
 
+fn parse_match(form: &[Datum], datum: &Datum) -> AilResult<ExpressionKind> {
+    if form.len() < 3 {
+        return Err(Diagnostic::simple(
+            "PARSE_MATCH_MISSING_DEFAULT",
+            "match must contain a value and end with an explicit _ arm",
+        )
+        .at(datum.span));
+    }
+    let raw_arms = &form[2..];
+    let final_arm = raw_arms
+        .last()
+        .and_then(Datum::list)
+        .filter(|arm| arm.len() == 2);
+    if final_arm.and_then(|arm| arm[0].symbol()) != Some("_") {
+        return Err(Diagnostic::simple(
+            "PARSE_MATCH_MISSING_DEFAULT",
+            "match must end with an explicit _ arm",
+        )
+        .at(raw_arms.last().map_or(datum.span, |arm| arm.span)));
+    }
+
+    let mut arms = Vec::with_capacity(raw_arms.len());
+    for (index, raw_arm) in raw_arms.iter().enumerate() {
+        let arm = raw_arm.list().unwrap_or_default();
+        if arm.len() != 2 {
+            return Err(Diagnostic::new(
+                "PARSE_INVALID_MATCH_ARM",
+                "match arm must be (pattern expression)",
+                json!({ "arm": raw_arm.display() }),
+            )
+            .at(raw_arm.span));
+        }
+        if arm[0].symbol() == Some("_") && index + 1 != raw_arms.len() {
+            return Err(Diagnostic::simple(
+                "PARSE_MATCH_DEFAULT_NOT_LAST",
+                "the _ match arm must be last",
+            )
+            .at(raw_arm.span));
+        }
+        let mut bindings = HashSet::new();
+        arms.push(MatchArm {
+            pattern: parse_pattern(&arm[0], &mut bindings)?,
+            expression: parse_expression(&arm[1])?,
+        });
+    }
+    Ok(ExpressionKind::Match {
+        value: Box::new(parse_expression(&form[1])?),
+        arms,
+    })
+}
+
+fn parse_pattern(datum: &Datum, bindings: &mut HashSet<String>) -> AilResult<Pattern> {
+    let kind = match &datum.kind {
+        DatumKind::Symbol(name) if name == "_" => PatternKind::Wildcard,
+        DatumKind::Symbol(name) => {
+            if !bindings.insert(name.clone()) {
+                return Err(Diagnostic::new(
+                    "PARSE_DUPLICATE_PATTERN_BINDING",
+                    "pattern binding name is not unique",
+                    json!({ "name": name }),
+                )
+                .at(datum.span));
+            }
+            PatternKind::Binding(name.clone())
+        }
+        DatumKind::Integer(_) | DatumKind::Bool(_) | DatumKind::String(_) => {
+            PatternKind::Literal(datum.clone())
+        }
+        DatumKind::List(items) if !items.is_empty() => {
+            let Some(name) = items[0].symbol() else {
+                return Err(Diagnostic::new(
+                    "PARSE_INVALID_PATTERN",
+                    "variant pattern must begin with a constructor name",
+                    json!({ "pattern": datum.display() }),
+                )
+                .at(datum.span));
+            };
+            PatternKind::Variant {
+                name: name.to_owned(),
+                fields: items[1..]
+                    .iter()
+                    .map(|item| parse_pattern(item, bindings))
+                    .collect::<AilResult<Vec<_>>>()?,
+            }
+        }
+        DatumKind::List(_) => {
+            return Err(Diagnostic::simple(
+                "PARSE_INVALID_PATTERN",
+                "empty list is not a match pattern",
+            )
+            .at(datum.span));
+        }
+    };
+    Ok(Pattern {
+        kind,
+        span: datum.span,
+    })
+}
+
 fn ensure_expression_version(expression: &Expression, version: &BigInt) -> AilResult<()> {
     let minimum = match &expression.kind {
         ExpressionKind::And(_) => Some(("and", 2_u8)),
         ExpressionKind::Or(_) => Some(("or", 2_u8)),
         ExpressionKind::Cond { .. } => Some(("cond", 2_u8)),
+        ExpressionKind::Match { .. } => Some(("match", 3_u8)),
         _ => None,
     };
     if let Some((feature, minimum_version)) = minimum
@@ -940,6 +1237,13 @@ fn ensure_expression_version(expression: &Expression, version: &BigInt) -> AilRe
             }
             ensure_expression_version(alternative, version)
         }
+        ExpressionKind::Match { value, arms } => {
+            ensure_expression_version(value, version)?;
+            for arm in arms {
+                ensure_expression_version(&arm.expression, version)?;
+            }
+            Ok(())
+        }
         ExpressionKind::Let { bindings, body } => {
             for binding in bindings {
                 ensure_expression_version(&binding.expression, version)?;
@@ -958,6 +1262,24 @@ fn ensure_expression_version(expression: &Expression, version: &BigInt) -> AilRe
             Ok(())
         }
     }
+}
+
+fn program_feature_requires_version(
+    feature: &str,
+    version: &BigInt,
+    minimum_version: u8,
+    datum: &Datum,
+) -> Diagnostic {
+    Diagnostic::new(
+        "PROGRAM_FEATURE_REQUIRES_VERSION",
+        "program uses a feature from a newer language version",
+        json!({
+            "feature": feature,
+            "actualVersion": version.to_u64().unwrap_or_default(),
+            "minimumVersion": minimum_version,
+        }),
+    )
+    .at(datum.span)
 }
 
 fn ensure_schema_version(schema: &SchemaKind, version: &BigInt, datum: &Datum) -> AilResult<()> {
@@ -1305,15 +1627,15 @@ mod tests {
         );
 
         let future = require_error(load_program_source(
-            "(program (name future) (version 3) (def run #t) (export run))",
+            "(program (name future) (version 4) (def run #t) (export run))",
         ));
         assert_eq!(future.code, "PROGRAM_UNSUPPORTED_VERSION");
         assert_eq!(
             future.details.as_ref(),
             &json!({
-                "actualVersion": "3",
+                "actualVersion": "4",
                 "minimumSupportedVersion": 1,
-                "maximumSupportedVersion": 2,
+                "maximumSupportedVersion": 3,
             })
         );
     }
@@ -1396,5 +1718,57 @@ mod tests {
                 },
             ])
         );
+    }
+
+    #[test]
+    fn parses_v3_imports_data_types_and_total_match() {
+        let program = load_program_source(
+            r#"(program
+                (name approvals)
+                (version 3)
+                (imports policy)
+                (data decision (approved id) (rejected reason))
+                (def describe (fn (value)
+                  (match value
+                    ((approved id) id)
+                    ((rejected reason) reason)
+                    (_ "unknown"))))
+                (export describe))"#,
+        )
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(program.imports, ["policy"]);
+        assert_eq!(program.data_types[0].name, "decision");
+        assert_eq!(program.data_types[0].variants[0].fields, ["id"]);
+
+        let missing_default = require_error(load_program_source(
+            r#"(program
+                (name invalid)
+                (version 3)
+                (def run (fn (value) (match value (1 "one"))))
+                (export run))"#,
+        ));
+        assert_eq!(missing_default.code, "PARSE_MATCH_MISSING_DEFAULT");
+    }
+
+    #[test]
+    fn gates_v3_program_features() {
+        let imports = require_error(load_program_source(
+            "(program (name old) (version 2) (imports helper) (def run #t) (export run))",
+        ));
+        assert_eq!(imports.code, "PROGRAM_FEATURE_REQUIRES_VERSION");
+        assert_eq!(
+            imports.details.as_ref(),
+            &json!({ "feature": "imports", "actualVersion": 2, "minimumVersion": 3 })
+        );
+
+        let data = require_error(load_program_source(
+            "(program (name old) (version 2) (data maybe (some value) (none)) (def run #t) (export run))",
+        ));
+        assert_eq!(data.code, "PROGRAM_FEATURE_REQUIRES_VERSION");
+
+        let matcher = require_error(load_program_source(
+            "(program (name old) (version 2) (def run (match 1 (_ #t))) (export run))",
+        ));
+        assert_eq!(matcher.code, "PROGRAM_FEATURE_REQUIRES_VERSION");
     }
 }

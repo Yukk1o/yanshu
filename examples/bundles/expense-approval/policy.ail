@@ -1,0 +1,17 @@
+; Expense policy owns its decision data and keeps helper bindings private.
+(program
+  (name policy)
+  (version 3)
+  (data decision
+    (approved amount)
+    (review amount reason)
+    (rejected reason))
+
+  (def decide
+    (fn (amount)
+      (cond
+        ((< amount 0) (rejected "negative amount"))
+        ((>= amount 1000) (review amount "manual approval required"))
+        (else (approved amount)))))
+
+  (export decide approved review rejected))
