@@ -21,6 +21,8 @@ Wiki 构建前会执行 `scripts/sync-source.mjs`，把明确白名单中的仓�
 | [parser.rkt](/source/src/parser.rkt.txt) | 语法、唯一性、能力和路由静态检查 | `parser::parse_program` |
 | [runtime.rkt](/source/src/runtime.rkt.txt) | 环境、闭包、求值、fuel、primitive | `runtime::{Vm, Value, Diagnostic}` |
 | [schema.rkt](/source/src/schema.rkt.txt) | 有边界的递归业务校验 | `schema::validate` |
+| [library-contract.rkt](/source/src/library-contract.rkt.txt) | 标准库名称、版本、类型和 fuel 契约 | `ail_library::contract` |
+| [library-backend.rkt](/source/src/library-backend.rkt.txt) | 可替换的 Racket 参考实现 | Rust crate adapters |
 | [error.rkt](/source/src/error.rkt.txt) | 稳定诊断 code/message/details | `enum DiagnosticCode` + struct |
 
 ## Web 数据面
@@ -50,6 +52,8 @@ Wiki 构建前会执行 `scripts/sync-source.mjs`，把明确白名单中的仓�
 - [有缺陷折扣 v1](/source/examples/discount/v1.ail.txt)
 - [修复后折扣 v2](/source/examples/discount/v2.ail.txt)
 - [折扣测试](/source/examples/discount/tests.json.txt)
+- [text@1 Library Backend 示例](/source/examples/libraries/text.ail.txt)
+- [text@1 示例测试](/source/examples/libraries/tests.json.txt)
 - [完整宿主测试](/source/tests/all.rkt.txt)
 
 ## 原始规格
@@ -57,6 +61,7 @@ Wiki 构建前会执行 `scripts/sync-source.mjs`，把明确白名单中的仓�
 - [v0.1 语言规格](/source/docs/spec-v0.1.md.txt)
 - [v0.2 Web 后端规格](/source/docs/web-backend-v0.2.md.txt)
 - [v0.3 业务 Schema 规格](/source/docs/business-backend-v0.3.md.txt)
+- [v0.4 Library Backend 规格](/source/docs/library-backend-v0.4.md.txt)
 - [架构与可移植边界](/source/docs/design.md.txt)
 - [Live provider 说明](/source/docs/live-provider.md.txt)
 

@@ -210,9 +210,30 @@ match validate(&TASK_CREATE, body) {
 
 没有声明就没有绑定；声明了但宿主没有提供，也会失败。这是 capability security 的核心，不是普通框架中“随处可 import 数据库包”的方式。
 
+## 版本化标准库与 Library Backend
+
+纯库和有权限的 capability 是两件事。程序可以声明语言定义的标准库契约：
+
+```lisp
+(libraries (text 1))
+
+(text/length "AI语言")                    ; 4 个 Unicode scalar
+(text/starts-with? "AI language" "AI")  ; #t
+(text/replace "AI language" "AI" "机器") ; "机器 language"
+```
+
+客体只能选择 `text@1` 契约，不能指定 crates.io、PyPI 包或具体 provider。可信
+contract 固定函数集合、参数/结果类型和 fuel 估算；宿主可以把实现换成 Racket、
+Rust、隔离 Python 或 WASM，额外函数、缺失函数和错误版本都会在执行前被拒绝。
+
+当前实现见 [library-contract.rkt](/source/src/library-contract.rkt.txt) 与
+[library-backend.rkt](/source/src/library-backend.rkt.txt)，可运行示例见
+[text.ail](/source/examples/libraries/text.ail.txt)。这正是 Rust Library Backend 的
+迁移边界，不是允许 guest 反射调用任意宿主函数。
+
 ## 不支持的东西
 
-当前没有宏、异常捕获、可变变量、并发、模块导入、递归 Schema、浮点数、日期类型、用户自定义类型或任意宿主调用。不要把 Racket 语法误认为 `.ail` 一定支持；以 [Parser](/source/src/parser.rkt.txt) 和 [语言规格](/source/docs/spec-v0.1.md.txt) 为准。
+当前没有宏、异常捕获、可变变量、并发、用户模块导入、递归 Schema、浮点数、日期类型、用户自定义类型或任意宿主调用。不要把 Racket 语法误认为 `.ail` 一定支持；以 [Parser](/source/src/parser.rkt.txt) 和 [语言规格](/source/docs/spec-v0.1.md.txt) 为准。
 
 ::: warning 整数不能在迁移时静默收窄
 当前 `Int` 继承 Racket `exact-integer` 的任意精度语义。Rust 宿主需要使用

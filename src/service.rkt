@@ -5,6 +5,7 @@
          "ast.rkt"
          "error.rkt"
          "kv-store.rkt"
+         "library-backend.rkt"
          "runtime.rkt")
 
 (provide (struct-out service-request)
@@ -23,6 +24,9 @@
                                 #:max-depth [maximum-depth 256]
                                 #:logger [logger void]
                                 #:clock [clock current-milliseconds]
+                                #:library-backends
+                                [library-backends
+                                 (make-reference-library-backends)]
                                 #:capability-bindings
                                 [extra-capability-bindings (hasheq)])
   (define clock-bindings
@@ -57,6 +61,7 @@
               #:fuel fuel
               #:max-depth maximum-depth
               #:logger logger
+              #:library-backends library-backends
               #:capability-bindings
               (merge-capability-bindings base-bindings kv-bindings)))
            (unless (dispatch-result-diagnostic result) (commit!))
@@ -66,12 +71,16 @@
                           #:fuel fuel
                           #:max-depth maximum-depth
                           #:logger logger
+                          #:library-backends library-backends
                           #:capability-bindings base-bindings))))
 
 (define (dispatch-request program request
                           #:fuel [fuel 25000]
                           #:max-depth [maximum-depth 256]
                           #:logger [logger void]
+                          #:library-backends
+                          [library-backends
+                           (make-reference-library-backends)]
                           #:capability-bindings [capability-bindings (hasheq)])
   (validate-service-request request)
   (define method (string-upcase (service-request-method request)))
@@ -147,6 +156,7 @@
                          #:fuel fuel
                          #:max-depth maximum-depth
                          #:logger logger
+                         #:library-backends library-backends
                          #:capability-bindings capability-bindings))
        (dispatch-result (validate-guest-response raw-response)
                         #f

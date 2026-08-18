@@ -5,6 +5,8 @@
          racket/list
          "ast.rkt"
          "error.rkt"
+         "library-backend.rkt"
+         "library-contract.rkt"
          "parser.rkt"
          "reader.rkt"
          "schema.rkt")
@@ -12,6 +14,7 @@
 (provide (struct-out ok-value)
          (struct-out err-value)
          (struct-out capability-primitive)
+         (all-from-out "library-backend.rkt")
          load-program-source
          load-program-file
          execute-export
@@ -38,6 +41,8 @@
                         #:fuel [fuel 10000]
                         #:max-depth [maximum-depth 256]
                         #:logger [logger default-logger]
+                        #:library-backends
+                        [library-backends (make-reference-library-backends)]
                         #:capability-bindings [capability-bindings (hasheq)])
   (unless (and (exact-integer? fuel) (positive? fuel))
     (raise-argument-error 'execute-export "exact-positive-integer?" fuel))
@@ -53,6 +58,10 @@
   (define base-environment (make-base-environment context))
   (define module-environment
     (environment (make-hasheq) base-environment))
+  (install-libraries! module-environment
+                      (ail-program-libraries program)
+                      context
+                      library-backends)
   (install-capabilities! module-environment
                          (ail-program-capabilities program)
                          context
@@ -366,6 +375,254 @@
                                "details" details)))))
   base)
 
+(define maximum-library-result-nodes 10000)
+(define maximum-library-result-depth 64)
+(define maximum-library-result-string-length (* 1024 1024))
+
+(define (install-libraries! target requirements context backends)
+  (unless (hash? backends)
+    (raise-argument-error 'execute-export "hash?" backends))
+  (for ([requirement (in-list requirements)])
+    (define library-name (library-requirement-name requirement))
+    (define library-version (library-requirement-version requirement))
+    (define contract (find-library-contract library-name library-version))
+    (unless contract
+      (raise-ail "RUNTIME_LIBRARY_CONTRACT_MISSING"
+                 "parsed program refers to an unknown library contract"
+                 (hasheq 'library (symbol->string library-name)
+                         'version library-version)))
+    (define backend
+      (hash-ref backends (cons library-name library-version) #f))
+    (unless backend
+      (raise-ail "RUNTIME_LIBRARY_UNAVAILABLE"
+                 "host did not provide a declared library backend"
+                 (hasheq 'library (symbol->string library-name)
+                         'version library-version)))
+    (validate-library-backend! backend contract)
+    (define provider (library-backend-provider backend))
+    (define implementations (library-backend-implementations backend))
+    (for ([(operation-name operation-contract)
+           (in-hash (library-contract-operations contract))])
+      (define implementation (hash-ref implementations operation-name))
+      (environment-define!
+       target
+       operation-name
+       (primitive
+        operation-name
+        (library-operation-contract-minimum-arity operation-contract)
+        (library-operation-contract-maximum-arity operation-contract)
+        (lambda (arguments runtime-context)
+          (check-library-arguments! operation-contract arguments)
+          (define cost
+            (with-handlers
+                ([exn:fail?
+                  (lambda (_error)
+                    (raise-ail
+                     "RUNTIME_LIBRARY_CONTRACT_FAILURE"
+                     "library cost estimator failed"
+                     (library-call-details library-name
+                                           library-version
+                                           operation-name
+                                           provider)))])
+              ((library-operation-contract-cost operation-contract)
+               arguments)))
+          (unless (exact-nonnegative-integer? cost)
+            (raise-ail
+             "RUNTIME_LIBRARY_CONTRACT_FAILURE"
+             "library cost estimator returned an invalid cost"
+             (library-call-details library-name
+                                   library-version
+                                   operation-name
+                                   provider)))
+          (consume-fuel-amount! runtime-context cost)
+          (define raw-result
+            (with-handlers
+                ([exn:fail?
+                  (lambda (_error)
+                    (raise-ail
+                     "RUNTIME_LIBRARY_FAILURE"
+                     "library backend operation failed"
+                     (library-call-details library-name
+                                           library-version
+                                           operation-name
+                                           provider)))])
+              (implementation arguments)))
+          (define result
+            (normalize-library-result raw-result
+                                      runtime-context
+                                      library-name
+                                      library-version
+                                      operation-name
+                                      provider))
+          (unless (library-kind-matches?
+                   (library-operation-contract-result-kind operation-contract)
+                   result)
+            (raise-ail
+             "RUNTIME_LIBRARY_INVALID_RESULT"
+             "library backend returned a value of the wrong kind"
+             (hash-set
+              (hash-set
+               (library-call-details library-name
+                                     library-version
+                                     operation-name
+                                     provider)
+               'expected
+               (symbol->string
+                (library-operation-contract-result-kind operation-contract)))
+              'actual
+              (value-kind result))))
+          result))))))
+
+(define (validate-library-backend! backend contract)
+  (define library-name (library-contract-name contract))
+  (define library-version (library-contract-version contract))
+  (unless (library-backend? backend)
+    (raise-invalid-library-backend library-name
+                                   library-version
+                                   "registry entry is not a library backend"))
+  (unless (and (eq? (library-backend-name backend) library-name)
+               (exact-positive-integer? (library-backend-version backend))
+               (= (library-backend-version backend) library-version))
+    (raise-invalid-library-backend library-name
+                                   library-version
+                                   "backend identity does not match registry key"))
+  (define provider (library-backend-provider backend))
+  (unless (and (string? provider)
+               (<= 1 (string-length provider) 128))
+    (raise-invalid-library-backend library-name
+                                   library-version
+                                   "backend provider label is invalid"))
+  (define implementations (library-backend-implementations backend))
+  (unless (hash? implementations)
+    (raise-invalid-library-backend library-name
+                                   library-version
+                                   "backend implementations are not a map"))
+  (define expected-names
+    (sort (hash-keys (library-contract-operations contract)) symbol<?))
+  (define actual-names
+    (and (andmap symbol? (hash-keys implementations))
+         (sort (hash-keys implementations) symbol<?)))
+  (unless (and actual-names (equal? actual-names expected-names))
+    (raise-invalid-library-backend
+     library-name
+     library-version
+     "backend functions do not exactly match the contract"
+     (hasheq 'expected (map symbol->string expected-names)
+             'actual (if actual-names
+                         (map symbol->string actual-names)
+                         '()))))
+  (for ([(name implementation) (in-hash implementations)])
+    (unless (procedure? implementation)
+      (raise-invalid-library-backend
+       library-name
+       library-version
+       "backend function is not callable"
+       (hasheq 'operation (symbol->string name))))))
+
+(define (raise-invalid-library-backend library-name
+                                       library-version
+                                       message
+                                       [extra-details (hasheq)])
+  (raise-ail
+   "RUNTIME_INVALID_LIBRARY_BACKEND"
+   message
+   (for/fold ([details
+               (hasheq 'library (symbol->string library-name)
+                       'version library-version)])
+             ([(key value) (in-hash extra-details)])
+     (hash-set details key value))))
+
+(define (check-library-arguments! contract arguments)
+  (for ([expected (in-list (library-operation-contract-argument-kinds contract))]
+        [argument (in-list arguments)]
+        [index (in-naturals)])
+    (unless (library-kind-matches? expected argument)
+      (raise-ail
+       "RUNTIME_TYPE"
+       "library function received a value of the wrong type"
+       (hasheq 'operation
+               (symbol->string (library-operation-contract-name contract))
+               'index index
+               'expected (symbol->string expected)
+               'actual (value-kind argument))))))
+
+(define (library-kind-matches? expected value)
+  (case expected
+    [(Any Data) #t]
+    [(Nil) (null? value)]
+    [(Bool) (boolean? value)]
+    [(Int) (exact-integer? value)]
+    [(String) (string? value)]
+    [(Symbol) (symbol? value)]
+    [(List) (list? value)]
+    [(Map) (hash? value)]
+    [(Result) (or (ok-value? value) (err-value? value))]
+    [else #f]))
+
+(define (normalize-library-result value
+                                  context
+                                  library-name
+                                  library-version
+                                  operation-name
+                                  provider)
+  (define node-count 0)
+  (define (invalid message [extra-details (hasheq)])
+    (raise-ail
+     "RUNTIME_LIBRARY_INVALID_RESULT"
+     message
+     (for/fold ([details
+                 (library-call-details library-name
+                                       library-version
+                                       operation-name
+                                       provider)])
+               ([(key item) (in-hash extra-details)])
+       (hash-set details key item))))
+  (define (visit item depth)
+    (set! node-count (add1 node-count))
+    (consume-fuel! context)
+    (when (> node-count maximum-library-result-nodes)
+      (invalid "library backend result exceeds the node limit"
+               (hasheq 'maximum maximum-library-result-nodes)))
+    (when (> depth maximum-library-result-depth)
+      (invalid "library backend result exceeds the depth limit"
+               (hasheq 'maximum maximum-library-result-depth)))
+    (cond
+      [(or (exact-integer? item) (boolean? item) (symbol? item) (null? item))
+       item]
+      [(string? item)
+       (define length (string-length item))
+       (when (> length maximum-library-result-string-length)
+         (invalid "library backend result contains an oversized string"
+                  (hasheq 'maximum maximum-library-result-string-length)))
+       (consume-fuel-amount! context (quotient (+ length 63) 64))
+       (string->immutable-string item)]
+      [(list? item)
+       (for/list ([child (in-list item)])
+         (visit child (add1 depth)))]
+      [(hash? item)
+       (for/hash ([(key child) (in-hash item)])
+         (unless (or (symbol? key) (string? key))
+           (invalid "library backend result contains an invalid map key"
+                    (hasheq 'kind (value-kind key))))
+         (define normalized-key
+           (if (string? key) (string->immutable-string key) key))
+         (values normalized-key (visit child (add1 depth))))]
+      [(ok-value? item) (ok-value (visit (ok-value-value item) (add1 depth)))]
+      [(err-value? item) (err-value (visit (err-value-value item) (add1 depth)))]
+      [else
+       (invalid "library backend result is not portable guest data"
+                (hasheq 'kind (value-kind item)))]))
+  (visit value 0))
+
+(define (library-call-details library-name
+                              library-version
+                              operation-name
+                              provider)
+  (hasheq 'library (symbol->string library-name)
+          'version library-version
+          'operation (symbol->string operation-name)
+          'provider provider))
+
 (define (install-capabilities! target capabilities context bindings)
   (unless (hash? bindings)
     (raise-argument-error 'execute-export "hash?" bindings))
@@ -431,11 +688,14 @@
                 (hasheq 'name (symbol->string name)))]))
 
 (define (consume-fuel! context)
+  (consume-fuel-amount! context 1))
+
+(define (consume-fuel-amount! context amount)
   (define remaining (execution-context-fuel context))
-  (when (<= remaining 0)
+  (when (< remaining amount)
     (raise-ail "RUNTIME_FUEL_EXHAUSTED"
                "execution exhausted its fuel allowance"))
-  (set-execution-context-fuel! context (sub1 remaining)))
+  (set-execution-context-fuel! context (- remaining amount)))
 
 (define (check-depth! context depth)
   (when (> depth (execution-context-maximum-depth context))

@@ -3,6 +3,7 @@
 (provide (struct-out ail-program)
          (struct-out ail-route)
          (struct-out ail-schema)
+         (struct-out library-requirement)
          (struct-out schema-any)
          (struct-out schema-string)
          (struct-out schema-integer)
@@ -25,8 +26,10 @@
          ast->jsexpr
          program->jsexpr)
 
+(require "library-contract.rkt")
+
 (struct ail-program
-  (name version capabilities schemas routes definitions exports source)
+  (name version capabilities libraries schemas routes definitions exports source)
   #:transparent)
 (struct ail-route (method path handler) #:transparent)
 (struct ail-schema (name specification) #:transparent)
@@ -138,6 +141,10 @@
    'name (symbol->string (ail-program-name program))
    'version (ail-program-version program)
    'capabilities (map symbol->string (ail-program-capabilities program))
+   'libraries
+   (for/list ([requirement (in-list (ail-program-libraries program))])
+     (hasheq 'name (symbol->string (library-requirement-name requirement))
+             'version (library-requirement-version requirement)))
    'schemas
    (for/list ([schema (in-list (ail-program-schemas program))])
      (hasheq 'name (symbol->string (ail-schema-name schema))
