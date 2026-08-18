@@ -205,6 +205,13 @@ cargo run --quiet --locked -p ail-server -- `
   .runtime\tasks-rust\code `
   127.0.0.1:8081 `
   .runtime\tasks-rust\store.json
+cargo run --quiet --locked -p ail-cli -- evolve-service `
+  .runtime\tasks-rust\code `
+  examples\tasks\scenarios.json
+cargo run --quiet --locked -p ail-cli -- evolve-service `
+  .runtime\tasks-rust\code `
+  examples\tasks\scenarios.json `
+  --promote
 cargo run --quiet --locked -p ail-cli -- version-conformance `
   examples\discount\v1.ail `
   examples\discount\v2.ail
@@ -213,3 +220,5 @@ cargo run --quiet --locked -p ail-cli -- version-conformance `
 `scripts/check-rust.ps1` 会把上述结果与 Racket canonical JSON 做精确差分。迁移期仍以
 Racket 网页服务作为默认宿主；Rust 已能安全切换活动版本并承接 JSON HTTP 监听。
 也可以直接运行 [serve-tasks-rust.ps1](/source/scripts/serve-tasks-rust.ps1.txt)。
+Rust `evolve-service` 从相同环境变量读取 provider；不带 `--promote` 时只注册通过测试的
+候选，不改变活动版本。第一方实现完全禁止 unsafe，API key 不写入 JSON 输出或版本元数据。

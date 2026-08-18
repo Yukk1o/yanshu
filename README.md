@@ -111,6 +111,25 @@ Responses API 的请求结构参见
 严格输出结构参见
 [Structured Outputs 指南](https://developers.openai.com/api/docs/guides/structured-outputs)。
 
+Rust host 也已接入相同的活动服务演化门禁。先通过环境变量配置 provider，再运行：
+
+```powershell
+# 默认只生成、测试并注册候选，不提升
+cargo run --locked -p ail-cli -- evolve-service `
+  .runtime\tasks-rust\code `
+  examples\tasks\scenarios.json
+
+# 只有 11 个场景全通过时才会响应显式提升请求
+cargo run --locked -p ail-cli -- evolve-service `
+  .runtime\tasks-rust\code `
+  examples\tasks\scenarios.json `
+  --promote
+```
+
+Rust transport 强制 HTTPS、拒绝重定向、限制请求/响应大小和墙钟时间，并在释放时清零
+内存中的 API key。当前进程没有配置 provider 环境变量，因此本次迁移只执行了模拟响应
+测试；真实调用仍必须由操作者在进程环境中提供凭据。
+
 ## 语言示例
 
 ```lisp
@@ -195,9 +214,9 @@ Rust 版本必须复用 `.ail` 源码、JSON 测试、诊断代码、版本文�
 调用和裸 `eval` 都不属于语言语义。
 
 当前 Rust host 已迁移 Reader、Parser、解释器、Schema、Library Backend、服务能力、
-事务/文件 KV、版本库和活动版本 HTTP API。运行 `./scripts/check-rust.ps1` 会同时执行第一方 unsafe
+事务/文件 KV、版本库、活动版本 HTTP API，以及 OpenAI/DeepSeek Provider。运行 `./scripts/check-rust.ps1` 会同时执行第一方 unsafe
 门禁、Rust 测试、Clippy，以及语言、任务服务和版本生命周期的 Racket/Rust 精确差分。
-实时 provider 尚未迁移，默认网页服务也尚未切换到 Rust。
+默认网页服务尚未切换到 Rust，Provider 的真实联网烟雾测试需要操作者配置环境凭据。
 
 ## 当前安全边界
 

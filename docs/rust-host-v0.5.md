@@ -22,8 +22,12 @@ language host. It does not switch production traffic yet.
   active program before execution;
 - `ail-server`: independently deployable TCP process with structured startup and
   failure output plus graceful Ctrl+C shutdown;
+- `ail-provider`: offline and live proposal interfaces, OpenAI Responses and
+  DeepSeek Chat request/response validation, bounded Reqwest/Rustls transport,
+  HTTPS-only endpoints, redirect refusal, credential zeroization, and stable
+  diagnostics;
 - `ail-cli`: Rust `check`, `inspect`, `conformance`, `test-service`,
-  `deploy-service`, and `version-conformance` commands.
+  `deploy-service`, `evolve-service`, and `version-conformance` commands.
 
 The runtime represents environments and closures with checked arena indices.
 It does not use pointers, native ABI shims, or unsafe self-referential structs.
@@ -84,8 +88,10 @@ internal unsafe implementations remain inventoried according to
 
 Racket remains the default browser service and semantic oracle. Rust now hosts
 the capability/service boundary, compatible local persistence, version storage,
-test-gated deployment, and an active-version JSON HTTP server. Static browser
-assets and LLM providers have not migrated, and production still lacks auth,
-metrics/tracing, database persistence, backups, and canary automation. The
+test-gated deployment, an active-version JSON HTTP server, and live provider
+adapters. Provider behavior is covered by deterministic simulated transports,
+but a real Rust provider smoke test still requires operator-supplied environment
+credentials. Static browser assets have not migrated, and production still lacks
+auth, metrics/tracing, database persistence, backups, and canary automation. The
 cutover sequence remains: CI differential, offline replay, shadow execution,
 canary, then explicit default-host change.

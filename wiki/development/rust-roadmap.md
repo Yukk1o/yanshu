@@ -36,6 +36,7 @@ crates/
 ├─ ail-evolution/    provider、candidate gate、promotion policy
 ├─ ail-http/         基于成熟 HTTP 库的 transport adapter
 ├─ ail-server/       活动版本 HTTP 进程入口与优雅关闭
+├─ ail-provider/     受控 LLM 请求/响应、HTTPS transport 与凭据边界
 └─ ail-cli/          与当前 JSON CLI 兼容的 binary
 ```
 
@@ -188,7 +189,7 @@ Capability dispatcher 应采用白名单注册，不能让 guest 通过字符串
 
 ## 阶段 4：HTTP、版本库和 provider
 
-::: tip 版本库与 HTTP 已落地，provider 待迁移
+::: tip 版本库、HTTP 与 provider 已落地
 `ail-store` 已兼容 Racket 的 SHA-256 内容地址、元数据、活动指针与事件序列，并增加源码
 完整性校验、hash 路径约束、标准库跨进程文件锁和有界锁超时。Racket/Rust 会执行同一套
 注册、测试门禁、晋升、重启读取与回滚生命周期，canonical JSON 当前零差异。
@@ -197,11 +198,17 @@ Capability dispatcher 应采用白名单注册，不能让 guest 通过字符串
 `ail-server` 在每次请求开始时从兼容版本库读取并固定活动程序。测试覆盖进程内路由和
 真实 loopback TCP 连接。Rust CLI 的 `deploy-service` 会先跑完 11 个业务场景，只有
 通过才晋升，因此可从空版本目录启动，不依赖 Racket 预部署。
+
+`ail-provider` 已迁移 OpenAI Responses 与 DeepSeek Chat 的严格请求/响应边界，并用
+Reqwest/Rustls 提供仅 HTTPS、无重定向、有墙钟和大小限制的控制面 transport。Rust CLI
+的 `evolve-service` 默认只注册测试后的候选；只有显式 `--promote` 且 11 个场景全通过
+才修改 active。当前测试使用模拟 transport；真实联网仍要求操作者配置环境凭据。
 :::
 
 HTTP 使用成熟 Rust 生态库，而不是逐行移植手写 TCP parser；把请求转换成稳定的 `ServiceRequest` 后再进入宿主无关 service 层。
 
-provider 层最后迁移，因为它在信任边界之外，不应阻塞语言一致性。
+provider 层已经最后迁移，因为它在信任边界之外，没有阻塞语言一致性。后续重点是把
+真实 provider replay、shadow traffic 和晋升审批纳入发布门禁。
 
 ## 阶段 5：生成只读审查视图（建议）
 

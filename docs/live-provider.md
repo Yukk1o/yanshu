@@ -93,3 +93,29 @@ only when every test passes.
 - Refusal, missing credential, malformed response, and failed candidate paths
   are reported without changing the active version.
 - With an API key configured, `scripts/live-demo.ps1` exercises the real endpoint.
+
+## Rust host
+
+`ail-provider` implements the same two adapters behind a `JsonTransport` trait.
+Its deterministic tests capture the endpoint and request document without making
+network calls, then replay completed, refused, truncated, and malformed responses.
+The production transport uses exact-pinned Reqwest 0.13.4 with Rustls, forces
+HTTPS, disables redirects, applies a complete request timeout, limits request and
+response documents to 4 MiB, bounds remote error excerpts, and redacts the Bearer
+secret. The in-memory credential is wrapped in `Zeroizing<String>` and the provider
+type deliberately has no `Debug` implementation.
+
+Rust service evolution is available through:
+
+```powershell
+cargo run --locked -p ail-cli -- evolve-service `
+  .runtime\tasks-rust\code `
+  examples\tasks\scenarios.json `
+  --promote
+```
+
+Omit `--promote` to stage a tested candidate without changing the active pointer.
+Configuration is read from the same environment variable names listed above; the
+Rust host never reads a `.env` file. Plain HTTP base URLs are rejected. No live
+Rust request was made at this checkpoint because the process environment did not
+contain a provider credential.

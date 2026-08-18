@@ -30,6 +30,7 @@ ail-conformance → ail-store → ail-service → ail-cli` 阅读；这些 crate
 | [store/scenario.rs](/source/rust/crates/ail-store/src/scenario.rs.txt) | Racket/Rust 版本库生命周期差分 |
 | [service/lib.rs](/source/rust/crates/ail-service/src/lib.rs.txt) | capability trait、路由、事务/文件 KV 与场景 runner |
 | [http/lib.rs](/source/rust/crates/ail-http/src/lib.rs.txt) | Axum/Tokio 请求边界、活动版本 loader 与 TCP 测试 |
+| [provider/lib.rs](/source/rust/crates/ail-provider/src/lib.rs.txt) | OpenAI/DeepSeek 请求响应、HTTPS 边界与凭据清零 |
 | [server/main.rs](/source/rust/crates/ail-server/src/main.rs.txt) | Rust HTTP 进程入口、监听与优雅关闭 |
 | [cli/main.rs](/source/rust/crates/ail-cli/src/main.rs.txt) | Rust check / inspect / conformance CLI |
 

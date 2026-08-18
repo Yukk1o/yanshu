@@ -6,16 +6,25 @@ unsound = "all"
 [bans]
 multiple-versions = "deny"
 wildcards = "deny"
+skip = [
+  { crate = "syn@2.0.119", reason = "Reqwest's transitive URL/platform derives still require syn 2 while Tokio and other derives use syn 3" },
+]
 
 [licenses]
 confidence-threshold = 0.93
 allow = [
   "Apache-2.0",
   "BSD-3-Clause",
+  "ISC",
   "MIT",
   "Unlicense",
   "Unicode-3.0",
 ]
+
+[[licenses.exceptions]]
+allow = ["CDLA-Permissive-2.0"]
+name = "webpki-root-certs"
+version = "=1.0.9"
 
 [sources]
 unknown-registry = "deny"

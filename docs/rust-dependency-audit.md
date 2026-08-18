@@ -20,7 +20,7 @@ exception.
 
 ## Current graph
 
-The current Rust host has six normal direct external dependencies and one
+The current Rust host has eight normal direct external dependencies and one
 test-only dependency:
 
 | Dependency | Purpose | Decision |
@@ -31,21 +31,41 @@ test-only dependency:
 | `sha2 0.11.0` | Preserve the Racket version store's SHA-256 content identifiers | Exact-pinned RustCrypto implementation; default features disabled and portable software backend forced |
 | `axum 0.8.9` | Route-independent HTTP/1.1 server adapter | Exact-pinned; default features disabled; only `http1` and `tokio` enabled |
 | `tokio 1.53.1` | TCP runtime, bounded async body reads, signals, and graceful shutdown | Exact-pinned with a narrow explicit feature set |
+| `reqwest 0.13.4` | Bounded HTTPS transport for live LLM providers | Exact-pinned; defaults disabled; only blocking control-plane calls and Rustls enabled |
+| `zeroize 1.9.0` | Clear live provider credentials when their owner is dropped | Exact-pinned with only allocation support enabled |
 | `tower 0.5.3` | In-process HTTP router tests | Dev-only direct dependency; exact-pinned with only `util` enabled |
 
-The resolved workspace graph has 56 reachable external packages when normal,
-development, platform-specific, and build edges are included. The exact list is
-machine-derived from `Cargo.lock` by `scripts/audit-rust.ps1`; keeping a second
-hand-maintained transitive list here would go stale. All packages come from
-crates.io. There are no git dependencies, wildcard versions, or duplicated
-package versions. Declared licenses are covered by MIT, Apache-2.0, Unlicense,
-BSD-3-Clause, and Unicode-3.0.
+The host-target graph currently has 112 external packages; the union of enabled
+normal, development, build, and platform edges across all targets has 151. HTTPS,
+certificate verification, URL normalization, and their platform adapters account
+for most of this increase. The exact list is machine-derived from `Cargo.lock` and
+the Cargo graph; keeping a second hand-maintained transitive list here would go
+stale. All packages come from crates.io and there are no git or wildcard
+dependencies.
+
+The graph is in an ecosystem transition where Reqwest's transitive URL/platform
+derives still use `syn 2.0.119`, while current Tokio and other derives use
+`syn 3.0.3`.
+`deny.toml` skips exactly `syn@2.0.119` from duplicate rejection with a recorded
+reason; every other active duplicate remains denied. The skip becomes an audit
+warning when it no longer matches and must then be removed. Licenses are covered
+by MIT, Apache-2.0, Unlicense, BSD-3-Clause, Unicode-3.0, and ISC, with one
+version-specific CDLA-Permissive-2.0 exception for the WebPKI root-certificate
+data package.
 
 The syntax/runtime frontend still does not enable Serde derive. Axum's required
 Tokio integration does, however, bring in the `tokio-macros`, `proc-macro2`,
 `quote`, `syn`, and `unicode-ident` build chain. The host does not use procedural
 macros in first-party source, but these locked build dependencies remain inside
 the reviewed supply-chain boundary.
+
+The live provider uses Reqwest's explicit Rustls backend and disables default
+features, redirects, compression, cookies, HTTP/2, system proxy discovery, and
+other unused client features. Rustls currently selects AWS-LC for cryptographic
+operations and platform certificate verification. These implementations include
+native and unsafe internals, but first-party code reaches them only through safe
+Reqwest APIs. The Bearer value is not `Debug`, never enters provider diagnostics,
+and is held in `Zeroizing<String>`.
 
 The persisted KV implementation also evaluated `atomic-write-file 0.3.1`.
 It was removed before this checkpoint because it added twelve packages to the
@@ -67,14 +87,17 @@ target or cfg makes a site unreachable.
 Source inventory confirms no matching unsafe implementation in `axum`,
 `axum-core`, `tower`, `tower-layer`, or `tower-service`. Lower transport/runtime
 dependencies including Tokio, Hyper, Mio, Socket2, Bytes, and platform support
-do contain internal unsafe implementations. The script prints a per-package
+do contain internal unsafe implementations. Reqwest has a small number of
+internal unsafe sites; Rustls itself has no matching sites, while AWS-LC and its
+sys crate form the audited native cryptographic boundary. The script prints a per-package
 matching-line count for the complete resolved graph. This is an inventory aid,
 not proof that every match is reachable or correct; those internals remain part
 of the trusted dependency base even though no unsafe API is called by
 first-party code.
 
 `cargo-deny 0.20.2` has executed successfully against this lockfile: advisories,
-licenses, sources, duplicate versions, and wildcards all pass. This checkpoint
+licenses, sources, the documented exact duplicate exception, and wildcards all
+pass. This checkpoint
 is suitable for cross-host differential development, **not yet a production
 dependency approval**. Before a production release we must:
 

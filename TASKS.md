@@ -68,6 +68,6 @@
 - [x] Migrate compatible persisted KV with synced same-directory replacement.
 - [x] Migrate the compatible content-addressed version store and rollback lifecycle.
 - [x] Migrate the bounded active-version HTTP host and test-gated Rust deployment command.
-- [ ] Migrate provider layers behind the same candidate boundary.
+- [x] Migrate OpenAI/DeepSeek provider parsing, bounded HTTPS transport, and explicit service evolution to Rust.
 - [x] Pass locked dependency advisories, bans, licenses, sources, and unsafe inventory audit.
 - [ ] Pass shadow-traffic, rollback, observability, backup, and release gates.

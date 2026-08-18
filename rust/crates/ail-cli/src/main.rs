@@ -8,6 +8,7 @@ use std::{
 
 use ail_conformance::run_manifest;
 use ail_diagnostic::{AilResult, Diagnostic};
+use ail_provider::{EvolutionProvider, EvolutionRequest, configured_live_provider};
 use ail_service::run_service_suite;
 use ail_store::{CandidateRegistration, VersionStore, run_version_scenario, source_hash};
 use ail_syntax::load_program_source;
@@ -64,6 +65,20 @@ fn run(arguments: Vec<String>) -> AilResult<Value> {
         [command, program_path, suite_path, store_path] if command == "deploy-service" => {
             deploy_service(program_path, suite_path, store_path)
         }
+        [command, store_path, suite_path] if command == "evolve-service" => {
+            let provider = configured_live_provider()?;
+            evolve_service_with_provider(store_path, suite_path, false, &provider)
+        }
+        [command, store_path, suite_path, option] if command == "evolve-service" => {
+            if option != "--promote" {
+                return Err(Diagnostic::simple(
+                    "CLI_INVALID_OPTION",
+                    "the only evolve-service option is --promote",
+                ));
+            }
+            let provider = configured_live_provider()?;
+            evolve_service_with_provider(store_path, suite_path, true, &provider)
+        }
         [command, initial_path, candidate_path] if command == "version-conformance" => {
             let report = run_version_scenario(initial_path, candidate_path)?;
             let passed = report.get("passed").and_then(Value::as_bool) == Some(true);
@@ -78,6 +93,7 @@ fn run(arguments: Vec<String>) -> AilResult<Value> {
                 "conformance <manifest.json>",
                 "test-service <program.ail> <scenarios.json>",
                 "deploy-service <program.ail> <scenarios.json> <code-store>",
+                "evolve-service <code-store> <scenarios.json> [--promote]",
                 "version-conformance <initial.ail> <candidate.ail>"
             ] }),
         )),
@@ -144,6 +160,67 @@ fn current_seconds() -> u64 {
         .map_or(0, |duration| duration.as_secs())
 }
 
+fn evolve_service_with_provider(
+    store_path: &str,
+    suite_path: &str,
+    promotion_requested: bool,
+    provider: &dyn EvolutionProvider,
+) -> AilResult<Value> {
+    let store = VersionStore::new(store_path);
+    let current_hash = store.active_hash()?.ok_or_else(|| {
+        Diagnostic::simple("VERSION_NO_ACTIVE", "version store has no active version")
+    })?;
+    let current_source = store.version_source(&current_hash)?;
+    let current_program = load_program_source(&current_source)?;
+    let current_report = run_service_suite(&current_program, suite_path)?;
+    let proposal = provider.propose(&EvolutionRequest {
+        current_hash: current_hash.clone(),
+        current_source,
+        observations: current_report.clone(),
+    })?;
+    let candidate_program = load_program_source(&proposal.source)?;
+    let candidate_report = run_service_suite(&candidate_program, suite_path)?;
+    let passed = candidate_report.get("passed").and_then(Value::as_bool) == Some(true);
+    let candidate_hash = source_hash(&proposal.source);
+    let already_active = candidate_hash == current_hash;
+    let registered = if already_active {
+        candidate_hash
+    } else {
+        store.register_candidate(CandidateRegistration {
+            source: &proposal.source,
+            parent: Some(&current_hash),
+            provider: proposal.provider,
+            provider_metadata: &proposal.metadata,
+            report: &candidate_report,
+            registered_at: current_seconds(),
+        })?
+    };
+    let promoted = if promotion_requested && passed && !already_active {
+        store.promote(&registered, current_seconds())?;
+        true
+    } else {
+        false
+    };
+    Ok(json!({
+        "ok": passed,
+        "store": store_path,
+        "current": {
+            "hash": current_hash,
+            "report": current_report,
+        },
+        "candidate": {
+            "hash": registered,
+            "provider": proposal.provider,
+            "notes": proposal.notes,
+            "report": candidate_report,
+            "alreadyActive": already_active,
+        },
+        "promotionRequested": promotion_requested,
+        "promoted": promoted,
+        "active": store.active_hash()?,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -153,6 +230,7 @@ mod tests {
     };
 
     use ail_diagnostic::{AilResult, Diagnostic};
+    use ail_provider::FileProvider;
     use serde_json::{Value, json};
 
     use super::run;
@@ -219,6 +297,58 @@ mod tests {
         assert_eq!(second["ok"], true);
         assert_eq!(second["promoted"], false);
         assert_eq!(second["alreadyActive"], true);
+    }
+
+    #[test]
+    fn service_evolution_registers_before_explicit_promotion() {
+        let temporary = TestDirectory::new();
+        let project_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let program = project_root.join("examples/tasks/service.ail");
+        let suite = project_root.join("examples/tasks/scenarios.json");
+        let store = temporary.path.join("code");
+        let deployed = run(vec![
+            "deploy-service".to_owned(),
+            program.display().to_string(),
+            suite.display().to_string(),
+            store.display().to_string(),
+        ])
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        let original = deployed["active"]
+            .as_str()
+            .unwrap_or_else(|| panic!("deployment must have an active hash"))
+            .to_owned();
+        let candidate_path = temporary.path.join("candidate.ail");
+        let candidate_source = format!(
+            "; candidate keeps behavior while exercising the evolution gate\n{}",
+            fs::read_to_string(&program)
+                .unwrap_or_else(|error| panic!("program read failed: {error}"))
+        );
+        fs::write(&candidate_path, candidate_source)
+            .unwrap_or_else(|error| panic!("candidate write failed: {error}"));
+        let provider = FileProvider::new(&candidate_path);
+
+        let staged = super::evolve_service_with_provider(
+            &store.display().to_string(),
+            &suite.display().to_string(),
+            false,
+            &provider,
+        )
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(staged["ok"], true);
+        assert_eq!(staged["promoted"], false);
+        assert_eq!(staged["active"], original);
+
+        let promoted = super::evolve_service_with_provider(
+            &store.display().to_string(),
+            &suite.display().to_string(),
+            true,
+            &provider,
+        )
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(promoted["ok"], true);
+        assert_eq!(promoted["promoted"], true);
+        assert_eq!(promoted["active"], promoted["candidate"]["hash"]);
+        assert_ne!(promoted["active"], original);
     }
 
     struct TestDirectory {

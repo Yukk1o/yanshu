@@ -72,6 +72,7 @@ const publishedFiles = [
   'rust/crates/ail-conformance/src/lib.rs',
   'rust/crates/ail-diagnostic/src/lib.rs',
   'rust/crates/ail-http/src/lib.rs',
+  'rust/crates/ail-provider/src/lib.rs',
   'rust/crates/ail-runtime/src/budget.rs',
   'rust/crates/ail-runtime/src/lib.rs',
   'rust/crates/ail-runtime/src/schema.rs',
