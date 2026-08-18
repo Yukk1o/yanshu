@@ -102,7 +102,8 @@
                     ", "))
            (hasheq 'error
                    (hasheq 'code "METHOD_NOT_ALLOWED"
-                           'message "method is not allowed for this path")))
+                           'message "method is not allowed for this path"
+                           'details (hasheq))))
           #f
           #f)
          (dispatch-result
@@ -111,7 +112,8 @@
            (hasheq 'content-type "application/json; charset=utf-8")
            (hasheq 'error
                    (hasheq 'code "ROUTE_NOT_FOUND"
-                           'message "no route matches the request")))
+                           'message "no route matches the request"
+                           'details (hasheq))))
           #f
           #f))]
     [else
@@ -249,7 +251,7 @@
     (hasheq 'error
             (hasheq 'code "INTERNAL_ERROR"
                     'message "request could not be completed"
-                    'requestId request-id)))
+                    'details (hasheq 'requestId request-id))))
    (hasheq 'requestId request-id
            'method (and (service-request? request)
                         (service-request-method request))

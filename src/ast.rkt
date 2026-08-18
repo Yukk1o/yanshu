@@ -2,6 +2,14 @@
 
 (provide (struct-out ail-program)
          (struct-out ail-route)
+         (struct-out ail-schema)
+         (struct-out schema-any)
+         (struct-out schema-string)
+         (struct-out schema-integer)
+         (struct-out schema-boolean)
+         (struct-out schema-list)
+         (struct-out schema-object)
+         (struct-out schema-field)
          (struct-out ail-definition)
          (struct-out ast-binding)
          (struct-out expr-lit)
@@ -13,12 +21,24 @@
          (struct-out expr-do)
          (struct-out expr-call)
          datum->portable-jsexpr
+         schema->jsexpr
          ast->jsexpr
          program->jsexpr)
 
-(struct ail-program (name version capabilities routes definitions exports source)
+(struct ail-program
+  (name version capabilities schemas routes definitions exports source)
   #:transparent)
 (struct ail-route (method path handler) #:transparent)
+(struct ail-schema (name specification) #:transparent)
+(struct schema-any () #:transparent)
+(struct schema-string (minimum-length maximum-length) #:transparent)
+(struct schema-integer (minimum maximum) #:transparent)
+(struct schema-boolean () #:transparent)
+(struct schema-list (item minimum-length maximum-length) #:transparent)
+(struct schema-object (fields) #:transparent)
+(struct schema-field
+  (name specification required? has-default? default)
+  #:transparent)
 (struct ail-definition (name expression) #:transparent)
 (struct ast-binding (name expression) #:transparent)
 
@@ -77,12 +97,51 @@
     [else
      (error 'ast->jsexpr "unknown AST node: ~s" expression)]))
 
+(define (schema->jsexpr specification)
+  (cond
+    [(schema-any? specification) (hasheq 'type "any")]
+    [(schema-string? specification)
+     (hasheq 'type "string"
+             'minimumLength (schema-string-minimum-length specification)
+             'maximumLength (or (schema-string-maximum-length specification) #f))]
+    [(schema-integer? specification)
+     (hasheq 'type "integer"
+             'minimum (or (schema-integer-minimum specification) #f)
+             'maximum (or (schema-integer-maximum specification) #f))]
+    [(schema-boolean? specification) (hasheq 'type "boolean")]
+    [(schema-list? specification)
+     (hasheq 'type "list"
+             'item (schema->jsexpr (schema-list-item specification))
+             'minimumLength (schema-list-minimum-length specification)
+             'maximumLength (schema-list-maximum-length specification))]
+    [(schema-object? specification)
+     (hasheq
+      'type "object"
+      'additionalProperties #f
+      'fields
+      (for/list ([field (in-list (schema-object-fields specification))])
+        (define document
+          (hasheq 'name (schema-field-name field)
+                  'required (schema-field-required? field)
+                  'schema (schema->jsexpr
+                           (schema-field-specification field))))
+        (if (schema-field-has-default? field)
+            (hash-set document
+                      'default
+                      (datum->portable-jsexpr (schema-field-default field)))
+            document)))]
+    [else (error 'schema->jsexpr "unknown schema node: ~s" specification)]))
+
 (define (program->jsexpr program)
   (hasheq
    'type "program"
    'name (symbol->string (ail-program-name program))
    'version (ail-program-version program)
    'capabilities (map symbol->string (ail-program-capabilities program))
+   'schemas
+   (for/list ([schema (in-list (ail-program-schemas program))])
+     (hasheq 'name (symbol->string (ail-schema-name schema))
+             'schema (schema->jsexpr (ail-schema-specification schema))))
    'routes
    (for/list ([route (in-list (ail-program-routes program))])
      (hasheq 'method (ail-route-method route)

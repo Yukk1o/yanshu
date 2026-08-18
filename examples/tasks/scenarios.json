@@ -8,7 +8,57 @@
       "body": "not-an-object",
       "expectStatus": 400,
       "expectBodyContains": {
-        "error": {"code": "INVALID_BODY"}
+        "error": {
+          "code": "VALIDATION_FAILED",
+          "details": [
+            {"path": "", "code": "SCHEMA_TYPE"}
+          ]
+        }
+      }
+    },
+    {
+      "name": "reject-missing-title",
+      "method": "POST",
+      "path": "/tasks",
+      "body": {"id": "missing-title"},
+      "expectStatus": 400,
+      "expectBodyContains": {
+        "error": {
+          "code": "VALIDATION_FAILED",
+          "details": [
+            {"path": "/title", "code": "SCHEMA_REQUIRED"}
+          ]
+        }
+      }
+    },
+    {
+      "name": "reject-empty-title",
+      "method": "POST",
+      "path": "/tasks",
+      "body": {"id": "empty-title", "title": ""},
+      "expectStatus": 400,
+      "expectBodyContains": {
+        "error": {
+          "code": "VALIDATION_FAILED",
+          "details": [
+            {"path": "/title", "code": "SCHEMA_MIN_LENGTH"}
+          ]
+        }
+      }
+    },
+    {
+      "name": "reject-additional-field",
+      "method": "POST",
+      "path": "/tasks",
+      "body": {"id": "extra", "title": "extra", "owner": "ambient"},
+      "expectStatus": 400,
+      "expectBodyContains": {
+        "error": {
+          "code": "VALIDATION_FAILED",
+          "details": [
+            {"path": "/owner", "code": "SCHEMA_ADDITIONAL_PROPERTY"}
+          ]
+        }
       }
     },
     {

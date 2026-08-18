@@ -1,0 +1,22 @@
+{
+  "name": "ai-evolve-wiki",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^18.0.0 || ^20.0.0 || >=22.0.0"
+  },
+  "scripts": {
+    "sync-source": "node scripts/sync-source.mjs",
+    "predev": "npm run sync-source",
+    "dev": "vitepress dev . --host 127.0.0.1",
+    "prebuild": "npm run sync-source",
+    "build": "vitepress build .",
+    "preview": "vitepress preview . --host 127.0.0.1"
+  },
+  "devDependencies": {
+    "vitepress": "1.6.4"
+  },
+  "overrides": {
+    "vite": "6.4.3"
+  }
+}

@@ -2,6 +2,7 @@
 
 (require json
          racket/file
+         racket/list
          racket/port
          racket/runtime-path
          racket/string
@@ -48,6 +49,19 @@
 
 (define (check-false actual [label "expected false"])
   (when actual (error 'check-false "~a" label)))
+
+(define (check-api-error-envelope body expected-code)
+  (unless (and (hash? body) (hash? (hash-ref body 'error #f)))
+    (error 'check-api-error-envelope "response has no error envelope: ~s" body))
+  (define public-error (hash-ref body 'error))
+  (check-equal (sort (hash-keys public-error) symbol<?)
+               '(code details message)
+               "error envelope fields differ")
+  (check-equal (hash-ref public-error 'code) expected-code)
+  (check-true (string? (hash-ref public-error 'message))
+              "error message is not a string")
+  (check-true (hash-has-key? public-error 'details)
+              "error details are missing"))
 
 (define (check-ail-code expected thunk)
   (define observed #f)
@@ -156,6 +170,112 @@
              "(def second-handler (fn (request) request)) "
              "(export first-handler second-handler))"))))))
 
+(define schema-program-source
+  (string-append
+   "(program (name schema-demo) (version 1) (capabilities) "
+   "(schema create-input "
+   "  (object "
+   "    (required \"id\" (string 1 8)) "
+   "    (required \"title\" (string 1 12)) "
+   "    (optional \"completed\" boolean #f))) "
+   "(schema integer-list (list (integer 0 9) 0 100)) "
+   "(def check (fn (value) (validate create-input value))) "
+   "(def check-list (fn (value) (validate integer-list value))) "
+   "(def fail (fn (details) "
+   "  (api-error 422 \"VALIDATION_FAILED\" \"input was rejected\" details))) "
+   "(export check check-list fail))"))
+
+(test "schemas are compiler-owned program metadata"
+      (lambda ()
+        (define program (load-program-source schema-program-source))
+        (check-equal (length (ail-program-schemas program)) 2)
+        (define inspected (program->jsexpr program))
+        (check-equal
+         (hash-ref (car (hash-ref inspected 'schemas)) 'name)
+         "create-input")
+        (check-equal
+         (hash-ref
+          (hash-ref (car (hash-ref inspected 'schemas)) 'schema)
+          'additionalProperties)
+         #f)))
+
+(test "schema validation normalizes defaults and returns bounded issues"
+      (lambda ()
+        (define program (load-program-source schema-program-source))
+        (define accepted
+          (execute-export program
+                          'check
+                          (list (hash "id" "a" "title" "ship"))))
+        (check-true (ok-value? accepted))
+        (check-equal
+         (ok-value-value accepted)
+         (hash "id" "a" "title" "ship" "completed" #f))
+        (define rejected
+          (execute-export
+           program
+           'check
+           (list (hash "id" "" "owner" "ambient"))))
+        (check-true (err-value? rejected))
+        (define issues (err-value-value rejected))
+        (check-equal (map (lambda (issue) (hash-ref issue "code")) issues)
+                     '("SCHEMA_MIN_LENGTH"
+                       "SCHEMA_REQUIRED"
+                       "SCHEMA_ADDITIONAL_PROPERTY"))
+        (check-equal (map (lambda (issue) (hash-ref issue "path")) issues)
+                     '("/id" "/title" "/owner"))
+        (define capped
+          (execute-export program
+                          'check-list
+                          (list (make-list 40 "not-an-integer"))))
+        (check-true (err-value? capped))
+        (define capped-issues (err-value-value capped))
+        (check-equal (length capped-issues) 32)
+        (check-equal (hash-ref (last capped-issues) "code")
+                     "SCHEMA_ISSUES_TRUNCATED")))
+
+(test "invalid schema defaults and reserved names fail during parsing"
+      (lambda ()
+        (check-ail-code
+         "PROGRAM_SCHEMA_INVALID_DEFAULT"
+         (lambda ()
+           (load-program-source
+            (string-append
+             "(program (name bad-default) (version 1) (capabilities) "
+             "(schema input (object (optional \"enabled\" boolean \"yes\"))) "
+             "(def run (fn () #t)) (export run))"))))
+        (check-ail-code
+         "PROGRAM_SCHEMA_RESERVED_NAME"
+         (lambda ()
+           (load-program-source
+            (string-append
+             "(program (name bad-name) (version 1) (capabilities) "
+             "(schema map string) "
+             "(def run (fn () #t)) (export run))"))))))
+
+(test "schema work consumes interpreter fuel"
+      (lambda ()
+        (define program (load-program-source schema-program-source))
+        (check-ail-code
+         "RUNTIME_FUEL_EXHAUSTED"
+         (lambda ()
+           (execute-export program
+                           'check-list
+                           (list (make-list 50 1))
+                           #:fuel 20)))))
+
+(test "API error constructor produces one stable public envelope"
+      (lambda ()
+        (define program (load-program-source schema-program-source))
+        (define response
+          (execute-export program 'fail (list (list (hash "path" "/id")))))
+        (check-equal (hash-ref response "status") 422)
+        (check-equal (hash-ref response "headers") (hash))
+        (define error-body (hash-ref (hash-ref response "body") "error"))
+        (check-equal (hash-ref error-body "code") "VALIDATION_FAILED")
+        (check-equal (hash-ref error-body "message") "input was rejected")
+        (check-equal (hash-ref error-body "details")
+                     (list (hash "path" "/id")))))
+
 (test "declared host capabilities are injected without ambient authority"
       (lambda ()
         (define program
@@ -260,6 +380,12 @@
         (check-equal
          (service-response-status (dispatch-result-response result))
          500)
+        (define public-body
+          (service-response-body (dispatch-result-response result)))
+        (check-api-error-envelope public-body "INTERNAL_ERROR")
+        (check-equal
+         (hash-ref (hash-ref (hash-ref public-body 'error) 'details) 'requestId)
+         (hash-ref (dispatch-result-diagnostic result) 'requestId))
         (check-true (dispatch-result-diagnostic result))
         (check-false
          (hash-has-key? (kv-store-snapshot store) "task/should-rollback"))))
@@ -416,6 +542,7 @@
             (check-equal
              (hash-ref (hash-ref body 'error) 'code)
              "HTTP_INVALID_JSON")
+            (check-api-error-envelope body "HTTP_INVALID_JSON")
             (check-equal (hash-count (kv-store-snapshot store)) 0))
           (lambda () (stop-http-server! server)))))
 
@@ -464,9 +591,12 @@
                 (define-values (invalid-status invalid-body)
                   (send-http-request port "POST" "/tasks" "\"not-an-object\""))
                 (check-equal invalid-status 400)
-                (check-equal
-                 (hash-ref (hash-ref invalid-body 'error) 'code)
-                 "INVALID_BODY")
+                (check-api-error-envelope invalid-body "VALIDATION_FAILED")
+                (define invalid-details
+                  (hash-ref (hash-ref invalid-body 'error) 'details))
+                (check-equal (hash-ref (car invalid-details) 'path) "")
+                (check-equal (hash-ref (car invalid-details) 'code)
+                             "SCHEMA_TYPE")
                 (define-values (created-status created)
                   (send-http-request
                    port
@@ -510,9 +640,7 @@
                 (define-values (method-status method-body)
                   (send-http-request port "PATCH" "/tasks/business-1" (hasheq)))
                 (check-equal method-status 405)
-                (check-equal
-                 (hash-ref (hash-ref method-body 'error) 'code)
-                 "METHOD_NOT_ALLOWED")
+                (check-api-error-envelope method-body "METHOD_NOT_ALLOWED")
                 (define-values (delete-status deleted)
                   (send-http-request port "DELETE" "/tasks/business-1"))
                 (check-equal delete-status 200)
@@ -520,9 +648,7 @@
                 (define-values (missing-status missing)
                   (send-http-request port "GET" "/tasks/business-1"))
                 (check-equal missing-status 404)
-                (check-equal
-                 (hash-ref (hash-ref missing 'error) 'code)
-                 "TASK_NOT_FOUND"))
+                (check-api-error-envelope missing "TASK_NOT_FOUND"))
               (lambda () (stop-http-server! second-server))))
           (lambda () (delete-directory/files directory)))))
 
@@ -535,11 +661,11 @@
         (define passing-report
           (run-service-test-suite (load-program-source source) suite))
         (check-true (hash-ref passing-report 'passed))
-        (check-equal (hash-ref passing-report 'total) 8)
+        (check-equal (hash-ref passing-report 'total) 11)
         (define broken-source
           (string-replace source
-                          "(response 201 task)"
-                          "(response 200 task)"))
+                          "(api-response 201 task)"
+                          "(api-response 200 task)"))
         (define failing-report
           (run-service-test-suite (load-program-source broken-source) suite))
         (check-false (hash-ref failing-report 'passed))
@@ -563,14 +689,14 @@
             (define loader (make-active-program-loader directory))
             (check-equal (ail-program-name (loader)) 'task-service)
             (define upgraded-source
-              (string-replace source "(version 1)" "(version 2)"))
+              (string-replace source "(version 2)" "(version 3)"))
             (define upgraded (deploy-service! upgraded-source suite directory))
             (check-true (hash-ref upgraded 'promoted))
-            (check-equal (ail-program-version (loader)) 2)
+            (check-equal (ail-program-version (loader)) 3)
             (define broken-source
               (string-replace upgraded-source
-                              "(response 201 task)"
-                              "(response 200 task)"))
+                              "(api-response 201 task)"
+                              "(api-response 200 task)"))
             (define rejected (deploy-service! broken-source suite directory))
             (check-false (hash-ref rejected 'ok))
             (check-false (hash-ref rejected 'promoted))
@@ -587,8 +713,8 @@
             (define source (file->string task-example-path))
             (define broken-source
               (string-replace source
-                              "(response 201 task)"
-                              "(response 200 task)"))
+                              "(api-response 201 task)"
+                              "(api-response 200 task)"))
             (define broken-hash
               (register-candidate! directory
                                    broken-source
@@ -609,7 +735,7 @@
             (check-equal (active-hash directory) (source-hash source))
             (check-equal
              (hash-ref (hash-ref (hash-ref result 'candidate) 'report) 'total)
-             8))
+             11))
           (lambda () (delete-directory/files directory)))))
 
 (test "concurrent HTTP writes preserve every committed task"
@@ -834,6 +960,11 @@
                 (hash-ref captured 'headers)))
         (define body (hash-ref captured 'body))
         (check-false (hash-ref body 'store))
+        (check-true
+         (string-contains? (hash-ref body 'instructions)
+                           "(schema NAME SCHEMA)"))
+        (check-true
+         (string-contains? (hash-ref body 'instructions) "api-error"))
         (check-equal (hash-ref captured 'timeout) 17)
         (check-equal
          (hash-ref (hash-ref (hash-ref body 'text) 'format) 'type)
@@ -895,6 +1026,10 @@
                      "json_object")
         (check-equal (hash-ref (hash-ref body 'thinking) 'type) "enabled")
         (check-equal (length (hash-ref body 'messages)) 2)
+        (check-true
+         (string-contains?
+          (hash-ref (car (hash-ref body 'messages)) 'content)
+          "(schema NAME SCHEMA)"))
         (check-equal (evolution-proposal-source proposal) candidate-source)
         (check-equal (evolution-proposal-provider proposal) "deepseek-chat")
         (check-equal

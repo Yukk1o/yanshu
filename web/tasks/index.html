@@ -33,7 +33,7 @@
           <h1 id="page-title">把计划写进<br><em>运行中的语言。</em></h1>
           <p>
             这不是静态原型。你在这里创建、修改和删除的每一项任务，
-            都会经过 AI-Evolve 解释器、事务 KV 和真实 HTTP 路由。
+            都会经过编译器 Schema、AI-Evolve 解释器、事务 KV 和真实 HTTP 路由。
           </p>
         </div>
         <div class="hero-index" aria-hidden="true">01</div>
@@ -66,7 +66,7 @@
                   <span aria-hidden="true">↗</span>
                 </button>
               </div>
-              <p class="form-hint">回车即可创建；数据会持久化到本地 JSON KV。</p>
+              <p class="form-hint">回车后先通过 Schema 校验，再持久化到本地 JSON KV。</p>
             </form>
           </section>
 
@@ -130,6 +130,7 @@
             </div>
             <dl>
               <div><dt>语言</dt><dd>AI-Evolve Lisp</dd></div>
+              <div><dt>校验</dt><dd>Compiler Schema</dd></div>
               <div><dt>接口</dt><dd>JSON / HTTP 1.1</dd></div>
               <div><dt>状态</dt><dd>Transactional KV</dd></div>
               <div><dt>版本</dt><dd>Request-pinned</dd></div>

@@ -1,7 +1,18 @@
 (program
   (name task-service)
-  (version 1)
+  (version 2)
   (capabilities kv clock log)
+
+  (schema task-create
+    (object
+      (required "id" (string 1 64))
+      (required "title" (string 1 120))
+      (optional "completed" boolean #f)))
+
+  (schema task-update
+    (object
+      (optional "title" (string 1 120))
+      (optional "completed" boolean)))
 
   (route GET "/tasks" list-tasks)
   (route POST "/tasks" create-task)
@@ -9,61 +20,43 @@
   (route PUT "/tasks/:id" update-task)
   (route DELETE "/tasks/:id" delete-task)
 
-  (def response
-    (fn (status body)
-      (map "status" status
-           "headers" (map)
-           "body" body)))
-
-  (def error-response
-    (fn (status code message)
-      (response status
-                (map "error"
-                     (map "code" code "message" message)))))
-
   (def list-tasks
     (fn (request)
-      (response 200 (kv-list "task/"))))
+      (api-response 200 (kv-list "task/"))))
 
   (def get-task
     (fn (request)
       (let ((id (get (get request "params") "id"))
             (task (kv-get (string-append "task/" id) #f)))
         (if task
-            (response 200 task)
-            (error-response 404 "TASK_NOT_FOUND" "task does not exist")))))
+            (api-response 200 task)
+            (api-error 404 "TASK_NOT_FOUND" "task does not exist")))))
 
   (def create-task
     (fn (request)
-      (let ((body (get request "body")))
-        (if (map? body)
-            (if (has-key? body "id")
-                (if (has-key? body "title")
-                    (let ((id (get body "id"))
-                          (title (get body "title"))
-                          (completed (get-or body "completed" #f)))
-                      (if (string? id)
-                          (if (string? title)
-                              (if (boolean? completed)
-                                  (let ((key (string-append "task/" id))
-                                        (existing (kv-get key #f)))
-                                    (if existing
-                                        (error-response 409 "TASK_EXISTS" "task id already exists")
-                                        (let ((now (now-ms))
-                                              (task (map "id" id
-                                                         "title" title
-                                                         "completed" completed
-                                                         "createdAt" now
-                                                         "updatedAt" now)))
-                                          (do (kv-put key task)
-                                              (log (map "event" "task-created" "id" id))
-                                              (response 201 task)))))
-                                  (error-response 400 "INVALID_COMPLETED" "completed must be boolean"))
-                              (error-response 400 "INVALID_TITLE" "title must be string"))
-                          (error-response 400 "INVALID_ID" "id must be string")))
-                    (error-response 400 "MISSING_TITLE" "title is required"))
-                (error-response 400 "MISSING_ID" "id is required"))
-            (error-response 400 "INVALID_BODY" "body must be a JSON object")))))
+      (let ((validated (validate task-create (get request "body"))))
+        (if (ok? validated)
+            (let ((body (result-value validated))
+                  (id (get body "id"))
+                  (title (get body "title"))
+                  (completed (get body "completed"))
+                  (key (string-append "task/" id))
+                  (existing (kv-get key #f)))
+              (if existing
+                  (api-error 409 "TASK_EXISTS" "task id already exists")
+                  (let ((now (now-ms))
+                        (task (map "id" id
+                                   "title" title
+                                   "completed" completed
+                                   "createdAt" now
+                                   "updatedAt" now)))
+                    (do (kv-put key task)
+                        (log (map "event" "task-created" "id" id))
+                        (api-response 201 task)))))
+            (api-error 400
+                       "VALIDATION_FAILED"
+                       "request body failed schema validation"
+                       (result-value validated))))))
 
   (def update-task
     (fn (request)
@@ -72,23 +65,24 @@
             (existing (kv-get key #f))
             (body (get request "body")))
         (if existing
-            (if (map? body)
-                (let ((title (get-or body "title" (get existing "title")))
-                      (completed (get-or body "completed" (get existing "completed"))))
-                  (if (string? title)
-                      (if (boolean? completed)
-                          (let ((updated (map "id" id
-                                              "title" title
-                                              "completed" completed
-                                              "createdAt" (get existing "createdAt")
-                                              "updatedAt" (now-ms))))
-                            (do (kv-put key updated)
-                                (log (map "event" "task-updated" "id" id))
-                                (response 200 updated)))
-                          (error-response 400 "INVALID_COMPLETED" "completed must be boolean"))
-                      (error-response 400 "INVALID_TITLE" "title must be string")))
-                (error-response 400 "INVALID_BODY" "body must be a JSON object"))
-            (error-response 404 "TASK_NOT_FOUND" "task does not exist")))))
+            (let ((validated (validate task-update body)))
+              (if (ok? validated)
+                (let ((normalized (result-value validated))
+                      (title (get-or normalized "title" (get existing "title")))
+                      (completed (get-or normalized "completed" (get existing "completed")))
+                      (updated (map "id" id
+                                    "title" title
+                                    "completed" completed
+                                    "createdAt" (get existing "createdAt")
+                                    "updatedAt" (now-ms))))
+                  (do (kv-put key updated)
+                      (log (map "event" "task-updated" "id" id))
+                      (api-response 200 updated)))
+                (api-error 400
+                           "VALIDATION_FAILED"
+                           "request body failed schema validation"
+                           (result-value validated))))
+            (api-error 404 "TASK_NOT_FOUND" "task does not exist")))))
 
   (def delete-task
     (fn (request)
@@ -98,7 +92,7 @@
         (if existing
             (do (kv-delete key)
                 (log (map "event" "task-deleted" "id" id))
-                (response 200 existing))
-            (error-response 404 "TASK_NOT_FOUND" "task does not exist")))))
+                (api-response 200 existing))
+            (api-error 404 "TASK_NOT_FOUND" "task does not exist")))))
 
   (export list-tasks create-task get-task update-task delete-task))

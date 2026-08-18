@@ -31,3 +31,15 @@
 - [x] Pin the active program once per request and support explicit rollback.
 - [x] Add a responsive same-origin browser console for end-to-end testing.
 - [x] Verify malformed input, rollback, concurrency, restart persistence, and hot version selection.
+
+## Change: business-backend-v0.3
+
+- [x] Define a bounded compiler-owned Schema grammar.
+- [x] Parse schemas into typed AST nodes and expose them through inspection.
+- [x] Return normalized `Ok` values or bounded structured `Err` issues.
+- [x] Charge recursive validation work against interpreter fuel.
+- [x] Add uniform `api-response` and `api-error` constructors.
+- [x] Migrate task create/update handlers away from manual type branches.
+- [x] Expand the stateful business suite from 8 to 11 scenarios.
+- [x] Teach OpenAI and DeepSeek providers the schema and API contracts.
+- [x] Verify the v0.3 envelope over real HTTP.
