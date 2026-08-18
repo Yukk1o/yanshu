@@ -138,7 +138,8 @@
             (hasheq 'content-type "application/json; charset=utf-8")
             (hasheq 'error
                     (hasheq 'code "INTERNAL_ERROR"
-                            'message "request could not be completed")))))])
+                            'message "request could not be completed"
+                            'details (hasheq))))))])
     (define request
       (read-http-request input
                          deadline
@@ -248,7 +249,8 @@
        (hasheq 'content-type "application/json; charset=utf-8")
        (hasheq 'error
                (hasheq 'code "GATEWAY_TIMEOUT"
-                       'message "handler exceeded its execution deadline")))
+                       'message "handler exceeded its execution deadline"
+                       'details (hasheq))))
       (hasheq 'error
               (hasheq 'code "SERVICE_HANDLER_TIMEOUT"
                       'message "handler exceeded its execution deadline"
@@ -457,7 +459,8 @@
    (hasheq 'content-type "application/json; charset=utf-8")
    (hasheq 'error
            (hasheq 'code code
-                   'message (exn-message error)))))
+                   'message (exn-message error)
+                   'details (hasheq)))))
 
 (define (write-http-response output response)
   (define response-body (service-response-body response))

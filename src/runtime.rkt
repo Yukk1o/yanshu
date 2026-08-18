@@ -6,7 +6,8 @@
          "ast.rkt"
          "error.rkt"
          "parser.rkt"
-         "reader.rkt")
+         "reader.rkt"
+         "schema.rkt")
 
 (provide (struct-out ok-value)
          (struct-out err-value)
@@ -23,6 +24,7 @@
 (struct execution-context (fuel maximum-depth logger) #:mutable #:transparent)
 (struct ok-value (value) #:transparent)
 (struct err-value (value) #:transparent)
+(struct schema-value (name specification) #:transparent)
 (struct capability-primitive (minimum-arity maximum-arity implementation)
   #:transparent)
 
@@ -55,6 +57,12 @@
                          (ail-program-capabilities program)
                          context
                          capability-bindings)
+  (for ([schema (in-list (ail-program-schemas program))])
+    (environment-define!
+     module-environment
+     (ail-schema-name schema)
+     (schema-value (ail-schema-name schema)
+                   (ail-schema-specification schema))))
   (for ([definition (in-list (ail-program-definitions program))])
     (environment-define!
      module-environment
@@ -286,6 +294,20 @@
              (expect-map-key 'assoc key)
              (hash-set mapping key (caddr arguments))))
 
+  (install 'validate 2 2
+           (lambda (arguments runtime-context)
+             (define selected (car arguments))
+             (unless (schema-value? selected)
+               (raise-type-error 'validate "Schema" selected))
+             (define validation
+               (validate-schema
+                (schema-value-specification selected)
+                (cadr arguments)
+                #:step (lambda () (consume-fuel! runtime-context))))
+             (if (schema-validation-valid? validation)
+                 (ok-value (schema-validation-value validation))
+                 (err-value (schema-validation-issues validation)))))
+
   (install 'ok 1 1
            (lambda (arguments _context) (ok-value (car arguments))))
   (install 'err 1 1
@@ -294,6 +316,13 @@
            (lambda (arguments _context) (ok-value? (car arguments))))
   (install 'err? 1 1
            (lambda (arguments _context) (err-value? (car arguments))))
+  (install 'result-value 1 1
+           (lambda (arguments _context)
+             (define value (car arguments))
+             (cond
+               [(ok-value? value) (ok-value-value value)]
+               [(err-value? value) (err-value-value value)]
+               [else (raise-type-error 'result-value "Result" value)])))
   (install 'unwrap 1 1
            (lambda (arguments _context)
              (define value (car arguments))
@@ -306,6 +335,35 @@
                                    (value->jsexpr (err-value-value value))))]
                [else
                 (raise-type-error 'unwrap "Result" value)])))
+  (install 'api-response 2 2
+           (lambda (arguments _context)
+             (define status (expect-http-status 'api-response (car arguments) 100))
+             (hash "status" status
+                   "headers" (hash)
+                   "body" (cadr arguments))))
+  (install 'api-error 3 4
+           (lambda (arguments _context)
+             (define status (expect-http-status 'api-error (car arguments) 400))
+             (define code (cadr arguments))
+             (define message (caddr arguments))
+             (unless (and (string? code)
+                          (<= 1 (string-length code) 128)
+                          (regexp-match? #px"^[A-Z][A-Z0-9_]*$" code))
+               (raise-ail "RUNTIME_INVALID_API_ERROR"
+                          "api-error code must be a bounded uppercase identifier"))
+             (unless (and (string? message)
+                          (<= 1 (string-length message) 512))
+               (raise-ail "RUNTIME_INVALID_API_ERROR"
+                          "api-error message must be a non-empty bounded string"))
+             (define details
+               (if (= (length arguments) 4) (cadddr arguments) (hash)))
+             (hash "status" status
+                   "headers" (hash)
+                   "body"
+                   (hash "error"
+                         (hash "code" code
+                               "message" message
+                               "details" details)))))
   base)
 
 (define (install-capabilities! target capabilities context bindings)
@@ -425,6 +483,17 @@
     (raise-type-error operation "String or Symbol key" value))
   value)
 
+(define (expect-http-status operation value minimum)
+  (unless (and (exact-integer? value) (<= minimum value 599))
+    (raise-ail "RUNTIME_INVALID_HTTP_STATUS"
+               "HTTP response status is outside the allowed range"
+               (hasheq 'operation (symbol->string operation)
+                       'minimum minimum
+                       'actual (if (exact-integer? value)
+                                   value
+                                   (value-kind value)))))
+  value)
+
 (define (raise-type-error operation expected value)
   (raise-ail "RUNTIME_TYPE"
              "primitive received a value of the wrong type"
@@ -445,6 +514,7 @@
     [(hash? value) "Map"]
     [(ok-value? value) "Ok"]
     [(err-value? value) "Err"]
+    [(schema-value? value) "Schema"]
     [(closure? value) "Function"]
     [(primitive? value) "Primitive"]
     [else "Unknown"] ))
