@@ -13,7 +13,8 @@ Current line of development:
 ```text
 main (v0.1.0)
   └─ develop
-       └─ feature/web-backend-runtime
+       ├─ feature/web-backend-runtime (merged as v0.2 checkpoint)
+       └─ feature/business-backend-v0.3
 ```
 
 ## Merge policy

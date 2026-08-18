@@ -25,7 +25,7 @@ Racket `eval`。
 JSON KV；关闭后再次启动，任务仍然存在。端口可在启动前通过
 `$env:AI_EVOLVE_HTTP_PORT="9000"` 修改。
 
-启动脚本会先运行 [8 个有状态业务场景](examples/tasks/scenarios.json)，通过后
+启动脚本会先运行 [11 个有状态业务场景](examples/tasks/scenarios.json)，通过后
 才把 [任务服务](examples/tasks/service.ail) 提升为活动版本。HTTP 请求在开始时
 固定源码版本，因此运行中提升新版本不会改变正在处理的请求。
 
@@ -111,6 +111,21 @@ Responses API 的请求结构参见
 字符串、布尔、符号、列表、Map、`Ok`/`Err`。Web 程序可声明静态
 `route`，处理器接收请求 Map 并返回结构化响应 Map。只有 `#f` 为假。
 
+业务输入可以声明为编译器持有的 Schema：
+
+```lisp
+(schema task-create
+  (object
+    (required "id" (string 1 64))
+    (required "title" (string 1 120))
+    (optional "completed" boolean #f)))
+```
+
+`validate` 返回 `Ok` 或包含稳定问题列表的 `Err`；Schema 会拒绝额外字段、
+补入默认值并消耗解释器 fuel。`api-response` 和 `api-error` 用于生成统一 HTTP
+响应。完整语义见
+[Business Backend Specification v0.3](docs/business-backend-v0.3.md)。
+
 解释执行具有 fuel 和调用深度限制。客体默认没有文件、网络或数据库访问；
 `log`、事务 `kv` 和 `clock` 都必须显式声明并由宿主注入。
 
@@ -121,6 +136,7 @@ docs/                    v0.1 提案、设计与语言规格
 src/reader.rkt           安全读取和源码规模限制
 src/parser.rkt           S 表达式到独立 AST
 src/runtime.rkt          受限树遍历解释器
+src/schema.rkt           有边界的声明式业务数据校验
 src/test-suite.rkt       JSON 回归测试协议
 src/service.rkt          路由匹配、响应契约和能力注入
 src/kv-store.rkt         内存/文件事务 JSON KV
