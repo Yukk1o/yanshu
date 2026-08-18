@@ -1,0 +1,15 @@
+[package]
+name = "ail-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ail-diagnostic = { path = "../ail-diagnostic", version = "=0.5.0" }
+ail-syntax = { path = "../ail-syntax", version = "=0.5.0" }
+serde_json.workspace = true

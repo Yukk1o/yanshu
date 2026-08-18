@@ -60,8 +60,8 @@
 
 - [x] Freeze a host-neutral v1 conformance manifest and portable value codec.
 - [x] Make the Racket oracle execute the manifest through the public CLI.
-- [ ] Establish a Rust workspace whose first-party crates forbid unsafe code.
-- [ ] Implement Rust diagnostics, Reader, source spans, AST, and program parser.
+- [x] Establish a Rust workspace whose first-party crates forbid unsafe code.
+- [x] Implement Rust diagnostics, Reader, source spans, AST, and program parser.
 - [ ] Implement the bounded Rust evaluator and `text@1` Library Backend.
 - [ ] Run Racket and Rust against the same canonical fixtures with zero differences.
 - [ ] Migrate schema, service, store, HTTP, version, and provider layers in stages.

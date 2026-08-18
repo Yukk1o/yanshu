@@ -10,6 +10,9 @@ const outputRoot = join(wikiRoot, 'public', 'source')
 // Keeping the list explicit prevents the documentation build from publishing
 // credentials, runtime data, or unrelated workspace files.
 const publishedFiles = [
+  'Cargo.lock',
+  'Cargo.toml',
+  'deny.toml',
   'README.md',
   'TASKS.md',
   'conformance/v1/invalid/multiple-forms.ail',
@@ -25,6 +28,7 @@ const publishedFiles = [
   'docs/library-backend-v0.4.md',
   'docs/live-provider.md',
   'docs/rust-safety-policy.md',
+  'docs/rust-dependency-audit.md',
   'docs/spec-v0.1.md',
   'docs/web-backend-v0.2.md',
   'examples/discount/tests.json',
@@ -35,6 +39,9 @@ const publishedFiles = [
   'examples/tasks/scenarios.json',
   'examples/tasks/service.ail',
   'scripts/bootstrap.ps1',
+  'scripts/audit-rust.ps1',
+  'scripts/check-rust.ps1',
+  'scripts/diff-frontends.ps1',
   'scripts/serve-tasks.ps1',
   'scripts/test.ps1',
   'src/ast.rkt',
@@ -57,7 +64,13 @@ const publishedFiles = [
   'src/service.rkt',
   'src/test-suite.rkt',
   'src/version-store.rkt',
-  'tests/all.rkt'
+  'tests/all.rkt',
+  'rust/crates/ail-cli/src/main.rs',
+  'rust/crates/ail-diagnostic/src/lib.rs',
+  'rust/crates/ail-syntax/src/ast.rs',
+  'rust/crates/ail-syntax/src/lib.rs',
+  'rust/crates/ail-syntax/src/parser.rs',
+  'rust/crates/ail-syntax/src/reader.rs'
 ]
 
 // The mirror is generated output under wiki/public only. Recreate it so files

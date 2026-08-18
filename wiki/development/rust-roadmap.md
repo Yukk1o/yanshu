@@ -146,6 +146,13 @@ v1 manifest、portable value codec 和 Racket runner 已位于
 
 ## 阶段 1：Reader + AST + Parser
 
+::: tip 已落地第一版
+Rust workspace 已包含 `ail-diagnostic`、`ail-syntax` 与只读 `ail-cli`。三个
+conformance program 的完整 inspect JSON，以及两个无效输入的 diagnostic，均已通过
+Racket/Rust 精确差分。运行 `scripts/check-rust.ps1` 可同时检查格式、测试、Clippy、
+unsafe 门禁与前端差分。
+:::
+
 先实现纯前端：`.ail source → Program AST / Diagnostic`，输出与 `cli inspect` 可比较的 JSON。
 
 注意：不能直接选择功能完整的通用 Scheme reader，然后暴露项目没定义的 datum。字符串、整数、布尔、符号、proper list 和源大小限制需要明确。

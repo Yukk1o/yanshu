@@ -1,0 +1,29 @@
+[workspace]
+resolver = "3"
+members = [
+  "rust/crates/ail-diagnostic",
+  "rust/crates/ail-syntax",
+  "rust/crates/ail-cli",
+]
+
+[workspace.package]
+version = "0.5.0"
+edition = "2024"
+rust-version = "1.97"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace.dependencies]
+num-bigint = "0.4"
+num-traits = "0.2"
+serde_json = { version = "1.0", features = ["arbitrary_precision"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
