@@ -81,6 +81,10 @@ external package. It reuses the locked `sha2` implementation, standard-library
 exclusive file locks, `create_new` writes, bounded directory traversal, and the
 existing semantic validators. Restore has no overwrite flag.
 
+`ail-rollout` also adds no external package. Deterministic sampling and redacted
+body/header fingerprints reuse the locked `sha2`; candidate execution reuses the
+existing bounded interpreter and an isolated in-memory KV snapshot.
+
 The version store uses the ecosystem implementation instead of a handwritten
 SHA-256 primitive. `sha2` is exact-pinned to 0.11.0, its unused `alloc` and
 `oid` defaults are disabled, and `.cargo/config.toml` selects the documented

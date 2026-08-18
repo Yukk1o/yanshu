@@ -1,5 +1,9 @@
 #![forbid(unsafe_code)]
 
+mod shadow;
+
+pub use shadow::ShadowControls;
+
 use std::{
     collections::BTreeMap,
     fs::{File, OpenOptions},
@@ -127,6 +131,7 @@ struct HttpState {
     config: HttpConfig,
     authentication: Option<Arc<BearerAuth>>,
     observations: Option<Arc<dyn ObservationSink>>,
+    shadow: Option<ShadowControls>,
 }
 
 pub struct BearerAuth {
@@ -258,6 +263,17 @@ pub fn build_router_with_controls(
     authentication: Option<BearerAuth>,
     observations: Option<Arc<dyn ObservationSink>>,
 ) -> AilResult<Router> {
+    build_router_with_runtime_controls(loader, store, config, authentication, observations, None)
+}
+
+pub fn build_router_with_runtime_controls(
+    loader: Arc<dyn ProgramLoader>,
+    store: FileKvStore,
+    config: HttpConfig,
+    authentication: Option<BearerAuth>,
+    observations: Option<Arc<dyn ObservationSink>>,
+    shadow: Option<ShadowControls>,
+) -> AilResult<Router> {
     validate_config(&config)?;
     let state = HttpState {
         loader,
@@ -266,6 +282,7 @@ pub fn build_router_with_controls(
         config,
         authentication: authentication.map(Arc::new),
         observations,
+        shadow,
     };
     Ok(Router::new().fallback(dispatch).with_state(state))
 }
@@ -294,9 +311,27 @@ pub fn build_active_router_with_controls(
     authentication: Option<BearerAuth>,
     observations: Option<Arc<dyn ObservationSink>>,
 ) -> AilResult<Router> {
+    build_active_router_with_runtime_controls(
+        code_store,
+        data_store,
+        config,
+        authentication,
+        observations,
+        None,
+    )
+}
+
+pub fn build_active_router_with_runtime_controls(
+    code_store: impl AsRef<Path>,
+    data_store: impl AsRef<Path>,
+    config: HttpConfig,
+    authentication: Option<BearerAuth>,
+    observations: Option<Arc<dyn ObservationSink>>,
+    shadow: Option<ShadowControls>,
+) -> AilResult<Router> {
     let loader: Arc<dyn ProgramLoader> = Arc::new(ActiveVersionLoader::new(code_store));
     let store = FileKvStore::open(data_store)?;
-    build_router_with_controls(loader, store, config, authentication, observations)
+    build_router_with_runtime_controls(loader, store, config, authentication, observations, shadow)
 }
 
 pub async fn serve_with_shutdown<Shutdown>(
@@ -359,6 +394,7 @@ enum ExecutionOutcome {
     Completed {
         result: DispatchResult,
         version: Option<String>,
+        shadow: Option<Box<shadow::ShadowJob>>,
     },
     Failed {
         diagnostic: Diagnostic,
@@ -416,13 +452,22 @@ async fn dispatch_identified(
     })
     .await;
     match result {
-        Ok(ExecutionOutcome::Completed { result, version }) => dispatch_response(
+        Ok(ExecutionOutcome::Completed {
             result,
-            method_is_head,
-            state.config.maximum_response_bytes,
-            request_id,
             version,
-        ),
+            shadow,
+        }) => {
+            if let Some(shadow) = shadow {
+                shadow::launch(shadow);
+            }
+            dispatch_response(
+                result,
+                method_is_head,
+                state.config.maximum_response_bytes,
+                request_id,
+                version,
+            )
+        }
         Ok(ExecutionOutcome::Failed {
             diagnostic,
             version,
@@ -461,6 +506,17 @@ fn execute_request(
             };
         }
     };
+    let shadow_admission = state
+        .shadow
+        .as_ref()
+        .map_or(shadow::Admission::NotSelected, |controls| {
+            controls.admit(request_id)
+        });
+    shadow_admission.record_capacity_skip(
+        timestamp_milliseconds(),
+        request_id,
+        loaded.version.clone(),
+    );
     let mut store = match state.store.lock() {
         Ok(store) => store,
         Err(_) => {
@@ -473,15 +529,30 @@ fn execute_request(
             };
         }
     };
+    let shadow_store = shadow_admission.is_admitted().then(|| store.snapshot());
+    let clock_milliseconds = current_milliseconds();
+    let result = handle_file_service_request_with_id(
+        &loaded.program,
+        request,
+        &mut store,
+        &clock_milliseconds,
+        request_id,
+    );
+    let shadow = shadow_admission.into_job(
+        shadow_store,
+        shadow::JobContext {
+            request: request.clone(),
+            request_id: request_id.to_owned(),
+            clock_milliseconds,
+            active_version: loaded.version.clone(),
+            active_result: result.clone(),
+            timestamp_ms: timestamp_milliseconds(),
+        },
+    );
     ExecutionOutcome::Completed {
-        result: handle_file_service_request_with_id(
-            &loaded.program,
-            request,
-            &mut store,
-            &current_milliseconds(),
-            request_id,
-        ),
+        result,
         version: loaded.version,
+        shadow,
     }
 }
 
@@ -916,10 +987,13 @@ mod tests {
         fs,
         path::PathBuf,
         sync::Arc,
-        time::{SystemTime, UNIX_EPOCH},
+        time::{Duration, SystemTime, UNIX_EPOCH},
     };
 
     use ail_diagnostic::AilResult;
+    use ail_rollout::{
+        JsonlShadowObservationSink, ShadowObservationSink, ShadowPolicy, ShadowRuntime,
+    };
     use ail_store::{CandidateRegistration, VersionStore};
     use axum::{
         Router,
@@ -940,8 +1014,9 @@ mod tests {
 
     use super::{
         BearerAuth, FixedProgramLoader, HttpConfig, JsonlObservationSink, ObservationSink,
-        ProgramLoader, build_active_router, build_active_router_with_controls, build_router,
-        build_router_with_auth, build_router_with_controls, serve_with_shutdown,
+        ProgramLoader, ShadowControls, build_active_router, build_active_router_with_controls,
+        build_active_router_with_runtime_controls, build_router, build_router_with_auth,
+        build_router_with_controls, serve_with_shutdown,
     };
 
     const TASK_SERVICE: &str = include_str!("../../../../examples/tasks/service.ail");
@@ -997,6 +1072,18 @@ mod tests {
         let body = serde_json::from_slice(&bytes)
             .unwrap_or_else(|error| panic!("response JSON failed: {error}"));
         (status, body)
+    }
+
+    async fn wait_for_nonempty_file(path: &std::path::Path) -> String {
+        for _attempt in 0..200 {
+            if let Ok(source) = fs::read_to_string(path)
+                && !source.trim().is_empty()
+            {
+                return source;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        panic!("timed out waiting for {}", path.display());
     }
 
     fn request(method: &str, path: &str, body: Option<&JsonValue>) -> Request<Body> {
@@ -1373,6 +1460,170 @@ mod tests {
         assert_eq!(observations[1]["status"], 401);
         assert_eq!(observations[1]["errorCode"], "HTTP_AUTH_REQUIRED");
         assert!(observations[1]["version"].is_null());
+    }
+
+    #[test]
+    fn shadow_candidate_uses_the_pre_request_snapshot_without_persisting_side_effects() {
+        let temporary = TestDirectory::new();
+        let code_path = temporary.path.join("code");
+        let data_path = temporary.path.join("data.json");
+        let shadow_path = temporary.path.join("shadow.jsonl");
+        let versions = VersionStore::new(&code_path);
+        let report = json!({ "passed": true });
+        let metadata = json!({});
+        let active_hash = require(versions.register_candidate(CandidateRegistration {
+            source: TASK_SERVICE,
+            parent: None,
+            provider: "shadow-active-test",
+            provider_metadata: &metadata,
+            report: &report,
+            registered_at: 1,
+        }));
+        require(versions.promote(&active_hash, 2));
+        let candidate_source = TASK_SERVICE
+            .replacen(
+                "(do (kv-put key task)",
+                "(do (kv-put \"shadow/side-effect\" (map \"secret\" \"shadow-kv-secret\"))\n                        (kv-put key task)",
+                1,
+            )
+            .replacen(
+                "(api-response 201 task)",
+                "(api-response 202 (map \"shadowSecret\" \"shadow-response-secret\"))",
+                1,
+            );
+        let candidate_hash = require(versions.register_candidate(CandidateRegistration {
+            source: &candidate_source,
+            parent: Some(&active_hash),
+            provider: "shadow-candidate-test",
+            provider_metadata: &metadata,
+            report: &report,
+            registered_at: 3,
+        }));
+        let shadow_sink: Arc<dyn ShadowObservationSink> =
+            Arc::new(require(JsonlShadowObservationSink::open(&shadow_path)));
+        let shadow_runtime = Arc::new(ShadowRuntime::new(
+            &code_path,
+            require(ShadowPolicy::new(&candidate_hash, 100)),
+            shadow_sink,
+        ));
+        let shadow = require(ShadowControls::new(shadow_runtime, 1));
+
+        runtime().block_on(async {
+            let router = require(build_active_router_with_runtime_controls(
+                &code_path,
+                &data_path,
+                HttpConfig::default(),
+                None,
+                None,
+                Some(shadow),
+            ));
+            let body = json!({
+                "id": "active-only-id",
+                "title": "request-body-secret",
+                "completed": false
+            });
+            let (status, response) = call(router, request("POST", "/tasks", Some(&body))).await;
+            assert_eq!(status, StatusCode::CREATED);
+            assert_eq!(response["id"], "active-only-id");
+
+            let source = wait_for_nonempty_file(&shadow_path).await;
+            for secret in [
+                "request-body-secret",
+                "shadow-kv-secret",
+                "shadow-response-secret",
+            ] {
+                assert!(
+                    !source.contains(secret),
+                    "shadow observation leaked {secret}"
+                );
+            }
+            let observation: JsonValue = serde_json::from_str(source.trim())
+                .unwrap_or_else(|error| panic!("shadow observation JSON failed: {error}"));
+            assert_eq!(observation["activeVersion"], active_hash);
+            assert_eq!(observation["candidateVersion"], candidate_hash);
+            assert_eq!(observation["outcome"], "compared");
+            assert_eq!(observation["active"]["status"], 201);
+            assert_eq!(observation["candidate"]["status"], 202);
+            assert_eq!(observation["differences"], json!(["status", "body"]));
+            assert_eq!(
+                observation["active"].as_object().map(serde_json::Map::len),
+                Some(3)
+            );
+            assert!(observation["active"].get("bodySha256").is_none());
+            assert!(observation["candidate"].get("headersSha256").is_none());
+        });
+
+        let persisted = fs::read_to_string(&data_path)
+            .unwrap_or_else(|error| panic!("data store read failed: {error}"));
+        assert!(persisted.contains("active-only-id"));
+        assert!(!persisted.contains("shadow/side-effect"));
+        assert!(!persisted.contains("shadow-kv-secret"));
+    }
+
+    #[test]
+    fn runtime_candidate_tampering_is_observed_without_changing_the_primary_response() {
+        let temporary = TestDirectory::new();
+        let code_path = temporary.path.join("code");
+        let data_path = temporary.path.join("data.json");
+        let shadow_path = temporary.path.join("shadow.jsonl");
+        let versions = VersionStore::new(&code_path);
+        let report = json!({ "passed": true });
+        let metadata = json!({});
+        let active_hash = require(versions.register_candidate(CandidateRegistration {
+            source: TASK_SERVICE,
+            parent: None,
+            provider: "tamper-active-test",
+            provider_metadata: &metadata,
+            report: &report,
+            registered_at: 1,
+        }));
+        require(versions.promote(&active_hash, 2));
+        let candidate_source = format!("{TASK_SERVICE}\n");
+        let candidate_hash = require(versions.register_candidate(CandidateRegistration {
+            source: &candidate_source,
+            parent: Some(&active_hash),
+            provider: "tamper-candidate-test",
+            provider_metadata: &metadata,
+            report: &report,
+            registered_at: 3,
+        }));
+        let shadow_sink: Arc<dyn ShadowObservationSink> =
+            Arc::new(require(JsonlShadowObservationSink::open(&shadow_path)));
+        let shadow_runtime = Arc::new(ShadowRuntime::new(
+            &code_path,
+            require(ShadowPolicy::new(&candidate_hash, 100)),
+            shadow_sink,
+        ));
+        let shadow = require(ShadowControls::new(shadow_runtime, 1));
+        fs::write(
+            code_path
+                .join("versions")
+                .join(format!("{candidate_hash}.ail")),
+            "tampered",
+        )
+        .unwrap_or_else(|error| panic!("candidate tamper fixture failed: {error}"));
+
+        runtime().block_on(async {
+            let router = require(build_active_router_with_runtime_controls(
+                &code_path,
+                &data_path,
+                HttpConfig::default(),
+                None,
+                None,
+                Some(shadow),
+            ));
+            let (status, body) = call(router, request("GET", "/tasks", None)).await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(body, json!([]));
+
+            let source = wait_for_nonempty_file(&shadow_path).await;
+            let observation: JsonValue = serde_json::from_str(source.trim())
+                .unwrap_or_else(|error| panic!("shadow observation JSON failed: {error}"));
+            assert_eq!(observation["outcome"], "candidate-unavailable");
+            assert_eq!(observation["errorCode"], "VERSION_INTEGRITY_FAILURE");
+            assert_eq!(observation["activeVersion"], active_hash);
+            assert_eq!(observation["candidateVersion"], candidate_hash);
+        });
     }
 
     #[test]

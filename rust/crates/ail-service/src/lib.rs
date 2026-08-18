@@ -66,6 +66,18 @@ impl FileKvStore {
     pub fn path(&self) -> &Path {
         &self.path
     }
+
+    /// Captures an isolated in-memory view of the current service data.
+    ///
+    /// Executing against this snapshot cannot mutate or persist the file-backed
+    /// store. Callers must take the snapshot while holding their store lock when
+    /// they need a request-consistent view.
+    #[must_use]
+    pub fn snapshot(&self) -> MemoryKvStore {
+        MemoryKvStore {
+            data: self.data.clone(),
+        }
+    }
 }
 
 pub fn handle_service_request(
@@ -818,7 +830,7 @@ mod tests {
     }
 
     #[test]
-    fn file_kv_survives_reopen_with_racket_compatible_json() {
+    fn file_kv_survives_reopen_with_canonical_json() {
         let program = require(load_program_source(TASK_SERVICE));
         let temporary = TestDirectory::new();
         let store_path = temporary.path.join("store.json");

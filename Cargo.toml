@@ -9,6 +9,7 @@ members = [
   "rust/crates/ail-service",
   "rust/crates/ail-http",
   "rust/crates/ail-ops",
+  "rust/crates/ail-rollout",
   "rust/crates/ail-server",
   "rust/crates/ail-provider",
   "rust/crates/ail-cli",

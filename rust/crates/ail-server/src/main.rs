@@ -1,13 +1,16 @@
 #![forbid(unsafe_code)]
 
+mod configuration;
+
 use std::{env, io::Write, net::SocketAddr, process::ExitCode, sync::Arc};
 
 use ail_diagnostic::{AilResult, Diagnostic};
 use ail_http::{
     BearerAuth, HttpConfig, JsonlObservationSink, ObservationSink,
-    build_active_router_with_controls, serve_with_shutdown,
+    build_active_router_with_runtime_controls, serve_with_shutdown,
 };
 use ail_ops::acquire_service_lease;
+use configuration::configured_shadow;
 use serde_json::json;
 use tokio::{net::TcpListener, runtime, signal};
 
@@ -32,15 +35,25 @@ fn run(arguments: Vec<String>) -> AilResult<()> {
     let _service_lease = acquire_service_lease(data_store)?;
     let authentication = configured_authentication()?;
     let authentication_required = authentication.is_some();
+    let shadow = configured_shadow(code_store, data_store)?;
+    let shadow_enabled = shadow.is_some();
+    let shadow_candidate = shadow
+        .as_ref()
+        .map(|configuration| configuration.candidate_version.clone());
+    let shadow_observation_path = shadow
+        .as_ref()
+        .map(|configuration| configuration.observation_path.clone());
+    let shadow_controls = shadow.map(|configuration| configuration.controls);
     let observation_path = format!("{data_store}.observations.jsonl");
     let observations: Arc<dyn ObservationSink> =
         Arc::new(JsonlObservationSink::open(&observation_path)?);
-    let router = build_active_router_with_controls(
+    let router = build_active_router_with_runtime_controls(
         code_store,
         data_store,
         HttpConfig::default(),
         authentication,
         Some(observations),
+        shadow_controls,
     )?;
     let runtime = runtime::Builder::new_multi_thread()
         .enable_all()
@@ -73,6 +86,9 @@ fn run(arguments: Vec<String>) -> AilResult<()> {
                     "dataStore": data_store,
                     "observationStore": observation_path,
                     "authenticationRequired": authentication_required,
+                    "shadowEnabled": shadow_enabled,
+                    "shadowCandidate": shadow_candidate,
+                    "shadowObservationStore": shadow_observation_path,
                 }
             })
         );

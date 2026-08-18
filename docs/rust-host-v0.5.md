@@ -32,6 +32,9 @@ language host. It does not switch production traffic yet.
 - `ail-ops`: offline service leases, bounded snapshots, per-file SHA-256
   manifests, version/event/KV semantic verification, tamper detection, and
   no-overwrite restore;
+- `ail-rollout`: deterministic shadow sampling, exact candidate loading,
+  in-memory response/headers comparison, categorized differences, and bounded
+  redacted JSONL observations;
 - `ail-cli`: Rust `check`, `inspect`, `conformance`, `test-service`,
   `deploy-service`, `evolve-service`, `backup-service`, `verify-backup`,
   `restore-service`, and `version-conformance` commands.
@@ -98,6 +101,15 @@ an error code. Paths, query strings, headers, bodies, credentials, and diagnosti
 details are excluded by construction. A write failure is emitted separately and
 does not change a response after guest side effects may have committed.
 
+Optional shadow execution captures the file KV state before the active request
+commits, then runs the configured candidate against that isolated in-memory
+snapshot on a bounded background worker. Candidate writes and logs are always
+discarded. Shadow records contain version identities, result metadata, and
+difference categories; content hashes are discarded before persistence, and
+records never contain a request, response, header, or KV value. Candidate
+load/integrity/execution failures cannot replace the primary
+response. See `docs/shadow-rollout.md`.
+
 ## Not switched yet
 
 Racket remains the default browser service and semantic oracle. Rust now hosts
@@ -107,6 +119,6 @@ adapters. Provider behavior is covered by deterministic simulated transports,
 but a real Rust provider smoke test still requires operator-supplied environment
 credentials. Static browser assets have not migrated, and production still lacks
 fine-grained authorization, metrics aggregation/alerting, database persistence/PITR,
-off-site backup automation, and canary automation. The
-cutover sequence remains: CI differential, offline replay, shadow execution,
-canary, then explicit default-host change.
+off-site backup automation, and canary automation. The cutover sequence remains:
+CI differential, offline replay, the implemented shadow execution gate, canary,
+then explicit default-host change.

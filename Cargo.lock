@@ -39,6 +39,7 @@ name = "ail-http"
 version = "0.5.0"
 dependencies = [
  "ail-diagnostic",
+ "ail-rollout",
  "ail-runtime",
  "ail-service",
  "ail-store",
@@ -76,6 +77,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ail-rollout"
+version = "0.5.0"
+dependencies = [
+ "ail-diagnostic",
+ "ail-service",
+ "ail-store",
+ "ail-syntax",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "ail-runtime"
 version = "0.5.0"
 dependencies = [
@@ -93,6 +106,7 @@ dependencies = [
  "ail-diagnostic",
  "ail-http",
  "ail-ops",
+ "ail-rollout",
  "serde_json",
  "tokio",
 ]

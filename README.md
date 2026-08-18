@@ -51,6 +51,22 @@ Token 不会进入 guest headers、诊断或启动 JSON。每个响应都带独�
 方法、状态、耗时、handler、固定的活动版本哈希和错误码，不记录 URL/path、query、header
 或 body。日志写入失败会作为独立运维事件报告，不会把已经提交的业务请求伪装成失败。
 
+Rust server 还可以让一个尚未晋升的候选版本接收脱敏影子流量。它与活动版本读取同一份
+请求前 KV 快照，但只在隔离内存中执行；候选写入、日志和响应全部丢弃，不影响主响应：
+
+```powershell
+$env:AI_EVOLVE_SHADOW_VERSION="<已注册候选的 64 位哈希>"
+$env:AI_EVOLVE_SHADOW_PERCENT="10"
+$env:AI_EVOLVE_SHADOW_MAX_CONCURRENCY="4"
+.\scripts\serve-tasks-rust.ps1
+```
+
+采样由宿主请求 ID 确定，相同 ID 的决策稳定。结果写入
+`<data-store>.shadow.jsonl`，只含活动/候选版本、状态、handler、错误码和差异类别，
+不含 path、query、header、body、KV 值或内容指纹。候选缺失、被篡改或执行失败只会
+产生 `candidate-unavailable`/差异观测；完整边界见
+[影子运行](docs/shadow-rollout.md)。
+
 ## 快速开始
 
 项目使用私有 Minimal Racket 工具链，不修改系统 PATH。
@@ -225,7 +241,7 @@ Rust 版本必须复用 `.ail` 源码、JSON 测试、诊断代码、版本文�
 调用和裸 `eval` 都不属于语言语义。
 
 当前 Rust host 已迁移 Reader、Parser、解释器、Schema、Library Backend、服务能力、
-事务/文件 KV、版本库、活动版本 HTTP API、认证/脱敏观测、离线备份恢复，以及 OpenAI/DeepSeek Provider。运行 `./scripts/check-rust.ps1` 会同时执行第一方 unsafe
+事务/文件 KV、版本库、活动版本 HTTP API、认证/脱敏观测、隔离影子运行、离线备份恢复，以及 OpenAI/DeepSeek Provider。运行 `./scripts/check-rust.ps1` 会同时执行第一方 unsafe
 门禁、Rust 测试、Clippy，以及语言、任务服务和版本生命周期的 Racket/Rust 精确差分。
 默认网页服务尚未切换到 Rust，Provider 的真实联网烟雾测试需要操作者配置环境凭据。
 
@@ -234,5 +250,6 @@ Rust 版本必须复用 `.ail` 源码、JSON 测试、诊断代码、版本文�
 这是可用于本地业务原型的概念验证，不是公网生产服务器。Rust HTTP 已有 Bearer
 认证、请求身份、脱敏 JSONL 观测、连接并发、读取/正文/响应限制和响应头校验，解释器已有
 fuel 和调用深度限制；生产版仍需细粒度授权、TLS/反向代理、独立 OS 进程、数据库适配器、
-正式数据库/PITR、异地备份、日志轮转/采集、告警，以及审批和灰度门禁。文件后端的离线
+正式数据库/PITR、异地备份、日志轮转/采集、告警，以及审批和灰度门禁。影子运行不是灰度：
+候选永远不服务用户响应，尚不能作为生产流量切换机制。文件后端的离线
 快照、逐文件校验与拒绝覆盖恢复已经可用，见 [备份与恢复](docs/backup-restore.md)。
