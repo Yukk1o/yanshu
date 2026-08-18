@@ -125,6 +125,13 @@ Map 是否用 `BTreeMap` 要以现有可观察顺序为准；不要因为 `HashM
 
 ## 阶段 0：冻结一致性语料
 
+::: tip 已落地
+v1 manifest、portable value codec 和 Racket runner 已位于
+[`conformance/v1/manifest.json`](/source/conformance/v1/manifest.json.txt) 与
+[`src/conformance-suite.rkt`](/source/src/conformance-suite.rkt.txt)。可运行
+`conformance conformance/v1/manifest.json` 验证当前 oracle。
+:::
+
 在写 Rust 前先把 Racket 行为变成 golden/conformance fixtures：
 
 - 每种 AST form 的成功结果；

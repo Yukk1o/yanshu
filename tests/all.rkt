@@ -8,6 +8,7 @@
          racket/string
          racket/tcp
          "../src/ast.rkt"
+         "../src/conformance-suite.rkt"
          "../src/error.rkt"
          "../src/evolution-loop.rkt"
          "../src/evolver.rkt"
@@ -27,6 +28,8 @@
 (define library-example-root (build-path project-root "examples" "libraries"))
 (define task-example-path
   (build-path project-root "examples" "tasks" "service.ail"))
+(define conformance-manifest-path
+  (build-path project-root "conformance" "v1" "manifest.json"))
 
 (define total 0)
 (define failed 0)
@@ -80,6 +83,29 @@
 (define candidate-program (load-program-source candidate-source))
 (define discount-suite
   (load-test-suite (build-path example-root "tests.json")))
+
+(test "host-neutral conformance manifest matches the Racket oracle"
+      (lambda ()
+        (define report (run-conformance-manifest conformance-manifest-path))
+        (check-true (hash-ref report 'passed)
+                    (format "conformance failures: ~s"
+                            (filter (lambda (case-result)
+                                      (not (hash-ref case-result 'passed)))
+                                    (hash-ref report 'cases))))
+        (check-equal (hash-ref report 'total) 17)))
+
+(test "conformance fixture codec preserves portable guest values"
+      (lambda ()
+        (define guest-value
+          (hasheq 'integer 9223372036854775808
+                  'nil '()
+                  'symbol 'ready
+                  'result (ok-value (list 1 #t "value"))))
+        (check-equal (fixture->value (value->fixture guest-value))
+                     (hash "integer" 9223372036854775808
+                           "nil" '()
+                           "symbol" 'ready
+                           "result" (ok-value (list 1 #t "value"))))))
 
 (test "reader rejects multiple top-level documents"
       (lambda ()

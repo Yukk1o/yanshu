@@ -1,0 +1,242 @@
+{
+  "formatVersion": 1,
+  "cases": [
+    {
+      "name": "core-program-summary",
+      "phase": "inspect",
+      "source": "programs/core.ail",
+      "expect": {
+        "kind": "program",
+        "program": {
+          "name": "conformance-core",
+          "version": 1,
+          "capabilities": [],
+          "libraries": [],
+          "schemas": [],
+          "routes": [],
+          "definitions": [
+            "factorial",
+            "sequential-let",
+            "truthy",
+            "big-add",
+            "divide-by-zero",
+            "forever"
+          ],
+          "exports": [
+            "factorial",
+            "sequential-let",
+            "truthy",
+            "big-add",
+            "divide-by-zero",
+            "forever"
+          ]
+        }
+      }
+    },
+    {
+      "name": "recursive-factorial",
+      "phase": "run",
+      "source": "programs/core.ail",
+      "entry": "factorial",
+      "args": [{"$int": "5"}],
+      "expect": {"kind": "value", "value": {"$int": "120"}}
+    },
+    {
+      "name": "sequential-let-sees-earlier-binding",
+      "phase": "run",
+      "source": "programs/core.ail",
+      "entry": "sequential-let",
+      "args": [{"$int": "5"}],
+      "expect": {"kind": "value", "value": {"$int": "7"}}
+    },
+    {
+      "name": "only-false-is-false",
+      "phase": "run",
+      "source": "programs/core.ail",
+      "entry": "truthy",
+      "args": [false],
+      "expect": {"kind": "value", "value": {"$int": "0"}}
+    },
+    {
+      "name": "nil-is-truthy",
+      "phase": "run",
+      "source": "programs/core.ail",
+      "entry": "truthy",
+      "args": [{"$nil": true}],
+      "expect": {"kind": "value", "value": {"$int": "1"}}
+    },
+    {
+      "name": "integer-is-not-limited-to-i64",
+      "phase": "run",
+      "source": "programs/core.ail",
+      "entry": "big-add",
+      "args": [{"$int": "9223372036854775808"}],
+      "expect": {
+        "kind": "value",
+        "value": {"$int": "9223372036854775809"}
+      }
+    },
+    {
+      "name": "divide-by-zero-diagnostic",
+      "phase": "run",
+      "source": "programs/core.ail",
+      "entry": "divide-by-zero",
+      "args": [{"$int": "1"}],
+      "expect": {
+        "kind": "diagnostic",
+        "code": "RUNTIME_DIVIDE_BY_ZERO",
+        "message": "quotient denominator cannot be zero",
+        "details": {}
+      }
+    },
+    {
+      "name": "function-arity-diagnostic",
+      "phase": "run",
+      "source": "programs/core.ail",
+      "entry": "factorial",
+      "args": [],
+      "expect": {
+        "kind": "diagnostic",
+        "code": "RUNTIME_ARITY",
+        "message": "callable received the wrong number of arguments",
+        "details": {"name": "function", "minimum": 1, "maximum": 1, "actual": 0}
+      }
+    },
+    {
+      "name": "fuel-stops-recursion",
+      "phase": "run",
+      "source": "programs/core.ail",
+      "entry": "forever",
+      "args": [],
+      "fuel": 20,
+      "maxDepth": 1000,
+      "expect": {
+        "kind": "diagnostic",
+        "code": "RUNTIME_FUEL_EXHAUSTED",
+        "message": "execution exhausted its fuel allowance",
+        "details": {}
+      }
+    },
+    {
+      "name": "schema-default-normalization",
+      "phase": "run",
+      "source": "programs/schema.ail",
+      "entry": "check",
+      "args": [{"id": "a"}],
+      "expect": {
+        "kind": "value",
+        "value": {"$ok": {"id": "a", "enabled": true}}
+      }
+    },
+    {
+      "name": "schema-issues-are-stable-data",
+      "phase": "run",
+      "source": "programs/schema.ail",
+      "entry": "check",
+      "args": [{"id": "", "extra": 1}],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "$err": [
+            {
+              "path": "/id",
+              "code": "SCHEMA_MIN_LENGTH",
+              "message": "string is shorter than the minimum length",
+              "minimum": {"$int": "1"},
+              "actual": {"$int": "0"}
+            },
+            {
+              "path": "/extra",
+              "code": "SCHEMA_ADDITIONAL_PROPERTY",
+              "message": "field is not declared by the schema"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "library-program-summary",
+      "phase": "inspect",
+      "source": "programs/library.ail",
+      "expect": {
+        "kind": "program",
+        "program": {
+          "name": "conformance-library",
+          "version": 1,
+          "capabilities": [],
+          "libraries": [{"name": "text", "version": 1}],
+          "schemas": [],
+          "routes": [],
+          "definitions": ["inspect", "measure"],
+          "exports": ["inspect", "measure"]
+        }
+      }
+    },
+    {
+      "name": "text-library-reference-semantics",
+      "phase": "run",
+      "source": "programs/library.ail",
+      "entry": "inspect",
+      "args": ["AI语言"],
+      "expect": {
+        "kind": "value",
+        "value": [{"$int": "4"}, true, true, true, "机器语言"]
+      }
+    },
+    {
+      "name": "text-library-type-diagnostic",
+      "phase": "run",
+      "source": "programs/library.ail",
+      "entry": "measure",
+      "args": [{"$int": "42"}],
+      "expect": {
+        "kind": "diagnostic",
+        "code": "RUNTIME_TYPE",
+        "message": "library function received a value of the wrong type",
+        "details": {
+          "operation": "text/length",
+          "index": 0,
+          "expected": "String",
+          "actual": "Int"
+        }
+      }
+    },
+    {
+      "name": "declared-library-requires-a-backend",
+      "phase": "run",
+      "source": "programs/library.ail",
+      "entry": "measure",
+      "args": ["value"],
+      "libraryBackends": "none",
+      "expect": {
+        "kind": "diagnostic",
+        "code": "RUNTIME_LIBRARY_UNAVAILABLE",
+        "message": "host did not provide a declared library backend",
+        "details": {"library": "text", "version": 1}
+      }
+    },
+    {
+      "name": "reader-rejects-multiple-programs",
+      "phase": "load",
+      "source": "invalid/multiple-forms.ail",
+      "expect": {
+        "kind": "diagnostic",
+        "code": "READ_MULTIPLE_FORMS",
+        "message": "source document must contain exactly one top-level form",
+        "details": {}
+      }
+    },
+    {
+      "name": "parser-rejects-unknown-library-version",
+      "phase": "load",
+      "source": "invalid/unknown-library.ail",
+      "expect": {
+        "kind": "diagnostic",
+        "code": "PROGRAM_UNKNOWN_LIBRARY",
+        "message": "program declares an unsupported library contract",
+        "details": {"library": "text", "version": 2}
+      }
+    }
+  ]
+}
+

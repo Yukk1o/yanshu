@@ -1,0 +1,8 @@
+(program
+  (name unknown-library)
+  (version 1)
+  (capabilities)
+  (libraries (text 2))
+  (def run (fn () #t))
+  (export run))
+

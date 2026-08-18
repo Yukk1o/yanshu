@@ -1,0 +1,5 @@
+(program (name first) (version 1) (capabilities)
+  (def run (fn () 1)) (export run))
+(program (name second) (version 1) (capabilities)
+  (def run (fn () 2)) (export run))
+

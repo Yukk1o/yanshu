@@ -15,7 +15,8 @@ main (v0.1.0)
   └─ develop
        ├─ feature/web-backend-runtime (merged as v0.2 checkpoint)
        ├─ feature/business-backend-v0.3 (merged)
-       └─ feature/library-backend-v0.4
+       ├─ feature/library-backend-v0.4 (merged)
+       └─ feature/rust-host-v0.5
 ```
 
 ## Merge policy

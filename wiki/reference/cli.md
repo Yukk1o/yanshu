@@ -46,6 +46,17 @@ run <program.ail> <exported-entry> <args-json-or-file>
 
 运行纯函数 JSON suite。只要有失败，进程 exit code 为 1。
 
+### `conformance`
+
+```powershell
+& $ail src\cli.rkt conformance conformance\v1\manifest.json
+```
+
+运行与宿主无关的语言一致性语料。目前 Racket 是语义 oracle；迁移期间 Rust runner
+必须读取同一份 manifest，并与其中的 canonical value / diagnostic 完全相等。任一 case
+不匹配时进程 exit code 为 1。格式说明见
+[conformance-v1.md](/source/docs/conformance-v1.md.txt)。
+
 ### `demo`
 
 ```powershell

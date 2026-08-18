@@ -1,0 +1,16 @@
+(program
+  (name conformance-schema)
+  (version 1)
+  (capabilities)
+
+  (schema input
+    (object
+      (required "id" (string 1 4))
+      (optional "enabled" boolean #t)))
+
+  (def check
+    (fn (value)
+      (validate input value)))
+
+  (export check))
+

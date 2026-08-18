@@ -1,0 +1,20 @@
+(program
+  (name conformance-library)
+  (version 1)
+  (capabilities)
+  (libraries (text 1))
+
+  (def inspect
+    (fn (value)
+      (list (text/length value)
+            (text/starts-with? value "AI")
+            (text/ends-with? value "语言")
+            (text/contains? value "I语")
+            (text/replace value "AI" "机器"))))
+
+  (def measure
+    (fn (value)
+      (text/length value)))
+
+  (export inspect measure))
+

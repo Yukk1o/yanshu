@@ -1,0 +1,35 @@
+(program
+  (name conformance-core)
+  (version 1)
+  (capabilities)
+
+  (def factorial
+    (fn (n)
+      (if (<= n 1)
+          1
+          (* n (factorial (- n 1))))))
+
+  (def sequential-let
+    (fn (value)
+      (let ((first (+ value 1))
+            (second (+ first 1)))
+        second)))
+
+  (def truthy
+    (fn (value)
+      (if value 1 0)))
+
+  (def big-add
+    (fn (value)
+      (+ value 1)))
+
+  (def divide-by-zero
+    (fn (value)
+      (quotient value 0)))
+
+  (def forever
+    (fn ()
+      (forever)))
+
+  (export factorial sequential-let truthy big-add divide-by-zero forever))
+

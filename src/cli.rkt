@@ -5,6 +5,7 @@
          racket/path
          racket/runtime-path
          "ast.rkt"
+         "conformance-suite.rkt"
          "error.rkt"
          "evolution-loop.rkt"
          "evolver.rkt"
@@ -35,6 +36,11 @@
      (define program (load-program-file (cadr arguments)))
      (define suite (load-test-suite (caddr arguments)))
      (define report (run-test-suite program suite))
+     (emit (hasheq 'ok (hash-ref report 'passed) 'report report))
+     (unless (hash-ref report 'passed) (exit 1))]
+    [(and (= (length arguments) 2)
+          (string=? (car arguments) "conformance"))
+     (define report (run-conformance-manifest (cadr arguments)))
      (emit (hasheq 'ok (hash-ref report 'passed) 'report report))
      (unless (hash-ref report 'passed) (exit 1))]
     [(and (= (length arguments) 3)
@@ -281,6 +287,7 @@
     (list "demo"
           "check <program.ail>"
           "inspect <program.ail>"
+          "conformance <manifest.json>"
           "test <program.ail> <tests.json>"
           "run <program.ail> <entry> <args-json-or-file>"
           "evolve <program.ail> <tests.json> [--promote]"

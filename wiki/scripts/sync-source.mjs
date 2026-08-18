@@ -11,7 +11,15 @@ const outputRoot = join(wikiRoot, 'public', 'source')
 // credentials, runtime data, or unrelated workspace files.
 const publishedFiles = [
   'README.md',
+  'TASKS.md',
+  'conformance/v1/invalid/multiple-forms.ail',
+  'conformance/v1/invalid/unknown-library.ail',
+  'conformance/v1/manifest.json',
+  'conformance/v1/programs/core.ail',
+  'conformance/v1/programs/library.ail',
+  'conformance/v1/programs/schema.ail',
   'docs/business-backend-v0.3.md',
+  'docs/conformance-v1.md',
   'docs/design.md',
   'docs/git-workflow.md',
   'docs/library-backend-v0.4.md',
@@ -31,6 +39,7 @@ const publishedFiles = [
   'scripts/test.ps1',
   'src/ast.rkt',
   'src/cli.rkt',
+  'src/conformance-suite.rkt',
   'src/error.rkt',
   'src/evolution-loop.rkt',
   'src/evolver.rkt',

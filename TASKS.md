@@ -55,3 +55,14 @@
 - [x] Thread backend selection through pure, service, and HTTP execution paths.
 - [x] Teach live providers the library declaration and comment policy.
 - [x] Verify the complete repository and document the v0.4 checkpoint.
+
+## Change: rust-host-v0.5
+
+- [x] Freeze a host-neutral v1 conformance manifest and portable value codec.
+- [x] Make the Racket oracle execute the manifest through the public CLI.
+- [ ] Establish a Rust workspace whose first-party crates forbid unsafe code.
+- [ ] Implement Rust diagnostics, Reader, source spans, AST, and program parser.
+- [ ] Implement the bounded Rust evaluator and `text@1` Library Backend.
+- [ ] Run Racket and Rust against the same canonical fixtures with zero differences.
+- [ ] Migrate schema, service, store, HTTP, version, and provider layers in stages.
+- [ ] Pass dependency audit, shadow-traffic, rollback, observability, and release gates.
