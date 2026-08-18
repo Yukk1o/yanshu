@@ -47,6 +47,9 @@ Rust 绑定地址可通过 `$env:AI_EVOLVE_RUST_HTTP_BIND="127.0.0.1:9001"` 修�
 Rust server 只接受 loopback 地址；公网入口必须经可信 TLS 反向代理。需要认证时在启动前
 设置 `$env:AI_EVOLVE_HTTP_BEARER_TOKEN`，调用方使用 `Authorization: Bearer ...`。
 Token 不会进入 guest headers、诊断或启动 JSON。每个响应都带独立的 `X-Request-Id`。
+服务器同时把脱敏请求观测追加到 `<data-store>.observations.jsonl`：只包含时间、请求 ID、
+方法、状态、耗时、handler、固定的活动版本哈希和错误码，不记录 URL/path、query、header
+或 body。日志写入失败会作为独立运维事件报告，不会把已经提交的业务请求伪装成失败。
 
 ## 快速开始
 
@@ -217,13 +220,13 @@ Rust 版本必须复用 `.ail` 源码、JSON 测试、诊断代码、版本文�
 调用和裸 `eval` 都不属于语言语义。
 
 当前 Rust host 已迁移 Reader、Parser、解释器、Schema、Library Backend、服务能力、
-事务/文件 KV、版本库、活动版本 HTTP API，以及 OpenAI/DeepSeek Provider。运行 `./scripts/check-rust.ps1` 会同时执行第一方 unsafe
+事务/文件 KV、版本库、活动版本 HTTP API、认证/脱敏观测，以及 OpenAI/DeepSeek Provider。运行 `./scripts/check-rust.ps1` 会同时执行第一方 unsafe
 门禁、Rust 测试、Clippy，以及语言、任务服务和版本生命周期的 Racket/Rust 精确差分。
 默认网页服务尚未切换到 Rust，Provider 的真实联网烟雾测试需要操作者配置环境凭据。
 
 ## 当前安全边界
 
-这是可用于本地业务原型的概念验证，不是公网生产服务器。HTTP 已有连接并发、
-读取、正文、执行时限和响应头校验，解释器已有 fuel 和调用深度限制；生产版
-仍需认证授权、TLS/反向代理、独立 OS 进程、数据库适配器、内存/输出限制、
-备份迁移，以及审批、灰度和运行期指标。
+这是可用于本地业务原型的概念验证，不是公网生产服务器。Rust HTTP 已有 Bearer
+认证、请求身份、脱敏 JSONL 观测、连接并发、读取/正文/响应限制和响应头校验，解释器已有
+fuel 和调用深度限制；生产版仍需细粒度授权、TLS/反向代理、独立 OS 进程、数据库适配器、
+备份迁移、日志轮转/采集、告警，以及审批和灰度门禁。

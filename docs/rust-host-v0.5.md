@@ -20,8 +20,9 @@ language host. It does not switch production traffic yet.
 - `ail-http`: Axum/Tokio HTTP/1.1 adapter with bounded targets, headers, bodies,
   responses, concurrency and body-read deadlines; each request loads and pins one
   active program before execution; host-owned random request IDs, optional
-  constant-time Bearer authentication, and sensitive-header filtering remain
-  outside the guest;
+  constant-time Bearer authentication, sensitive-header filtering, exact
+  pinned-version identity, and bounded redacted JSONL observations remain outside
+  the guest;
 - `ail-server`: independently deployable TCP process with structured startup and
   failure output plus graceful Ctrl+C shutdown; it refuses non-loopback binds;
 - `ail-provider`: offline and live proposal interfaces, OpenAI Responses and
@@ -86,14 +87,21 @@ The current lockfile passes advisories, bans, licenses, and sources. Dependency
 internal unsafe implementations remain inventoried according to
 `docs/rust-dependency-audit.md`; they never permit unsafe in first-party code.
 
+The server appends one observation per identified request to
+`<data-store>.observations.jsonl`. Records contain only timestamp, host-generated
+request ID, method, status, duration, handler, immutable active-version hash, and
+an error code. Paths, query strings, headers, bodies, credentials, and diagnostic
+details are excluded by construction. A write failure is emitted separately and
+does not change a response after guest side effects may have committed.
+
 ## Not switched yet
 
 Racket remains the default browser service and semantic oracle. Rust now hosts
 the capability/service boundary, compatible local persistence, version storage,
-test-gated deployment, an active-version JSON HTTP server, and live provider
+test-gated deployment, an authenticated and observable active-version JSON HTTP server, and live provider
 adapters. Provider behavior is covered by deterministic simulated transports,
 but a real Rust provider smoke test still requires operator-supplied environment
 credentials. Static browser assets have not migrated, and production still lacks
-auth, metrics/tracing, database persistence, backups, and canary automation. The
+fine-grained authorization, metrics aggregation/alerting, database persistence, backups, and canary automation. The
 cutover sequence remains: CI differential, offline replay, shadow execution,
 canary, then explicit default-host change.

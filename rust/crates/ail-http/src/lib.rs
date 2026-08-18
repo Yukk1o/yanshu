@@ -2,11 +2,12 @@
 
 use std::{
     collections::BTreeMap,
+    fs::{File, OpenOptions},
     future::Future,
-    io,
+    io::{self, Write},
     path::Path,
     sync::{Arc, Mutex},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use ail_diagnostic::{AilResult, Diagnostic};
@@ -35,7 +36,13 @@ use tokio::{net::TcpListener, sync::Semaphore, task, time};
 use zeroize::Zeroizing;
 
 pub trait ProgramLoader: Send + Sync {
-    fn load(&self) -> AilResult<Program>;
+    fn load(&self) -> AilResult<LoadedProgram>;
+}
+
+#[derive(Debug, Clone)]
+pub struct LoadedProgram {
+    pub program: Program,
+    pub version: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -52,8 +59,11 @@ impl FixedProgramLoader {
 }
 
 impl ProgramLoader for FixedProgramLoader {
-    fn load(&self) -> AilResult<Program> {
-        Ok(self.program.clone())
+    fn load(&self) -> AilResult<LoadedProgram> {
+        Ok(LoadedProgram {
+            program: self.program.clone(),
+            version: None,
+        })
     }
 }
 
@@ -72,8 +82,15 @@ impl ActiveVersionLoader {
 }
 
 impl ProgramLoader for ActiveVersionLoader {
-    fn load(&self) -> AilResult<Program> {
-        load_program_source(&self.store.active_source()?)
+    fn load(&self) -> AilResult<LoadedProgram> {
+        let version = self.store.active_hash()?.ok_or_else(|| {
+            Diagnostic::simple("VERSION_NO_ACTIVE", "version store has no active version")
+        })?;
+        let source = self.store.version_source(&version)?;
+        Ok(LoadedProgram {
+            program: load_program_source(&source)?,
+            version: Some(version),
+        })
     }
 }
 
@@ -109,6 +126,7 @@ struct HttpState {
     permits: Arc<Semaphore>,
     config: HttpConfig,
     authentication: Option<Arc<BearerAuth>>,
+    observations: Option<Arc<dyn ObservationSink>>,
 }
 
 pub struct BearerAuth {
@@ -148,6 +166,74 @@ impl BearerAuth {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequestObservation {
+    pub timestamp_ms: u64,
+    pub request_id: String,
+    pub method: String,
+    pub status: u16,
+    pub duration_ms: u64,
+    pub handler: Option<String>,
+    pub version: Option<String>,
+    pub error_code: Option<String>,
+}
+
+pub trait ObservationSink: Send + Sync {
+    fn record(&self, observation: &RequestObservation) -> AilResult<()>;
+}
+
+#[derive(Debug)]
+pub struct JsonlObservationSink {
+    file: Mutex<File>,
+}
+
+impl JsonlObservationSink {
+    pub fn open(path: impl AsRef<Path>) -> AilResult<Self> {
+        let path = path.as_ref();
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            std::fs::create_dir_all(parent).map_err(|_| observation_open_failure(path))?;
+        }
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .map_err(|_| observation_open_failure(path))?;
+        Ok(Self {
+            file: Mutex::new(file),
+        })
+    }
+}
+
+impl ObservationSink for JsonlObservationSink {
+    fn record(&self, observation: &RequestObservation) -> AilResult<()> {
+        let mut bytes = serde_json::to_vec(&json!({
+            "schemaVersion": 1,
+            "timestampMs": observation.timestamp_ms,
+            "requestId": observation.request_id,
+            "method": observation.method,
+            "status": observation.status,
+            "durationMs": observation.duration_ms,
+            "handler": observation.handler,
+            "version": observation.version,
+            "errorCode": observation.error_code,
+        }))
+        .map_err(|_| observation_write_failure())?;
+        if bytes.len() > 4095 {
+            return Err(Diagnostic::simple(
+                "OBSERVATION_TOO_LARGE",
+                "request observation exceeded the record size limit",
+            ));
+        }
+        bytes.push(b'\n');
+        let mut file = self.file.lock().map_err(|_| observation_write_failure())?;
+        file.write_all(&bytes)
+            .and_then(|()| file.flush())
+            .map_err(|_| observation_write_failure())
+    }
+}
+
 pub fn build_router(
     loader: Arc<dyn ProgramLoader>,
     store: FileKvStore,
@@ -162,6 +248,16 @@ pub fn build_router_with_auth(
     config: HttpConfig,
     authentication: Option<BearerAuth>,
 ) -> AilResult<Router> {
+    build_router_with_controls(loader, store, config, authentication, None)
+}
+
+pub fn build_router_with_controls(
+    loader: Arc<dyn ProgramLoader>,
+    store: FileKvStore,
+    config: HttpConfig,
+    authentication: Option<BearerAuth>,
+    observations: Option<Arc<dyn ObservationSink>>,
+) -> AilResult<Router> {
     validate_config(&config)?;
     let state = HttpState {
         loader,
@@ -169,6 +265,7 @@ pub fn build_router_with_auth(
         permits: Arc::new(Semaphore::new(config.maximum_concurrency)),
         config,
         authentication: authentication.map(Arc::new),
+        observations,
     };
     Ok(Router::new().fallback(dispatch).with_state(state))
 }
@@ -187,9 +284,19 @@ pub fn build_active_router_with_auth(
     config: HttpConfig,
     authentication: Option<BearerAuth>,
 ) -> AilResult<Router> {
+    build_active_router_with_controls(code_store, data_store, config, authentication, None)
+}
+
+pub fn build_active_router_with_controls(
+    code_store: impl AsRef<Path>,
+    data_store: impl AsRef<Path>,
+    config: HttpConfig,
+    authentication: Option<BearerAuth>,
+    observations: Option<Arc<dyn ObservationSink>>,
+) -> AilResult<Router> {
     let loader: Arc<dyn ProgramLoader> = Arc::new(ActiveVersionLoader::new(code_store));
     let store = FileKvStore::open(data_store)?;
-    build_router_with_auth(loader, store, config, authentication)
+    build_router_with_controls(loader, store, config, authentication, observations)
 }
 
 pub async fn serve_with_shutdown<Shutdown>(
@@ -206,53 +313,99 @@ where
 }
 
 async fn dispatch(State(state): State<HttpState>, request: Request) -> Response {
+    let started = Instant::now();
+    let method = request.method().as_str().to_owned();
     let request_id = match generate_request_id() {
         Ok(request_id) => request_id,
         Err(diagnostic) => {
             return protocol_error_response(StatusCode::INTERNAL_SERVER_ERROR, &diagnostic, None);
         }
     };
-    let mut response = dispatch_identified(state, request, &request_id).await;
+    let mut outcome = dispatch_identified(state.clone(), request, &request_id).await;
     if let Ok(value) = HeaderValue::try_from(request_id.as_str()) {
-        response
+        outcome
+            .response
             .headers_mut()
             .insert(HeaderName::from_static("x-request-id"), value);
     }
-    response
+    if let Some(observations) = &state.observations {
+        let observation = RequestObservation {
+            timestamp_ms: timestamp_milliseconds(),
+            request_id: request_id.clone(),
+            method: bounded_observation_label(method, 32),
+            status: outcome.response.status().as_u16(),
+            duration_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            handler: outcome
+                .handler
+                .map(|value| bounded_observation_label(value, 256)),
+            version: outcome.version,
+            error_code: outcome.error_code,
+        };
+        if let Err(diagnostic) = observations.record(&observation) {
+            report_observation_failure(&request_id, &diagnostic);
+        }
+    }
+    outcome.response
 }
 
-async fn dispatch_identified(state: HttpState, request: Request, request_id: &str) -> Response {
+struct DispatchOutcome {
+    response: Response,
+    handler: Option<String>,
+    version: Option<String>,
+    error_code: Option<String>,
+}
+
+enum ExecutionOutcome {
+    Completed {
+        result: DispatchResult,
+        version: Option<String>,
+    },
+    Failed {
+        diagnostic: Diagnostic,
+        version: Option<String>,
+    },
+}
+
+async fn dispatch_identified(
+    state: HttpState,
+    request: Request,
+    request_id: &str,
+) -> DispatchOutcome {
     if let Some(authentication) = &state.authentication
         && !authentication.authorizes(request.headers())
     {
-        let mut response = protocol_error_response(
+        let mut outcome = protocol_outcome(
             StatusCode::UNAUTHORIZED,
             &Diagnostic::simple(
                 "HTTP_AUTH_REQUIRED",
                 "valid Bearer authentication is required",
             ),
             Some(request_id),
+            None,
         );
-        response
+        outcome
+            .response
             .headers_mut()
             .insert(WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
-        return response;
+        return outcome;
     }
     let Ok(_permit) = Arc::clone(&state.permits).try_acquire_owned() else {
-        return protocol_error_response(
+        return protocol_outcome(
             StatusCode::SERVICE_UNAVAILABLE,
             &Diagnostic::simple("HTTP_BUSY", "server concurrency limit is exhausted"),
             Some(request_id),
+            None,
         );
     };
     let method_is_head = request.method() == axum::http::Method::HEAD;
     let service_request = match parse_request(request, &state.config).await {
         Ok(request) => request,
         Err(diagnostic) => {
-            return protocol_error_response(
+            return protocol_outcome(
                 diagnostic_status(&diagnostic),
                 &diagnostic,
                 Some(request_id),
+                None,
             );
         }
     };
@@ -263,24 +416,30 @@ async fn dispatch_identified(state: HttpState, request: Request, request_id: &st
     })
     .await;
     match result {
-        Ok(Ok(result)) => dispatch_response(
+        Ok(ExecutionOutcome::Completed { result, version }) => dispatch_response(
             result,
             method_is_head,
             state.config.maximum_response_bytes,
             request_id,
+            version,
         ),
-        Ok(Err(diagnostic)) => protocol_error_response(
+        Ok(ExecutionOutcome::Failed {
+            diagnostic,
+            version,
+        }) => protocol_outcome(
             diagnostic_status(&diagnostic),
             &diagnostic,
             Some(request_id),
+            version,
         ),
-        Err(_) => protocol_error_response(
+        Err(_) => protocol_outcome(
             StatusCode::INTERNAL_SERVER_ERROR,
             &Diagnostic::simple(
                 "HTTP_WORKER_FAILURE",
                 "request worker could not be completed",
             ),
             Some(request_id),
+            None,
         ),
     }
 }
@@ -289,23 +448,41 @@ fn execute_request(
     state: &HttpState,
     request: &ServiceRequest,
     request_id: &str,
-) -> AilResult<DispatchResult> {
-    let program = state.loader.load().map_err(|_| {
-        Diagnostic::simple("HTTP_SERVICE_UNAVAILABLE", "service program is unavailable")
-    })?;
-    let mut store = state.store.lock().map_err(|_| {
-        Diagnostic::simple(
-            "HTTP_STORE_UNAVAILABLE",
-            "service data store is unavailable",
-        )
-    })?;
-    Ok(handle_file_service_request_with_id(
-        &program,
-        request,
-        &mut store,
-        &current_milliseconds(),
-        request_id,
-    ))
+) -> ExecutionOutcome {
+    let loaded = match state.loader.load() {
+        Ok(loaded) => loaded,
+        Err(_) => {
+            return ExecutionOutcome::Failed {
+                diagnostic: Diagnostic::simple(
+                    "HTTP_SERVICE_UNAVAILABLE",
+                    "service program is unavailable",
+                ),
+                version: None,
+            };
+        }
+    };
+    let mut store = match state.store.lock() {
+        Ok(store) => store,
+        Err(_) => {
+            return ExecutionOutcome::Failed {
+                diagnostic: Diagnostic::simple(
+                    "HTTP_STORE_UNAVAILABLE",
+                    "service data store is unavailable",
+                ),
+                version: loaded.version,
+            };
+        }
+    };
+    ExecutionOutcome::Completed {
+        result: handle_file_service_request_with_id(
+            &loaded.program,
+            request,
+            &mut store,
+            &current_milliseconds(),
+            request_id,
+        ),
+        version: loaded.version,
+    }
 }
 
 async fn parse_request(request: Request, config: &HttpConfig) -> AilResult<ServiceRequest> {
@@ -523,14 +700,29 @@ fn dispatch_response(
     head: bool,
     maximum_bytes: usize,
     request_id: &str,
-) -> Response {
-    service_response_to_http(result.response, head, maximum_bytes).unwrap_or_else(|diagnostic| {
-        protocol_error_response(
+    version: Option<String>,
+) -> DispatchOutcome {
+    let handler = result.handler;
+    let error_code = result
+        .diagnostic
+        .as_ref()
+        .and_then(|value| value.pointer("/error/code"))
+        .and_then(JsonValue::as_str)
+        .map(str::to_owned);
+    match service_response_to_http(result.response, head, maximum_bytes) {
+        Ok(response) => DispatchOutcome {
+            response,
+            handler,
+            version,
+            error_code,
+        },
+        Err(diagnostic) => protocol_outcome(
             StatusCode::INTERNAL_SERVER_ERROR,
             &diagnostic,
             Some(request_id),
-        )
-    })
+            version,
+        ),
+    }
 }
 
 fn service_response_to_http(
@@ -594,6 +786,20 @@ fn protocol_error_response(
     response
 }
 
+fn protocol_outcome(
+    status: StatusCode,
+    diagnostic: &Diagnostic,
+    request_id: Option<&str>,
+    version: Option<String>,
+) -> DispatchOutcome {
+    DispatchOutcome {
+        response: protocol_error_response(status, diagnostic, request_id),
+        handler: None,
+        version,
+        error_code: Some(diagnostic.code.to_owned()),
+    }
+}
+
 fn diagnostic_status(diagnostic: &Diagnostic) -> StatusCode {
     match diagnostic.code {
         "HTTP_AUTH_REQUIRED" => StatusCode::UNAUTHORIZED,
@@ -649,6 +855,44 @@ fn current_milliseconds() -> BigInt {
     BigInt::from(milliseconds)
 }
 
+fn timestamp_milliseconds() -> u64 {
+    let milliseconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_millis());
+    u64::try_from(milliseconds).unwrap_or(u64::MAX)
+}
+
+fn bounded_observation_label(value: String, maximum_characters: usize) -> String {
+    value.chars().take(maximum_characters).collect()
+}
+
+fn report_observation_failure(request_id: &str, diagnostic: &Diagnostic) {
+    eprintln!(
+        "{}",
+        json!({
+            "ok": false,
+            "event": "observation-write-failed",
+            "requestId": request_id,
+            "errorCode": diagnostic.code,
+        })
+    );
+}
+
+fn observation_open_failure(path: &Path) -> Diagnostic {
+    Diagnostic::new(
+        "OBSERVATION_OPEN_FAILURE",
+        "request observation log could not be opened",
+        json!({ "path": path.display().to_string() }),
+    )
+}
+
+fn observation_write_failure() -> Diagnostic {
+    Diagnostic::simple(
+        "OBSERVATION_WRITE_FAILURE",
+        "request observation could not be appended",
+    )
+}
+
 fn validate_config(config: &HttpConfig) -> AilResult<()> {
     if config.maximum_target_bytes == 0
         || config.maximum_header_bytes == 0
@@ -695,8 +939,9 @@ mod tests {
     use tower::ServiceExt;
 
     use super::{
-        BearerAuth, FixedProgramLoader, HttpConfig, ProgramLoader, build_active_router,
-        build_router, build_router_with_auth, serve_with_shutdown,
+        BearerAuth, FixedProgramLoader, HttpConfig, JsonlObservationSink, ObservationSink,
+        ProgramLoader, build_active_router, build_active_router_with_controls, build_router,
+        build_router_with_auth, build_router_with_controls, serve_with_shutdown,
     };
 
     const TASK_SERVICE: &str = include_str!("../../../../examples/tasks/service.ail");
@@ -899,11 +1144,20 @@ mod tests {
         "#;
         let temporary = TestDirectory::new();
         let store_path = temporary.path.join("store.json");
+        let observation_path = temporary.path.join("observations.jsonl");
         let loader: Arc<dyn ProgramLoader> =
             Arc::new(require(FixedProgramLoader::from_source(FAILING_SERVICE)));
         let store = require(ail_service::FileKvStore::open(&store_path));
-        let router = require(build_router(loader, store, HttpConfig::default()));
-        runtime().block_on(async {
+        let observations: Arc<dyn ObservationSink> =
+            Arc::new(require(JsonlObservationSink::open(&observation_path)));
+        let router = require(build_router_with_controls(
+            loader,
+            store,
+            HttpConfig::default(),
+            None,
+            Some(observations),
+        ));
+        let request_id = runtime().block_on(async {
             let response = call_raw(router, request("GET", "/boom", None)).await;
             assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
             let request_id = response
@@ -918,7 +1172,17 @@ mod tests {
             let body: JsonValue = serde_json::from_slice(&bytes)
                 .unwrap_or_else(|error| panic!("response JSON failed: {error}"));
             assert_eq!(body["error"]["details"]["requestId"], request_id);
+            request_id
         });
+        let source = fs::read_to_string(&observation_path)
+            .unwrap_or_else(|error| panic!("observation read failed: {error}"));
+        let observation: JsonValue = serde_json::from_str(source.trim())
+            .unwrap_or_else(|error| panic!("observation JSON failed: {error}"));
+        assert_eq!(observation["requestId"], request_id);
+        assert_eq!(observation["status"], 500);
+        assert_eq!(observation["handler"], "boom");
+        assert!(observation["errorCode"].as_str().is_some());
+        assert!(observation["version"].is_null());
     }
 
     #[test]
@@ -1012,6 +1276,103 @@ mod tests {
                 .unwrap_or_else(|error| panic!("server task failed: {error}"));
             result.unwrap_or_else(|error| panic!("server failed: {error}"));
         });
+    }
+
+    #[test]
+    fn jsonl_observations_append_across_restart_and_exclude_request_data() {
+        let temporary = TestDirectory::new();
+        let code_path = temporary.path.join("code");
+        let data_path = temporary.path.join("data.json");
+        let observation_path = temporary.path.join("requests.jsonl");
+        let versions = VersionStore::new(&code_path);
+        let report = json!({ "passed": true });
+        let metadata = json!({});
+        let hash = require(versions.register_candidate(CandidateRegistration {
+            source: TASK_SERVICE,
+            parent: None,
+            provider: "observation-test",
+            provider_metadata: &metadata,
+            report: &report,
+            registered_at: 1,
+        }));
+        require(versions.promote(&hash, 2));
+
+        runtime().block_on(async {
+            let observations: Arc<dyn ObservationSink> =
+                Arc::new(require(JsonlObservationSink::open(&observation_path)));
+            let router = require(build_active_router_with_controls(
+                &code_path,
+                &data_path,
+                HttpConfig::default(),
+                Some(require(BearerAuth::new("token-must-not-appear".to_owned()))),
+                Some(observations),
+            ));
+            let body = json!({
+                "id": "body-id-must-not-appear",
+                "title": "body-title-must-not-appear",
+                "completed": false
+            });
+            let authorized = Request::builder()
+                .method("POST")
+                .uri("/tasks?query-value-must-not-appear=1")
+                .header(AUTHORIZATION, "Bearer token-must-not-appear")
+                .header(COOKIE, "cookie-must-not-appear")
+                .header("x-api-key", "api-key-must-not-appear")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&body).unwrap_or_else(
+                    |error| panic!("request JSON failed: {error}"),
+                )))
+                .unwrap_or_else(|error| panic!("request build failed: {error}"));
+            let response = call_raw(router, authorized).await;
+            assert_eq!(response.status(), StatusCode::CREATED);
+
+            let observations: Arc<dyn ObservationSink> =
+                Arc::new(require(JsonlObservationSink::open(&observation_path)));
+            let restarted = require(build_active_router_with_controls(
+                &code_path,
+                &data_path,
+                HttpConfig::default(),
+                Some(require(BearerAuth::new("token-must-not-appear".to_owned()))),
+                Some(observations),
+            ));
+            let response = call_raw(restarted, request("GET", "/tasks", None)).await;
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        });
+
+        let source = fs::read_to_string(&observation_path)
+            .unwrap_or_else(|error| panic!("observation read failed: {error}"));
+        for secret in [
+            "token-must-not-appear",
+            "cookie-must-not-appear",
+            "api-key-must-not-appear",
+            "query-value-must-not-appear",
+            "body-id-must-not-appear",
+            "body-title-must-not-appear",
+            "/tasks",
+        ] {
+            assert!(!source.contains(secret), "observation leaked {secret}");
+        }
+        let observations = source
+            .lines()
+            .map(|line| {
+                serde_json::from_str::<JsonValue>(line)
+                    .unwrap_or_else(|error| panic!("observation JSON failed: {error}"))
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(observations.len(), 2);
+        assert_eq!(observations[0]["schemaVersion"], 1);
+        assert_eq!(observations[0]["method"], "POST");
+        assert_eq!(observations[0]["status"], 201);
+        assert_eq!(observations[0]["handler"], "create-task");
+        assert_eq!(observations[0]["version"], hash);
+        assert!(observations[0]["errorCode"].is_null());
+        assert_eq!(
+            observations[0].as_object().map(serde_json::Map::len),
+            Some(9)
+        );
+        assert_eq!(observations[1]["status"], 401);
+        assert_eq!(observations[1]["errorCode"], "HTTP_AUTH_REQUIRED");
+        assert!(observations[1]["version"].is_null());
     }
 
     #[test]

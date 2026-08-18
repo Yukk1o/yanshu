@@ -1,9 +1,12 @@
 #![forbid(unsafe_code)]
 
-use std::{env, io::Write, net::SocketAddr, process::ExitCode};
+use std::{env, io::Write, net::SocketAddr, process::ExitCode, sync::Arc};
 
 use ail_diagnostic::{AilResult, Diagnostic};
-use ail_http::{BearerAuth, HttpConfig, build_active_router_with_auth, serve_with_shutdown};
+use ail_http::{
+    BearerAuth, HttpConfig, JsonlObservationSink, ObservationSink,
+    build_active_router_with_controls, serve_with_shutdown,
+};
 use serde_json::json;
 use tokio::{net::TcpListener, runtime, signal};
 
@@ -27,11 +30,15 @@ fn run(arguments: Vec<String>) -> AilResult<()> {
     };
     let authentication = configured_authentication()?;
     let authentication_required = authentication.is_some();
-    let router = build_active_router_with_auth(
+    let observation_path = format!("{data_store}.observations.jsonl");
+    let observations: Arc<dyn ObservationSink> =
+        Arc::new(JsonlObservationSink::open(&observation_path)?);
+    let router = build_active_router_with_controls(
         code_store,
         data_store,
         HttpConfig::default(),
         authentication,
+        Some(observations),
     )?;
     let runtime = runtime::Builder::new_multi_thread()
         .enable_all()
@@ -62,6 +69,7 @@ fn run(arguments: Vec<String>) -> AilResult<()> {
                     "address": address.to_string(),
                     "codeStore": code_store,
                     "dataStore": data_store,
+                    "observationStore": observation_path,
                     "authenticationRequired": authentication_required,
                 }
             })
