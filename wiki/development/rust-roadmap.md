@@ -187,9 +187,15 @@ Capability dispatcher 应采用白名单注册，不能让 guest 通过字符串
 
 ## 阶段 4：HTTP、版本库和 provider
 
+::: tip 版本库已落地，HTTP/provider 待迁移
+`ail-store` 已兼容 Racket 的 SHA-256 内容地址、元数据、活动指针与事件序列，并增加源码
+完整性校验、hash 路径约束、标准库跨进程文件锁和有界锁超时。Racket/Rust 会执行同一套
+注册、测试门禁、晋升、重启读取与回滚生命周期，canonical JSON 当前零差异。
+:::
+
 HTTP 使用成熟 Rust 生态库，而不是逐行移植手写 TCP parser；把请求转换成稳定的 `ServiceRequest` 后再进入宿主无关 service 层。
 
-版本库应先做到读取现有 Racket 生成的 store，再做写入；provider 层最后迁移，因为它在信任边界之外，不应阻塞语言一致性。
+provider 层最后迁移，因为它在信任边界之外，不应阻塞语言一致性。
 
 ## 阶段 5：生成只读审查视图（建议）
 

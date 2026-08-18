@@ -3,16 +3,15 @@
 use std::{
     collections::BTreeMap,
     fs,
-    io::{self, Write},
     path::{Path, PathBuf},
     str::FromStr,
-    sync::atomic::{AtomicU64, Ordering},
 };
 
 use ail_diagnostic::{AilResult, Diagnostic};
 use ail_runtime::{
     CapabilityHost, ExecutionOptions, MapKey, Value, execute_export_with_host, json_to_value,
 };
+use ail_store::atomic_replace;
 use ail_syntax::{Program, Route};
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
@@ -688,61 +687,13 @@ fn read_store_file(path: &Path) -> AilResult<BTreeMap<String, Value>> {
 }
 
 fn write_store_file(path: &Path, data: &BTreeMap<String, Value>) -> AilResult<()> {
-    if let Some(parent) = path.parent()
-        && !parent.as_os_str().is_empty()
-    {
-        fs::create_dir_all(parent).map_err(|_| store_write_failure(path))?;
-    }
     let entries = data
         .iter()
         .map(|(key, value)| Ok(json!({ "key": key, "value": value.to_json()? })))
         .collect::<AilResult<Vec<_>>>()?;
     let bytes = serde_json::to_vec(&json!({ "version": 1, "entries": entries }))
         .map_err(|_| store_write_failure(path))?;
-
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    let file_name = path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or("store.json");
-    let (temporary, mut file) =
-        create_temporary_store_file(parent, file_name).map_err(|_| store_write_failure(path))?;
-    let result = (|| -> io::Result<()> {
-        file.write_all(&bytes)?;
-        file.write_all(b"\n")?;
-        file.sync_all()?;
-        drop(file);
-        fs::rename(&temporary, path)
-    })();
-    if result.is_err() {
-        let _ignored = fs::remove_file(&temporary);
-    }
-    result.map_err(|_| store_write_failure(path))
-}
-
-fn create_temporary_store_file(parent: &Path, file_name: &str) -> io::Result<(PathBuf, fs::File)> {
-    static TEMPORARY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
-    for _attempt in 0..128 {
-        let sequence = TEMPORARY_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-        let temporary = parent.join(format!(
-            ".{file_name}.{}.{}.tmp",
-            std::process::id(),
-            sequence
-        ));
-        match fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temporary)
-        {
-            Ok(file) => return Ok((temporary, file)),
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-            Err(error) => return Err(error),
-        }
-    }
-    Err(io::Error::new(
-        io::ErrorKind::AlreadyExists,
-        "could not allocate a unique KV temporary file",
-    ))
+    atomic_replace(path, &[bytes.as_slice(), b"\n"].concat()).map_err(|_| store_write_failure(path))
 }
 
 fn invalid_store_file(path: &Path) -> Diagnostic {

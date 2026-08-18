@@ -1,5 +1,5 @@
 [package]
-name = "ail-cli"
+name = "ail-store"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,9 +10,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-ail-conformance = { path = "../ail-conformance", version = "=0.5.0" }
 ail-diagnostic = { path = "../ail-diagnostic", version = "=0.5.0" }
-ail-service = { path = "../ail-service", version = "=0.5.0" }
-ail-store = { path = "../ail-store", version = "=0.5.0" }
 ail-syntax = { path = "../ail-syntax", version = "=0.5.0" }
 serde_json.workspace = true
+sha2.workspace = true

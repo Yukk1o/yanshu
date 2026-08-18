@@ -15,7 +15,8 @@
          "service-deployment.rkt"
          "service-test-suite.rkt"
          "test-suite.rkt"
-         "version-store.rkt")
+         "version-store.rkt"
+         "version-store-suite.rkt")
 
 (define-runtime-path source-directory ".")
 (define project-root (simplify-path (build-path source-directory 'up)))
@@ -48,6 +49,12 @@
      (define program (load-program-file (cadr arguments)))
      (define suite (load-service-test-suite (caddr arguments)))
      (define report (run-service-test-suite program suite))
+     (emit (hasheq 'ok (hash-ref report 'passed) 'report report))
+     (unless (hash-ref report 'passed) (exit 1))]
+    [(and (= (length arguments) 3)
+          (string=? (car arguments) "version-conformance"))
+     (define report
+       (run-version-store-scenario (cadr arguments) (caddr arguments)))
      (emit (hasheq 'ok (hash-ref report 'passed) 'report report))
      (unless (hash-ref report 'passed) (exit 1))]
     [(and (= (length arguments) 4)
@@ -292,6 +299,7 @@
           "run <program.ail> <entry> <args-json-or-file>"
           "evolve <program.ail> <tests.json> [--promote]"
           "test-service <program.ail> <scenarios.json>"
+          "version-conformance <initial.ail> <candidate.ail>"
           "deploy-service <program.ail> <scenarios.json> <code-store>"
           "serve <program.ail> <port> <data-store.json>"
           "serve-active <code-store> <port> <data-store.json>"

@@ -178,6 +178,11 @@ Rust 版本必须复用 `.ail` 源码、JSON 测试、诊断代码、版本文�
 只重写 Reader、AST、解释器、资源限制与能力分发。Racket 专属宏、任意宿主
 调用和裸 `eval` 都不属于语言语义。
 
+当前 Rust host 已迁移 Reader、Parser、解释器、Schema、Library Backend、服务能力、
+事务/文件 KV 和版本库。运行 `./scripts/check-rust.ps1` 会同时执行第一方 unsafe
+门禁、Rust 测试、Clippy，以及语言、任务服务和版本生命周期的 Racket/Rust 精确差分。
+HTTP 与实时 provider 尚未切换到 Rust。
+
 ## 当前安全边界
 
 这是可用于本地业务原型的概念验证，不是公网生产服务器。HTTP 已有连接并发、

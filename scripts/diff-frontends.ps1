@@ -82,6 +82,26 @@ try {
         throw "service scenario report differs"
     }
     Write-Output "ok - task service report parity: 11 scenarios"
+
+    $initialProgram = "examples\discount\v1.ail"
+    $candidateProgram = "examples\discount\v2.ail"
+    $racketOutput = @(& $racketExe $racketCli version-conformance $initialProgram $candidateProgram)
+    $racketExit = $LASTEXITCODE
+    $rustOutput = @(& $rustExe version-conformance $initialProgram $candidateProgram)
+    $rustExit = $LASTEXITCODE
+    if ($racketExit -ne $rustExit) {
+        throw "version-store scenario exit code differs: Racket=$racketExit Rust=$rustExit"
+    }
+    $racketJson = ($racketOutput -join "`n") |
+        ConvertFrom-Json |
+        ConvertTo-Json -Depth 100 -Compress
+    $rustJson = ($rustOutput -join "`n") |
+        ConvertFrom-Json |
+        ConvertTo-Json -Depth 100 -Compress
+    if ($racketJson -ne $rustJson) {
+        throw "version-store scenario report differs"
+    }
+    Write-Output "ok - version-store lifecycle report parity"
     exit 0
 }
 finally {

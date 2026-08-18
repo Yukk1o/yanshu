@@ -20,18 +20,22 @@ exception.
 
 ## Current graph
 
-The current Rust host has two direct external dependencies:
+The current Rust host has three direct external dependencies:
 
 | Dependency | Purpose | Decision |
 | --- | --- | --- |
 | `num-bigint 0.4.8` | Preserve Racket's arbitrary-precision integer semantics | Required until a smaller equivalently tested implementation exists |
 | `serde_json 1.0.151` | Stable JSON values, diagnostics, and inspection output | Required for cross-host protocol compatibility |
+| `sha2 0.11.0` | Preserve the Racket version store's SHA-256 content identifiers | Exact-pinned RustCrypto implementation; default features disabled and portable software backend forced |
 
-Active transitive packages are `autocfg 1.5.1`, `itoa 1.0.18`, `memchr 2.8.3`,
-`num-integer 0.1.47`, `num-traits 0.2.19`, `serde_core 1.0.229`, and
-`zmij 1.0.23`. All come from crates.io; there are no git dependencies, wildcard
-versions, or duplicated package versions. Declared licenses are covered by
-MIT, Apache-2.0, and Unlicense.
+Locked transitive packages are `autocfg 1.5.1`, `block-buffer 0.12.1`,
+`cfg-if 1.0.4`, `cpufeatures 0.3.0`, `crypto-common 0.2.2`, `digest 0.11.3`,
+`hybrid-array 0.4.14`, `itoa 1.0.18`, `libc 0.2.189`, `memchr 2.8.3`,
+`num-integer 0.1.47`, `num-traits 0.2.19`, `serde_core 1.0.229`,
+`typenum 1.20.1`, and `zmij 1.0.23`. `libc` is target-specific through CPU
+feature detection. All come from crates.io; there are no git dependencies,
+wildcard versions, or duplicated package versions. Declared licenses are
+covered by MIT, Apache-2.0, and Unlicense.
 
 The initial prototype briefly enabled Serde's derive feature. It was removed
 before this checkpoint because the frontend does not need it, eliminating the
@@ -44,17 +48,27 @@ locked graph. The host instead creates a same-directory file with
 `rename` operation to replace the prior snapshot. This keeps atomic replacement
 inside the supported Rust API without expanding the third-party trust base.
 
+The version store uses the ecosystem implementation instead of a handwritten
+SHA-256 primitive. `sha2` is exact-pinned to 0.11.0, its unused `alloc` and
+`oid` defaults are disabled, and `.cargo/config.toml` selects the documented
+portable software backend. This keeps version hashes identical across target
+CPUs and excludes the crate's optional instruction-specific backend paths from
+the build. The full downloaded sources remain in the inventory even where a
+target or cfg makes a site unreachable.
+
 ## Unsafe inventory status
 
-Source inventory confirms internal unsafe implementations in `num-bigint`,
-`serde_json`, `itoa`, `memchr`, `num-traits`, `serde_core`, and `zmij`.
-`autocfg` and `num-integer` have no matching unsafe implementation in the
-downloaded source. These internals are not callable as unsafe APIs from our
-code, but they remain part of the trusted dependency base.
+Source inventory confirms internal unsafe implementations in `block-buffer`,
+`cpufeatures`, `hybrid-array`, `itoa`, `libc`, `memchr`, `num-bigint`,
+`num-traits`, `serde_core`, `serde_json`, `sha2`, and `zmij`. `autocfg`,
+`cfg-if`, `crypto-common`, `digest`, `num-integer`, and `typenum` have no
+matching unsafe implementation in the downloaded source. These internals are
+not callable as unsafe APIs from our code, but they remain part of the trusted
+dependency base.
 
 `cargo-deny 0.20.2` has executed successfully against this lockfile: advisories,
 licenses, sources, duplicate versions, and wildcards all pass. This checkpoint
-is suitable for frontend differential development, **not yet a production
+is suitable for cross-host differential development, **not yet a production
 dependency approval**. Before a production release we must:
 
 1. run `cargo deny check` against the locked graph and fail on advisories,

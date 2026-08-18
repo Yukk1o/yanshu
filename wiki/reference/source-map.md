@@ -13,7 +13,8 @@ Wiki 构建前会执行 `scripts/sync-source.mjs`，把明确白名单中的仓�
 5. [evolution-loop.rkt](/source/src/evolution-loop.rkt.txt)：看 AI 候选怎样进入测试和版本库。
 
 如果要看正在迁移的 Rust 宿主，按 `ail-diagnostic → ail-syntax → ail-runtime →
-ail-conformance → ail-cli` 阅读；这些 crate 与 Racket oracle 共享同一份 fixtures。
+ail-conformance → ail-store → ail-service → ail-cli` 阅读；这些 crate 与 Racket oracle
+共享同一份 fixtures。
 
 ## Rust v0.5 宿主
 
@@ -25,6 +26,8 @@ ail-conformance → ail-cli` 阅读；这些 crate 与 Racket oracle 共享同�
 | [runtime/lib.rs](/source/rust/crates/ail-runtime/src/lib.rs.txt) | arena 环境、闭包、求值、primitive、Library Backend |
 | [runtime/schema.rs](/source/rust/crates/ail-runtime/src/schema.rs.txt) | Schema normalization 和 issues |
 | [conformance/lib.rs](/source/rust/crates/ail-conformance/src/lib.rs.txt) | 共享 manifest runner 和 portable codec |
+| [store/lib.rs](/source/rust/crates/ail-store/src/lib.rs.txt) | 原子文件替换、版本内容寻址、晋升与回滚 |
+| [store/scenario.rs](/source/rust/crates/ail-store/src/scenario.rs.txt) | Racket/Rust 版本库生命周期差分 |
 | [service/lib.rs](/source/rust/crates/ail-service/src/lib.rs.txt) | capability trait、路由、事务/文件 KV 与场景 runner |
 | [cli/main.rs](/source/rust/crates/ail-cli/src/main.rs.txt) | Rust check / inspect / conformance CLI |
 
@@ -59,6 +62,7 @@ ail-conformance → ail-cli` 阅读；这些 crate 与 Racket oracle 共享同�
 | [http-json.rkt](/source/src/http-json.rkt.txt) | 有超时和长度限制的 HTTPS JSON POST |
 | [evolution-loop.rkt](/source/src/evolution-loop.rkt.txt) | 当前报告 → 候选 → 测试 → 注册 → 可选晋升 |
 | [version-store.rkt](/source/src/version-store.rkt.txt) | SHA-256 版本、metadata、active、events、rollback |
+| [version-store-suite.rkt](/source/src/version-store-suite.rkt.txt) | Racket 侧版本库生命周期差分 runner |
 | [test-suite.rkt](/source/src/test-suite.rkt.txt) | 纯函数 JSON 回归 suite |
 
 ## 可运行案例
