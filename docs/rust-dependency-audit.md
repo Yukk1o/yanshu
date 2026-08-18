@@ -25,10 +25,10 @@ test-only dependency:
 
 | Dependency | Purpose | Decision |
 | --- | --- | --- |
-| `num-bigint 0.4.8` | Preserve Racket's arbitrary-precision integer semantics | Required until a smaller equivalently tested implementation exists |
+| `num-bigint 0.4.8` | Preserve the language's arbitrary-precision integer semantics | Required until a smaller equivalently tested implementation exists |
 | `num-traits 0.2.19` | Checked numeric conversions used at host boundaries | Small companion dependency of the arbitrary-precision value model |
 | `serde_json 1.0.151` | Stable JSON values, diagnostics, and inspection output | Required for cross-host protocol compatibility |
-| `sha2 0.11.0` | Preserve the Racket version store's SHA-256 content identifiers | Exact-pinned RustCrypto implementation; default features disabled and portable software backend forced |
+| `sha2 0.11.0` | Preserve the established SHA-256 content identifiers | Exact-pinned RustCrypto implementation; default features disabled and portable software backend forced |
 | `axum 0.8.9` | Route-independent HTTP/1.1 server adapter | Exact-pinned; default features disabled; only `http1` and `tokio` enabled |
 | `tokio 1.53.1` | TCP runtime, bounded async body reads, signals, and graceful shutdown | Exact-pinned with a narrow explicit feature set |
 | `reqwest 0.13.4` | Bounded HTTPS transport for live LLM providers | Exact-pinned; defaults disabled; only blocking control-plane calls and Rustls enabled |

@@ -525,7 +525,7 @@ mod tests {
     }
 
     #[test]
-    fn hashes_match_sha256_and_racket_version_ids() {
+    fn hashes_match_sha256_and_canonical_version_ids() {
         assert_eq!(
             source_hash("abc"),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"

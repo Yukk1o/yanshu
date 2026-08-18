@@ -1,4 +1,4 @@
-; The program declares a portable contract, not a Racket/Rust provider.
+; The program declares a portable contract, not a host-specific provider.
 (program
   (name text-library-demo)
   (version 1)
