@@ -14,7 +14,8 @@ Current line of development:
 main (v0.1.0)
   └─ develop
        ├─ feature/web-backend-runtime (merged as v0.2 checkpoint)
-       └─ feature/business-backend-v0.3
+       ├─ feature/business-backend-v0.3 (merged)
+       └─ feature/library-backend-v0.4
 ```
 
 ## Merge policy
