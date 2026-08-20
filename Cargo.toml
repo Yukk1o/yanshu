@@ -33,6 +33,8 @@ num-traits = "0.2"
 serde_json = { version = "1.0", features = ["arbitrary_precision"] }
 sha2 = { version = "=0.11.0", default-features = false }
 axum = { version = "=0.8.9", default-features = false, features = ["http1", "tokio"] }
+hyper = { version = "=1.11.0", default-features = false, features = ["http1", "server"] }
+hyper-util = { version = "=0.1.20", default-features = false, features = ["http1", "server-graceful", "service", "tokio"] }
 tokio = { version = "=1.53.1", default-features = false, features = ["io-util", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tower = { version = "=0.5.3", default-features = false, features = ["util"] }
 reqwest = { version = "=0.13.4", default-features = false, features = ["blocking", "rustls"] }

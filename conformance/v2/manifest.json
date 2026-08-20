@@ -10,6 +10,19 @@
       "expect": {"kind": "value", "value": {"$int": "110"}}
     },
     {
+      "name": "v2-bytecode-version-gate",
+      "phase": "run-compiled",
+      "source": "programs/business.yan",
+      "entry": "total",
+      "args": [[{"$int": "-5"}, {"$int": "40"}, {"$int": "70"}]],
+      "expect": {
+        "kind": "diagnostic",
+        "code": "COMPILER_LANGUAGE_VERSION",
+        "message": "v0.10 bytecode compilation requires language version 4",
+        "details": {"actual": "2", "required": "4"}
+      }
+    },
+    {
       "name": "v2-cond-and-result",
       "phase": "run",
       "source": "programs/business.yan",

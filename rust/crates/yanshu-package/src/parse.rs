@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use serde_json::Value;
+use serde_json::{Value, json};
 use yanshu_diagnostic::{Diagnostic, YanshuResult};
 
 use crate::{
@@ -18,6 +18,24 @@ use crate::{
 
 const MAXIMUM_PACKAGES: usize = 256;
 const MAXIMUM_MODULES: usize = 256;
+pub(crate) const MAXIMUM_DOCUMENT_BYTES: u64 = 1024 * 1024;
+
+pub(crate) fn document(bytes: &[u8], kind: &str) -> YanshuResult<Value> {
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MAXIMUM_DOCUMENT_BYTES {
+        return Err(Diagnostic::new(
+            "PACKAGE_FILE_LIMIT",
+            "package document exceeds its byte limit",
+            json!({ "maximum": MAXIMUM_DOCUMENT_BYTES }),
+        ));
+    }
+    serde_json::from_slice(bytes).map_err(|error| {
+        Diagnostic::new(
+            "PACKAGE_INVALID_JSON",
+            format!("{kind} is not valid JSON"),
+            json!({ "line": error.line(), "column": error.column() }),
+        )
+    })
+}
 
 pub(crate) fn source_descriptor(document: &Value) -> YanshuResult<SourceDescriptor> {
     let root = object(document, "package source descriptor")?;

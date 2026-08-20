@@ -19,8 +19,8 @@ Rust v0.10 已形成通用语言的安全内核；v0.11 正在把跨平台 CI、
 | 版本库 | SHA-256、不可变校验、metadata、active、events、原子写、跨进程锁、回滚 | 签名、远端 artifact store、生产审批流 |
 | 运维快照 | 离线 service lock、逐文件 SHA-256 manifest、版本/KV 语义校验、拒绝覆盖恢复 | 加密、签名、异地复制、定期恢复演练 |
 | Provider | OpenAI Responses、DeepSeek Chat、HTTPS-only、拒绝 redirect、大小/超时、密钥零化 | 真实凭据 smoke gate、速率/费用治理 |
-| HTTP / rollout | Axum/Tokio、loopback-only、可选 Bearer、宿主 request ID、每请求固定 hash、脱敏 JSONL、隔离影子采样 | TLS、细粒度授权、进程沙箱、指标/trace/告警、canary、静态网页 |
-| 工具 | check/inspect/review、Bundle、package pack/lock/verify/review/run/compile、bytecode/WASM compile/inspect/run、conformance、test/deploy/evolve service、version lifecycle、跨平台 CI、Reader/Value/artifact fuzz、Windows/Linux CLI 双构建与 keyless provenance | LSP、formatter、MCP、结构化 AST diff、操作型 rollback CLI |
+| HTTP / rollout | Axum/Tokio、显式 header/body deadline、loopback-only、可选 Bearer、宿主 request ID、每请求固定 hash、脱敏 JSONL、隔离影子采样 | TLS、细粒度授权、进程沙箱、指标/trace/告警、canary、静态网页 |
+| 工具 | check/inspect/review、Bundle、package pack/lock/verify/review/run/compile、bytecode/WASM compile/inspect/run、conformance、test/deploy/evolve service、version lifecycle、跨平台 CI、Reader/Value/artifact/结构化边界 fuzz、Windows/Linux CLI 双构建与 keyless provenance | LSP、formatter、MCP、结构化 AST diff、操作型 rollback CLI |
 
 ## Crate 边界
 

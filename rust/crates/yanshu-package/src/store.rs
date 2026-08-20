@@ -2,7 +2,8 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
+    fs::{self, File},
+    io::Read,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -19,12 +20,12 @@ use crate::{
         LoadedPackage, LockedPackage, PackageDependency, PackageLock, PackageManifest,
         PackageModule, SourceDescriptor,
     },
-    parse::{package_lock, package_manifest, source_descriptor},
+    parse::MAXIMUM_DOCUMENT_BYTES,
+    parse_package_lock_bytes, parse_package_manifest_bytes, parse_package_source_bytes,
 };
 
 const SOURCE_DESCRIPTOR: &str = "yanshu-package.source.json";
 const ARTIFACT_MANIFEST: &str = "package.json";
-const MAXIMUM_DOCUMENT_BYTES: u64 = 1024 * 1024;
 const MAXIMUM_SOURCE_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Debug)]
@@ -84,8 +85,12 @@ pub fn load_locked_package(
     lock_path: impl AsRef<Path>,
 ) -> YanshuResult<LoadedPackage> {
     let store = absolute_path(store.as_ref())?;
-    let document = read_json(lock_path.as_ref(), MAXIMUM_DOCUMENT_BYTES, "package lock")?;
-    let sealed = package_lock(&document)?;
+    let bytes = read_bounded(
+        lock_path.as_ref(),
+        MAXIMUM_DOCUMENT_BYTES,
+        "PACKAGE_DOCUMENT_READ",
+    )?;
+    let sealed = parse_package_lock_bytes(&bytes)?;
     let (computed, program) = resolve_store(&store, &sealed.root_package)?;
     if sealed != computed {
         return Err(Diagnostic::new(
@@ -204,12 +209,12 @@ impl BuildContext {
 }
 
 fn read_source_descriptor(root: &Path) -> YanshuResult<SourceDescriptor> {
-    let document = read_json(
+    let bytes = read_bounded(
         &root.join(SOURCE_DESCRIPTOR),
         MAXIMUM_DOCUMENT_BYTES,
-        "package source descriptor",
+        "PACKAGE_DOCUMENT_READ",
     )?;
-    source_descriptor(&document)
+    parse_package_source_bytes(&bytes)
 }
 
 type ModuleSources = BTreeMap<String, Vec<u8>>;
@@ -391,12 +396,12 @@ fn verify_artifact(store: &Path, content_hash: &str) -> YanshuResult<VerifiedArt
             json!({ "contentHash": content_hash }),
         ));
     }
-    let document = read_json(
+    let bytes = read_bounded(
         &canonical_root.join(ARTIFACT_MANIFEST),
         MAXIMUM_DOCUMENT_BYTES,
-        "package manifest",
+        "PACKAGE_DOCUMENT_READ",
     )?;
-    let manifest = package_manifest(&document)?;
+    let manifest = parse_package_manifest_bytes(&bytes)?;
     if manifest.content_hash() != content_hash {
         return Err(Diagnostic::new(
             "PACKAGE_CONTENT_HASH_MISMATCH",
@@ -566,17 +571,6 @@ impl Drop for TemporaryArtifact {
     }
 }
 
-fn read_json(path: &Path, maximum: u64, kind: &str) -> YanshuResult<Value> {
-    let bytes = read_bounded(path, maximum, "PACKAGE_DOCUMENT_READ")?;
-    serde_json::from_slice(&bytes).map_err(|error| {
-        Diagnostic::new(
-            "PACKAGE_INVALID_JSON",
-            format!("{kind} is not valid JSON"),
-            json!({ "line": error.line(), "column": error.column() }),
-        )
-    })
-}
-
 fn write_json(path: &Path, document: &Value, code: &'static str) -> YanshuResult<()> {
     if let Some(parent) = path.parent()
         && !parent.as_os_str().is_empty()
@@ -597,7 +591,10 @@ fn write_json(path: &Path, document: &Value, code: &'static str) -> YanshuResult
 }
 
 fn read_bounded(path: &Path, maximum: u64, code: &'static str) -> YanshuResult<Vec<u8>> {
-    let metadata = fs::metadata(path)
+    let file = File::open(path)
+        .map_err(|error| io_diagnostic(code, "could not open a package file", path, &error))?;
+    let metadata = file
+        .metadata()
         .map_err(|error| io_diagnostic(code, "could not inspect a package file", path, &error))?;
     if !metadata.is_file() || metadata.len() > maximum {
         return Err(Diagnostic::new(
@@ -606,8 +603,18 @@ fn read_bounded(path: &Path, maximum: u64, code: &'static str) -> YanshuResult<V
             json!({ "maximum": maximum }),
         ));
     }
-    fs::read(path)
-        .map_err(|error| io_diagnostic(code, "could not read a package file", path, &error))
+    let mut bytes = Vec::with_capacity(usize::try_from(metadata.len().min(maximum)).unwrap_or(0));
+    file.take(maximum.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(|error| io_diagnostic(code, "could not read a package file", path, &error))?;
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > maximum {
+        return Err(Diagnostic::new(
+            "PACKAGE_FILE_LIMIT",
+            "package file is not regular or exceeds its byte limit",
+            json!({ "maximum": maximum }),
+        ));
+    }
+    Ok(bytes)
 }
 
 fn canonical_directory(path: &Path, code: &'static str) -> YanshuResult<PathBuf> {

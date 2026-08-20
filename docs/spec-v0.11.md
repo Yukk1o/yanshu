@@ -8,7 +8,7 @@ v0.11 建立四条独立证据链：
 
 1. 每次 push / pull request 在 Windows 与 Linux 上执行 Rust 格式、测试和 Clippy；
 2. 在 Linux 上执行第一方 safe Rust、凭据模式、cargo-deny、v1-v4 conformance、编译产物与标准 WebAssembly 引擎 smoke test；
-3. 定时和按需使用 libFuzzer 攻击 Reader/Parser、portable JSON Value、bytecode/WASM artifact loader。
+3. 定时和按需使用 libFuzzer 攻击 Reader/Parser、portable JSON Value、bytecode/WASM artifact loader，以及 Bundle/package/HTTP 结构化输入边界；
 4. 对发布标签执行版本绑定、Windows/Linux 双构建字节比对、确定性归档、CycloneDX SBOM、SHA-256 清单与 keyless provenance。
 
 CI 不是新的可信解释器，也不赋予 AI 或 pull request 晋升权。它只能拒绝缺少证据的变更，不能证明程序没有缺陷。
@@ -28,13 +28,14 @@ CI 分为四个 job：
 
 ## 3. Fuzz 契约
 
-`fuzz/` 是独立 Cargo workspace，避免把 libFuzzer 运行时加入语言或发布二进制的依赖图；它有自己的 lock 和 cargo-deny 检查。`libfuzzer-sys` 的 `(MIT OR Apache-2.0) AND NCSA` 许可证被显式记录，不能借 fuzz 依赖扩展发布二进制的依赖面。三个 target 都是 safe Rust，并复用正式公开入口：
+`fuzz/` 是独立 Cargo workspace，避免把 libFuzzer 运行时加入语言或发布二进制的依赖图；它有自己的 lock 和 cargo-deny 检查。`libfuzzer-sys` 的 `(MIT OR Apache-2.0) AND NCSA` 许可证被显式记录，不能借 fuzz 依赖扩展发布二进制的依赖面。四个 target 都是 safe Rust，并复用正式公开入口：
 
 | Target | 不可信输入 | 失败条件 |
 | --- | --- | --- |
 | `reader_parser` | 任意 UTF-8 source bytes | panic、abort、越界或 sanitizer 报告 |
 | `portable_value` | 任意 JSON bytes | portable value 转换崩溃或 sanitizer 报告 |
 | `artifact_loaders` | 任意 artifact bytes | bytecode/WASM loader 崩溃或 sanitizer 报告 |
+| `boundary_inputs` | Bundle/package JSON bytes 与规范化 HTTP request | 边界 parser/normalizer 崩溃、无界工作或 sanitizer 报告 |
 
 预期的结构化 `Diagnostic` 不是 fuzz 失败。CI 限制单输入长度、RSS 和总运行时间；发现的 crash artifact 只短期保留，人工最小化后应转成普通回归测试。不得把包含业务数据或凭据的 corpus 上传到仓库。
 
@@ -54,6 +55,7 @@ cargo check --locked --manifest-path fuzz/Cargo.toml --bins
 cargo fuzz run reader_parser -- -max_total_time=30 -max_len=1048576 -rss_limit_mb=2048
 cargo fuzz run portable_value -- -max_total_time=30 -max_len=1048576 -rss_limit_mb=2048
 cargo fuzz run artifact_loaders -- -max_total_time=30 -max_len=1048576 -rss_limit_mb=2048
+cargo fuzz run boundary_inputs -- -max_total_time=30 -max_len=1048576 -rss_limit_mb=2048
 ```
 
 源码边界检查：
@@ -66,6 +68,10 @@ cargo fuzz run artifact_loaders -- -max_total_time=30 -max_len=1048576 -rss_limi
 
 发布工作流只接受位于 `main` 的注解式稳定标签，且标签必须精确等于 workspace 版本。Windows/Linux CLI 在同一 runner 的两个全新 target 目录分别构建，字节不一致立即拒绝；确定性 ZIP、构建记录、规范化 CycloneDX 1.5 SBOM、release manifest 和 `SHA256SUMS` 共同形成闭包，最终由 GitHub OIDC 生成 keyless provenance。详细威胁模型、验证命令和可复现性声明见 [release-supply-chain.md](release-supply-chain.md)。
 
-## 6. 未完成范围
+## 6. 审计收口
 
-v0.11 后续仍需长期 fuzz corpus 治理、Bundle/package 文件系统加载器与 HTTP parser 的隔离 fuzz harness、独立重构建者和 hermetic runner。当前双构建证明限定为同源码、同 runner 环境，不宣称任意机器已能得到相同 hash。LSP、formatter 和 MCP 属于 v0.12；标准库扩展与有界结构化并发属于 v0.13 以后。
+Bundle manifest、Bundle module、package document 和 HTTP request-header deadline 现在都在昂贵工作前具有明确边界；相关实现、既有审计项与回归证据见 [v0.11-audit-closure.md](v0.11-audit-closure.md)。`boundary_inputs` fuzz 的是 Hyper 解析后的 Yanshu trust boundary；原始 HTTP wire parser 仍由上游 Hyper 提供，慢 header 防御由真实 TCP 回归测试覆盖。
+
+## 7. 未完成范围
+
+v0.11 后续仍需长期 fuzz corpus 治理、独立重构建者和 hermetic runner。当前双构建证明限定为同源码、同 runner 环境，不宣称任意机器已能得到相同 hash。LSP、formatter 和 MCP 属于 v0.12；标准库扩展与有界结构化并发属于 v0.13 以后。

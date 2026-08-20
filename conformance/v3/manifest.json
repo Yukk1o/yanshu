@@ -13,6 +13,19 @@
       }
     },
     {
+      "name": "v3-bytecode-version-gate",
+      "phase": "run-compiled",
+      "source": "programs/data.yan",
+      "entry": "render",
+      "args": [{"$int": "1200"}],
+      "expect": {
+        "kind": "diagnostic",
+        "code": "COMPILER_LANGUAGE_VERSION",
+        "message": "v0.10 bytecode compilation requires language version 4",
+        "details": {"actual": "3", "required": "4"}
+      }
+    },
+    {
       "name": "v3-total-match-negative-branch",
       "phase": "run",
       "source": "programs/data.yan",

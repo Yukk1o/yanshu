@@ -18,12 +18,14 @@ yanshu-store = { path = "../yanshu-store", version = "=0.10.0" }
 yanshu-syntax = { path = "../yanshu-syntax", version = "=0.10.0" }
 axum.workspace = true
 getrandom.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
 num-bigint.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 subtle.workspace = true
 tokio.workspace = true
+tower.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
-tower.workspace = true

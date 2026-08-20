@@ -2,7 +2,8 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
+    fs::{self, File},
+    io::Read,
     path::{Component, Path},
 };
 
@@ -17,6 +18,8 @@ use crate::{graph::dependency_order, linker::link_programs};
 const MANIFEST_FILE: &str = "bundle.json";
 const MAXIMUM_FORMAT_VERSION: u64 = 2;
 const MAXIMUM_MODULES: usize = 256;
+pub(crate) const MAXIMUM_MANIFEST_BYTES: u64 = 1024 * 1024;
+pub(crate) const MAXIMUM_MODULE_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleManifest {
@@ -153,21 +156,14 @@ pub fn seal_bundle_directory(
 
 pub fn load_bundle(root: impl AsRef<Path>) -> YanshuResult<LoadedBundle> {
     let root = root.as_ref();
-    let source = fs::read_to_string(root.join(MANIFEST_FILE)).map_err(|error| {
-        Diagnostic::new(
-            "BUNDLE_MANIFEST_READ",
-            "bundle manifest could not be read",
-            json!({ "kind": error.kind().to_string() }),
-        )
-    })?;
-    let document: Value = serde_json::from_str(&source).map_err(|error| {
-        Diagnostic::new(
-            "BUNDLE_MANIFEST_JSON",
-            "bundle manifest is not valid JSON",
-            json!({ "line": error.line(), "column": error.column() }),
-        )
-    })?;
-    let manifest = parse_manifest(&document)?;
+    let bytes = read_bounded(
+        &root.join(MANIFEST_FILE),
+        MAXIMUM_MANIFEST_BYTES,
+        "BUNDLE_MANIFEST_READ",
+        "BUNDLE_MANIFEST_LIMIT",
+        "bundle manifest",
+    )?;
+    let manifest = parse_bundle_manifest_bytes(&bytes)?;
     let programs = read_verified_programs(root, &manifest)?;
     let order = dependency_order(&programs, &manifest.entry)?;
     let bundle_hash = manifest.content_hash();
@@ -191,6 +187,26 @@ pub fn load_bundle(root: impl AsRef<Path>) -> YanshuResult<LoadedBundle> {
         bundle_hash,
         program,
     })
+}
+
+/// Parses an untrusted bundle manifest after enforcing the same byte limit as
+/// the filesystem loader.
+pub fn parse_bundle_manifest_bytes(bytes: &[u8]) -> YanshuResult<BundleManifest> {
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MAXIMUM_MANIFEST_BYTES {
+        return Err(file_limit(
+            "BUNDLE_MANIFEST_LIMIT",
+            "bundle manifest",
+            MAXIMUM_MANIFEST_BYTES,
+        ));
+    }
+    let document: Value = serde_json::from_slice(bytes).map_err(|error| {
+        Diagnostic::new(
+            "BUNDLE_MANIFEST_JSON",
+            "bundle manifest is not valid JSON",
+            json!({ "line": error.line(), "column": error.column() }),
+        )
+    })?;
+    parse_manifest(&document)
 }
 
 fn read_verified_programs(
@@ -366,13 +382,68 @@ fn validate_relative_path(value: &str) -> YanshuResult<()> {
 fn read_module(root: &Path, relative: &str) -> YanshuResult<String> {
     let target = root.join(relative);
     ensure_contained(root, &target)?;
-    fs::read_to_string(&target).map_err(|error| {
+    let bytes = read_bounded(
+        &target,
+        MAXIMUM_MODULE_BYTES,
+        "BUNDLE_MODULE_READ",
+        "BUNDLE_MODULE_LIMIT",
+        "bundle module",
+    )?;
+    String::from_utf8(bytes).map_err(|_| {
         Diagnostic::new(
-            "BUNDLE_MODULE_READ",
-            "bundle module could not be read",
-            json!({ "path": relative, "kind": error.kind().to_string() }),
+            "BUNDLE_MODULE_UTF8",
+            "bundle module is not valid UTF-8",
+            json!({ "path": relative }),
         )
     })
+}
+
+fn read_bounded(
+    path: &Path,
+    maximum: u64,
+    read_code: &'static str,
+    limit_code: &'static str,
+    kind: &'static str,
+) -> YanshuResult<Vec<u8>> {
+    let file = File::open(path).map_err(|error| {
+        Diagnostic::new(
+            read_code,
+            format!("{kind} could not be opened"),
+            json!({ "kind": error.kind().to_string() }),
+        )
+    })?;
+    let metadata = file.metadata().map_err(|error| {
+        Diagnostic::new(
+            read_code,
+            format!("{kind} could not be inspected"),
+            json!({ "kind": error.kind().to_string() }),
+        )
+    })?;
+    if !metadata.is_file() || metadata.len() > maximum {
+        return Err(file_limit(limit_code, kind, maximum));
+    }
+    let mut bytes = Vec::with_capacity(usize::try_from(metadata.len().min(maximum)).unwrap_or(0));
+    file.take(maximum.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(|error| {
+            Diagnostic::new(
+                read_code,
+                format!("{kind} could not be read"),
+                json!({ "kind": error.kind().to_string() }),
+            )
+        })?;
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > maximum {
+        return Err(file_limit(limit_code, kind, maximum));
+    }
+    Ok(bytes)
+}
+
+fn file_limit(code: &'static str, kind: &str, maximum: u64) -> Diagnostic {
+    Diagnostic::new(
+        code,
+        format!("{kind} is not a regular file within its byte limit"),
+        json!({ "maximum": maximum }),
+    )
 }
 
 fn ensure_contained(root: &Path, target: &Path) -> YanshuResult<()> {

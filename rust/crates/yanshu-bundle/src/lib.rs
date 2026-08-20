@@ -10,7 +10,8 @@ use yanshu_diagnostic::YanshuResult;
 use yanshu_syntax::Program;
 
 pub use manifest::{
-    BundleManifest, LoadedBundle, ModuleManifest, load_bundle, seal_bundle_directory,
+    BundleManifest, LoadedBundle, ModuleManifest, load_bundle, parse_bundle_manifest_bytes,
+    seal_bundle_directory,
 };
 
 pub fn link_program_set(
@@ -163,6 +164,38 @@ mod tests {
         };
         assert_eq!(diagnostic.code, "BUNDLE_INVALID_MODULE_PATH");
         fs::remove_dir_all(cycle).unwrap_or_else(|error| panic!("{error}"));
+    }
+
+    #[test]
+    fn rejects_oversized_manifest_and_module_files_before_allocating_them() {
+        let manifest_root = temporary_directory("manifest-limit");
+        fs::create_dir_all(&manifest_root).unwrap_or_else(|error| panic!("{error}"));
+        let manifest = fs::File::create(manifest_root.join("bundle.json"))
+            .unwrap_or_else(|error| panic!("{error}"));
+        manifest
+            .set_len(super::manifest::MAXIMUM_MANIFEST_BYTES + 1)
+            .unwrap_or_else(|error| panic!("{error}"));
+        let diagnostic = match load_bundle(&manifest_root) {
+            Err(diagnostic) => diagnostic,
+            Ok(_) => panic!("oversized manifest must fail closed"),
+        };
+        assert_eq!(diagnostic.code, "BUNDLE_MANIFEST_LIMIT");
+        fs::remove_dir_all(manifest_root).unwrap_or_else(|error| panic!("{error}"));
+
+        let module_root = temporary_directory("module-limit");
+        fs::create_dir_all(&module_root).unwrap_or_else(|error| panic!("{error}"));
+        let module = fs::File::create(module_root.join("large.yan"))
+            .unwrap_or_else(|error| panic!("{error}"));
+        module
+            .set_len(super::manifest::MAXIMUM_MODULE_BYTES + 1)
+            .unwrap_or_else(|error| panic!("{error}"));
+        let diagnostic =
+            match seal_bundle_directory(&module_root, "large", &["large.yan".to_owned()]) {
+                Err(diagnostic) => diagnostic,
+                Ok(_) => panic!("oversized module must fail closed"),
+            };
+        assert_eq!(diagnostic.code, "BUNDLE_MODULE_LIMIT");
+        fs::remove_dir_all(module_root).unwrap_or_else(|error| panic!("{error}"));
     }
 
     #[test]

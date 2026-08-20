@@ -7,8 +7,29 @@ mod store;
 
 pub use model::{
     LoadedPackage, LockedPackage, PackageDependency, PackageLock, PackageManifest, PackageModule,
+    SourceDependency, SourceDescriptor,
 };
 pub use store::{load_locked_package, lock_workspace, pack_workspace, verify_package};
+
+use yanshu_diagnostic::YanshuResult;
+
+/// Parses an untrusted package source descriptor with the production byte and
+/// structural limits, without reading from the filesystem.
+pub fn parse_package_source_bytes(bytes: &[u8]) -> YanshuResult<SourceDescriptor> {
+    parse::source_descriptor(&parse::document(bytes, "package source descriptor")?)
+}
+
+/// Parses an untrusted content-addressed package manifest with the production
+/// byte and structural limits, without reading from the filesystem.
+pub fn parse_package_manifest_bytes(bytes: &[u8]) -> YanshuResult<PackageManifest> {
+    parse::package_manifest(&parse::document(bytes, "package manifest")?)
+}
+
+/// Parses an untrusted package lock with the production byte and structural
+/// limits, without reading from the filesystem.
+pub fn parse_package_lock_bytes(bytes: &[u8]) -> YanshuResult<PackageLock> {
+    parse::package_lock(&parse::document(bytes, "package lock")?)
+}
 
 #[cfg(test)]
 mod tests {
@@ -20,7 +41,10 @@ mod tests {
 
     use yanshu_runtime::{ExecutionOptions, Value, execute_export};
 
-    use crate::{load_locked_package, lock_workspace};
+    use crate::{
+        load_locked_package, lock_workspace, parse_package_lock_bytes,
+        parse_package_manifest_bytes, parse_package_source_bytes,
+    };
 
     const POLICY: &str = r#"(program
       (name policy)
@@ -181,5 +205,33 @@ mod tests {
             Ok(_) => panic!("expected dependency path diagnostic"),
         };
         assert_eq!(diagnostic.code, "PACKAGE_INVALID_PATH");
+    }
+
+    #[test]
+    fn byte_parsers_share_the_filesystem_loader_limit() {
+        let oversized = vec![b' '; super::parse::MAXIMUM_DOCUMENT_BYTES as usize + 1];
+        for diagnostic in [
+            parse_package_source_bytes(&oversized).err(),
+            parse_package_manifest_bytes(&oversized).err(),
+            parse_package_lock_bytes(&oversized).err(),
+        ] {
+            assert_eq!(
+                diagnostic.map(|value| value.code),
+                Some("PACKAGE_FILE_LIMIT")
+            );
+        }
+
+        let descriptor = parse_package_source_bytes(
+            br#"{
+              "formatVersion": 1,
+              "name": "bounded-source",
+              "version": "1.0.0",
+              "entry": "app",
+              "modules": ["app.yan"],
+              "dependencies": []
+            }"#,
+        )
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(descriptor.entry, "app");
     }
 }
