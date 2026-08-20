@@ -14,7 +14,7 @@ CI 不是新的可信解释器，也不赋予 AI 或 pull request 晋升权。�
 
 ## 2. 工作流边界
 
-`.github/workflows/ci.yml` 使用只读 `contents` 权限，不持久化 checkout 凭据。第三方 Action 固定到完整 commit SHA；升级 Action 必须作为普通依赖变更审查，不能只移动 tag。
+`.github/workflows/ci.yml` 使用只读 `contents` 权限，不持久化 checkout 凭据。第三方 Action 固定到完整 commit SHA；升级 Action 必须作为普通依赖变更审查，不能只移动 tag。`.gitattributes` 规定文本 checkout 使用 LF，使 Windows 与 Linux 的 rustfmt 看到同一规范字节；CI 对 feature branch 由 pull request 触发，避免一次 push 重复占用两套 runner。
 
 CI 分为四个 job：
 
