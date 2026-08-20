@@ -1,295 +1,227 @@
-# AI-Evolve
+<div align="center">
 
-> 更习惯 Go / Rust、暂时看不懂 Lisp？从 [中文 Wiki](wiki/README.md) 开始，
-> 其中包含 5 分钟上手、逐段语法翻译、架构/源码地图和 AI 改动审查清单。
+# 衍术 · Yanshu
 
-一个用于验证“运行中的软件生成候选后继版本”的 Rust-first 通用语言原型。当前
-实现还是安全内核阶段；Reader、Parser、AST、解释器、Web 服务、
-版本库、LLM provider、影子执行与运维工具都已有第一方 Rust 实现，并全局禁止
-第一方 `unsafe`。冻结的旧前端只服务于 v1 差分验证，不再承接 v2 语言开发。
+### 程序即数据，演化皆可溯。
 
-当前闭环：
+*Programs are data. Evolution leaves a trace.*
 
-```text
-稳定程序 -> 运行测试/观察失败 -> LLM/provider 生成候选源码
-         -> 受限解释执行 -> 完整回归测试 -> 注册 -> 晋升 -> 回滚
+![status](https://img.shields.io/badge/status-experimental-f59e0b?style=flat-square)
+![release](https://img.shields.io/badge/release-v0.10-6d5dfc?style=flat-square)
+![language](https://img.shields.io/badge/language-v4-22c55e?style=flat-square)
+![implementation](https://img.shields.io/badge/implementation-safe_Rust-b7410e?style=flat-square&logo=rust)
+![license](https://img.shields.io/badge/license-MIT_OR_Apache--2.0-2563eb?style=flat-square)
+
+一门面向人类与 AI 协作的实验性、受限通用语言：候选代码可以持续生成，执行权与晋升权始终留在可审计的宿主边界内。
+
+[快速体验](#快速体验) · [语言能力](#现在能做什么) · [安全边界](#安全边界) · [中文 Wiki](wiki/README.md) · [路线图](#项目状态)
+
+</div>
+
+> [!CAUTION]
+> **实验性 AI 辅助软件，请勿用于生产。** 本项目由人类提出目标与安全边界，并在 AI 编程代理的大量协助下设计、实现和测试。代码尚未经过充分的独立人工审计，可能包含大量缺陷、安全问题、语义不一致及数据丢失风险。请勿用于生产环境、关键业务或敏感数据处理。
+>
+> **Experimental, AI-assisted software.** This project was designed, implemented, and tested with substantial assistance from AI coding agents under human-directed goals and security boundaries. It has not received sufficient independent human audit and may contain numerous bugs, security flaws, semantic inconsistencies, or data-loss risks. Do not use it in production, critical systems, or with sensitive data.
+
+## 为什么是衍术
+
+传统语言把源代码视为写给编译器的文本；衍术进一步把程序视为可以解析、哈希、比较、测试、审查和派生的数据。
+
+AI 可以提出一个完整候选版本，但不能直接改写正在服务用户的活动程序。每个候选都必须经过同一条宿主持有的流水线：
+
+```mermaid
+flowchart LR
+    A[".yan 规范源码"] --> B["Parser + 类型/效果分析"]
+    B --> C["fuel 受限执行 + 完整测试"]
+    C --> D["内容哈希 + 密封制品"]
+    D --> E["人类只读审查"]
+    E --> F["显式晋升 / 廉价回滚"]
 ```
 
-这里的 AI 是候选代码开发者，不是测试裁判。测试集和解释器由宿主持有；AI
-不能修改测试、绕过解释器、给自己判定通过，或直接改变活动版本。
+这里的“运行期演化”不是让 LLM 绕过测试在线修改闭包，而是让运行系统持续产生隔离候选，再由确定的语言规则和发布门禁决定它能否成为后继版本。
 
-## 直接测试 Web 后端
+## 一眼看懂
 
-```powershell
-.\scripts\serve-tasks.ps1
-```
-
-看到 `"event":"listening"` 后打开 <http://127.0.0.1:8080/>。页面不是静态
-演示：新增、编辑、完成和删除任务都会经过 `.ail` 路由、受限解释器和事务
-JSON KV；关闭后再次启动，任务仍然存在。端口可在启动前通过
-`$env:AI_EVOLVE_HTTP_PORT="9000"` 修改。
-
-启动脚本会先运行 [11 个有状态业务场景](examples/tasks/scenarios.json)，通过后
-才把 [任务服务](examples/tasks/service.ail) 提升为活动版本。HTTP 请求在开始时
-固定源码版本，因此运行中提升新版本不会改变正在处理的请求。
-
-Rust HTTP 主机也已经可以独立完成测试门禁、部署和监听：
-
-```powershell
-# 终端 1
-.\scripts\serve-tasks-rust.ps1
-
-# 终端 2
-Invoke-RestMethod http://127.0.0.1:8081/tasks
-```
-
-该入口当前提供 JSON API；浏览器测试控制台仍由上面的 Racket 启动脚本提供。
-Rust 绑定地址可通过 `$env:AI_EVOLVE_RUST_HTTP_BIND="127.0.0.1:9001"` 修改。
-Rust server 只接受 loopback 地址；公网入口必须经可信 TLS 反向代理。需要认证时在启动前
-设置 `$env:AI_EVOLVE_HTTP_BEARER_TOKEN`，调用方使用 `Authorization: Bearer ...`。
-Token 不会进入 guest headers、诊断或启动 JSON。每个响应都带独立的 `X-Request-Id`。
-服务器同时把脱敏请求观测追加到 `<data-store>.observations.jsonl`：只包含时间、请求 ID、
-方法、状态、耗时、handler、固定的活动版本哈希和错误码，不记录 URL/path、query、header
-或 body。日志写入失败会作为独立运维事件报告，不会把已经提交的业务请求伪装成失败。
-
-Rust server 还可以让一个尚未晋升的候选版本接收脱敏影子流量。它与活动版本读取同一份
-请求前 KV 快照，但只在隔离内存中执行；候选写入、日志和响应全部丢弃，不影响主响应：
-
-```powershell
-$env:AI_EVOLVE_SHADOW_VERSION="<已注册候选的 64 位哈希>"
-$env:AI_EVOLVE_SHADOW_PERCENT="10"
-$env:AI_EVOLVE_SHADOW_MAX_CONCURRENCY="4"
-.\scripts\serve-tasks-rust.ps1
-```
-
-采样由宿主请求 ID 确定，相同 ID 的决策稳定。结果写入
-`<data-store>.shadow.jsonl`，只含活动/候选版本、状态、handler、错误码和差异类别，
-不含 path、query、header、body、KV 值或内容指纹。候选缺失、被篡改或执行失败只会
-产生 `candidate-unavailable`/差异观测；完整边界见
-[影子运行](docs/shadow-rollout.md)。
-
-## 快速开始
-
-主实现只需要仓库声明的 Rust 工具链：
-
-```powershell
-.\scripts\check-rust.ps1
-cargo run --locked -p ail-cli -- test-service examples\expenses\service.ail examples\expenses\scenarios.json
-cargo run --locked -p ail-cli -- inspect-bundle examples\bundles\expense-approval
-cargo run --locked -p ail-cli -- run-bundle examples\bundles\expense-approval evaluate examples\bundles\expense-approval\arguments.json
-cargo run --locked -p ail-cli -- package-lock examples\packages\typed-expense .runtime\v0.9-package-store examples\packages\typed-expense\ail.lock.json
-cargo run --locked -p ail-cli -- package-review .runtime\v0.9-package-store examples\packages\typed-expense\ail.lock.json --text
-```
-
-Rust conformance 固定 v1 兼容语义。需要额外运行冻结旧前端的差分证据时，显式启用；它会按需使用仓库私有工具链，不修改系统 PATH：
-
-```powershell
-$env:AI_EVOLVE_CHECK_V1_REFERENCE="1"
-.\scripts\check-rust.ps1
-.\scripts\bootstrap.ps1
-.\scripts\test.ps1
-.\scripts\demo.ps1
-```
-
-`bootstrap.ps1` 下载并校验官方 Racket 9.3 Windows x64 tarball。当前工作区
-已经完成这一步，`.toolchains` 不进入版本控制。
-
-演示会：
-
-1. 将有缺陷的折扣程序作为初始稳定版；
-2. 运行三个案例并观察两个失败；
-3. 通过离线 provider 取得候选程序；
-4. 验证候选程序的全部案例；
-5. 晋升候选版本，VIP 价格由 `100` 变为 `90`；
-6. 回滚到父版本，结果恢复为 `100`。
-
-## CLI
-
-```powershell
-.\.toolchains\racket\Racket.exe src\cli.rkt check examples\discount\v2.ail
-.\.toolchains\racket\Racket.exe src\cli.rkt inspect examples\discount\v2.ail
-.\.toolchains\racket\Racket.exe src\cli.rkt test examples\discount\v2.ail examples\discount\tests.json
-.\.toolchains\racket\Racket.exe src\cli.rkt run examples\discount\v2.ail calculate-discount examples\discount\vip-args.json
-.\.toolchains\racket\Racket.exe src\cli.rkt test-service examples\tasks\service.ail examples\tasks\scenarios.json
-.\.toolchains\racket\Racket.exe src\cli.rkt deploy-service examples\tasks\service.ail examples\tasks\scenarios.json .runtime\tasks\code
-.\.toolchains\racket\Racket.exe src\cli.rkt serve-active .runtime\tasks\code 8080 .runtime\tasks\store.json
-
-cargo run --locked -p ail-cli -- deploy-service examples\tasks\service.ail examples\tasks\scenarios.json .runtime\tasks-rust\code
-cargo run --locked -p ail-server -- .runtime\tasks-rust\code 127.0.0.1:8081 .runtime\tasks-rust\store.json
-
-# 停服后创建、校验并恢复到全新目标（命令不会覆盖已有路径）
-cargo run --locked -p ail-cli -- backup-service .runtime\tasks-rust\code .runtime\tasks-rust\store.json .backups\tasks
-cargo run --locked -p ail-cli -- verify-backup .backups\tasks
-cargo run --locked -p ail-cli -- restore-service .backups\tasks .runtime\tasks-restored\code .runtime\tasks-restored\store.json
-```
-
-`run` 的最后一个参数既可以是 JSON 文本，也可以是 JSON 文件路径；Windows
-下推荐文件路径，避免 shell 转义差异。所有正常结果、测试报告和语言错误都
-使用 JSON 输出。
-
-## 接入 LLM
-
-实时 provider 支持 OpenAI Responses API，以及 DeepSeek 的 OpenAI-compatible
-Chat Completions API。密钥只从进程环境读取；程序不会自动读取 `.env`，也不会
-把密钥写入提示、诊断或版本元数据。
-
-```powershell
-# DeepSeek V4 Flash：安全提示输入密钥，通过测试才提升
-.\scripts\live-demo.ps1
-
-# 只生成、解释和测试候选，不提升（需先配置环境密钥）
-.\.toolchains\racket\Racket.exe src\cli.rkt evolve examples\discount\v1.ail examples\discount\tests.json
-```
-
-可配置项见 [.env.example](.env.example) 和
-[docs/live-provider.md](docs/live-provider.md)。候选即使生成成功也不会自动提升；
-`--promote` 只是宿主侧请求，测试不通过时活动版本保持不变。DeepSeek 适配器
-使用 `/chat/completions` 和 JSON Output，参见
-[DeepSeek Chat Completion](https://api-docs.deepseek.com/api/create-chat-completion)
-与 [JSON Output 指南](https://api-docs.deepseek.com/guides/json_mode/)。OpenAI
-Responses API 的请求结构参见
-[OpenAI 官方迁移指南](https://developers.openai.com/api/docs/guides/migrate-to-responses)，
-严格输出结构参见
-[Structured Outputs 指南](https://developers.openai.com/api/docs/guides/structured-outputs)。
-
-Rust host 也已接入相同的活动服务演化门禁。先通过环境变量配置 provider，再运行：
-
-```powershell
-# 默认只生成、测试并注册候选，不提升
-cargo run --locked -p ail-cli -- evolve-service `
-  .runtime\tasks-rust\code `
-  examples\tasks\scenarios.json
-
-# 只有 11 个场景全通过时才会响应显式提升请求
-cargo run --locked -p ail-cli -- evolve-service `
-  .runtime\tasks-rust\code `
-  examples\tasks\scenarios.json `
-  --promote
-```
-
-Rust transport 强制 HTTPS、拒绝重定向、限制请求/响应大小和墙钟时间，并在释放时清零
-内存中的 API key。当前进程没有配置 provider 环境变量，因此本次迁移只执行了模拟响应
-测试；真实调用仍必须由操作者在进程环境中提供凭据。
-
-## 语言示例
+下面是一个 v4 模块。它声明了数据类型、函数签名和唯一允许的宿主能力 `log`：
 
 ```lisp
 (program
-  (name discount)
-  (version 1)
-  (capabilities)
-  (def calculate-discount
-    (fn (price user-type)
-      (if (= user-type "vip")
-          (- price (quotient price 10))
-          price)))
-  (export calculate-discount))
+  (name expense-policy)
+  (version 4)
+  (capabilities log)
+
+  (data decision
+    (approved (amount integer))
+    (review (amount integer) (reason string))
+    (rejected (reason string)))
+  (export-types decision)
+
+  (signature decide (fn (integer) decision))
+  (def decide
+    (fn (amount)
+      (cond
+        ((< amount 0)
+          (rejected "negative amount"))
+        ((>= amount 1000)
+          (review amount "manual approval required"))
+        (else
+          (do
+            (log amount)
+            (approved amount))))))
+
+  (export decide approved review rejected))
 ```
 
-v1 支持 `quote`、`if`、顺序 `let`、`fn`、`do` 和函数调用，以及整数、
-字符串、布尔、符号、列表、Map、`Ok`/`Err`。v2 增加真正短路的
-`and/or`、穷尽式 `cond`、`number->string`、有界 `list-map/list-filter/list-fold/sum`、
-`enum/union` Schema、带 fuel 成本的 `validate-report`，以及只返回业务 Result 的
-`checked-quotient/checked-remainder`。完整示例见
-[费用审批服务](examples/expenses/service.ail)及其[五个场景](examples/expenses/scenarios.json)。
+供人类审核时，同一程序会生成 Rust 风格的**只读语义视图**。`log!` 明确表示副作用；视图不能作为 Rust 或衍术源码重新执行：
 
-v3 增加显式 `imports`、用户定义的封闭数据类型、带绑定的 `match`，以及由模块
-SHA-256 汇成根哈希的密封 Bundle。带 imports 的单文件不能直接执行；宿主必须先验证
-完整依赖图并链接命名空间。可运行示例见
-[多模块费用审批 Bundle](examples/bundles/expense-approval)，完整契约见
-[v0.7 规格](docs/spec-v0.7.md)。
+```rust
+// Generated semantic review — READ ONLY.
+// semantic Int = bounded arbitrary-precision integer.
 
-v4 要求导出函数签名和 typed data field，并用独立的 `export-types` 声明跨模块名义类型；运行前推断内部类型并静态计算每个 export
-的传递 capability 闭包。Bundle format v2 把闭包封进根 hash，加载时重新计算比对；
-宿主输入与 guest 输出也按签名检查。`review` / `review-bundle` 可生成带 source span
-和 effect 的 Rust 风格只读审查视图。示例见
-[typed-expense Bundle](examples/bundles/typed-expense)，契约见
-[v0.8 规格](docs/spec-v0.8.md)。
-
-v0.9 增加内容寻址 package store 与精确 `ail.lock.json`：开发路径只在打包时使用，锁定加载只读取
-`store/sha256/<hash>` 并重新验证 manifest、源码、依赖、类型和 capability 闭包。`ail-library`
-同时把 `text@1` 迁到可替换 Rust Backend；contract 在进入 backend 前校验类型并扣除 fuel，guest
-不能选择 crate、provider、动态库或任意宿主函数。完整示例见
-[typed-expense package](examples/packages/typed-expense)，契约见
-[v0.9 规格](docs/spec-v0.9.md)。
-
-Web 程序可声明静态 `route`，处理器接收请求 Map 并返回结构化响应 Map。所有版本
-都只有 `#f` 为假。
-
-业务输入可以声明为编译器持有的 Schema：
-
-```lisp
-(schema task-create
-  (object
-    (required "id" (string 1 64))
-    (required "title" (string 1 120))
-    (optional "completed" boolean #f)))
+fn decide(amount: Int) -> Decision ![log] {
+    if amount < 0 {
+        Decision::Rejected { reason: "negative amount" }
+    } else {
+        log!(amount);
+        Decision::Approved { amount }
+    }
+}
 ```
 
-`validate` 返回 `Ok` 或包含稳定问题列表的 `Err`；Schema 会拒绝额外字段、
-补入默认值并消耗解释器 fuel。`api-response` 和 `api-error` 用于生成统一 HTTP
-响应。完整语义见
-[Business Backend Specification v0.3](docs/business-backend-v0.3.md)。
+## 快速体验
 
-纯标准库通过版本化契约声明，宿主决定使用 Racket、Rust 或其他一致实现：
+需要仓库声明的 Rust 工具链；当前最低 Rust 版本是 1.97。在 PowerShell 中：
 
-```lisp
-(libraries (text 1))
-(text/replace value "AI" "machine")
+```powershell
+# 解析并检查一个最小程序
+cargo run --locked -p yanshu-cli -- `
+  inspect examples\discount\v2.yan
+
+# 执行 v4 语言契约
+cargo run --locked -p yanshu-cli -- `
+  conformance conformance\v4\manifest.json
+
+# 生成人类可读、不可执行的 Bundle 审查视图
+cargo run --locked -p yanshu-cli -- `
+  review-bundle examples\bundles\typed-expense --text
 ```
 
-`text@1` 还提供字符计数、前缀、后缀和包含判断。契约拥有函数集合、类型和
-fuel 成本；后端不能增加隐藏函数或改变版本。可运行案例在
-[examples/libraries](examples/libraries)，完整边界见
-[Library Backend Specification v0.4](docs/library-backend-v0.4.md)。
+构建 CLI 后，可以直接使用 `target\debug\yanshu.exe`：
 
-解释执行具有 fuel 和调用深度限制。客体默认没有文件、网络或数据库访问；
-`log`、事务 `kv` 和 `clock` 都必须显式声明并由宿主注入。
+```powershell
+cargo build --locked -p yanshu-cli
+.\target\debug\yanshu.exe inspect examples\discount\v2.yan
+```
 
-## 目录
+运行真实任务服务及 11 个有状态场景：
+
+```powershell
+cargo run --locked -p yanshu-cli -- `
+  test-service examples\tasks\service.yan examples\tasks\scenarios.json
+
+.\scripts\serve-tasks-rust.ps1
+```
+
+服务默认只监听 `127.0.0.1:8081`。这是本地验证入口，不是生产部署方案。
+
+## 现在能做什么
+
+| 能力 | 当前实现 |
+|---|---|
+| 程序即数据 | S-expression AST、稳定 span、机器可读诊断与规范 JSON |
+| 业务表达 | 短路 `and/or`、`cond`、集合处理、Schema、Result、模式匹配 |
+| 模块化 | 用户数据类型、导出签名、密封 Bundle、模块链接 |
+| 静态审查 | 类型推断、效果分析、capability 闭包、Rust 风格只读视图 |
+| 供应链 | 内容寻址 package、闭包锁文件、全量重验 |
+| 受限执行 | 调用深度、值边界、Reader 边界与显式 fuel 计量 |
+| 编译路径 | 规范字节码、verifier、解释器/VM 差分与 WASM handle ABI |
+| 宿主生态 | 安全 Rust Library Backend；guest 不能直接调用 crates.io 或 FFI |
+| AI 开发 | DeepSeek/OpenAI-compatible HTTP，以及 Codex、Claude Code、OpenCode CLI 后端 |
+| 生命周期 | 候选注册、测试门禁、显式晋升、影子执行、审计事件与哈希回滚 |
+
+编译一个锁定的费用审批 package：
+
+```powershell
+cargo run --locked -p yanshu-cli -- package-compile `
+  .runtime\package-store `
+  examples\packages\typed-expense\yanshu.lock.json `
+  .runtime\typed-expense.ybc.json `
+  .runtime\typed-expense.wasm
+```
+
+## 安全边界
+
+衍术当前追求的是**结构性限制和可审计性**，不是已经获得证明的绝对安全。
+
+- guest 没有 `eval`、隐式宿主访问、文件、网络、线程、动态库或任意 FFI。
+- capability 必须显式声明、静态分析、由宿主注入，并在运行时再次核对。
+- 读取、解析、Schema、值转换、标准库和 capability 返回都必须有边界并计费。
+- 第一方 Rust 使用 `#![forbid(unsafe_code)]`；`unsafe` 代码、函数、trait 与实现均被禁止。
+- `.yan`、密封 manifest 与 lock 是规范输入；生成的审查视图永远只读。
+- 内容哈希绑定规范语义与制品，失败候选不能获得活动版本资格。
+
+当前仍缺少独立进程级生产沙箱、正式权限系统、TLS 终止、成熟数据库适配、LSP、独立安全审计及长期兼容承诺。完整政策见 [SECURITY.md](SECURITY.md) 与 [Rust 安全策略](docs/rust-safety-policy.md)。
+
+## 让 Codex / Claude Code / OpenCode 编写候选
+
+仓库根目录的 [AGENTS.md](AGENTS.md) 和 [CLAUDE.md](CLAUDE.md) 会把代理引导到同一份[共享契约](docs/ai-agent-guide.md)。代理也可以作为隔离候选的编写后端：
+
+```powershell
+$env:YANSHU_PROVIDER = "codex-cli" # 也可使用 claude-code-cli / opencode-cli
+
+cargo run --locked -p yanshu-cli -- `
+  evolve-service `
+  .runtime\tasks-rust\code `
+  examples\tasks\scenarios.json `
+  --task .\TASK.md
+```
+
+代理只编辑一次性目录中的 `candidate.yan`，看不到真实活动指针、生产 capability 或可信测试文件。代理退出成功不等于候选通过；Parser、测试、fuel、内容哈希和人工晋升仍是最终证据。
+
+## 仓库地图
 
 ```text
-docs/                    v0.1 提案、设计与语言规格
-src/reader.rkt           安全读取和源码规模限制
-src/parser.rkt           S 表达式到独立 AST
-src/runtime.rkt          受限树遍历解释器
-src/schema.rkt           有边界的声明式业务数据校验
-src/library-contract.rkt 版本化标准库函数、类型和成本契约
-src/library-backend.rkt  Racket 参考后端；未来由 Rust/Python/WASM 实现
-src/test-suite.rkt       JSON 回归测试协议
-src/service.rkt          路由匹配、响应契约和能力注入
-src/kv-store.rkt         内存/文件事务 JSON KV
-src/http-server.rkt      有边界的本地 HTTP/1.1 JSON 服务
-src/service-test-suite.rkt  有状态 Web 业务场景测试
-src/service-deployment.rkt  测试门禁、活动版本加载与演化
-src/version-store.rkt    SHA-256 版本、晋升、回滚、审计事件
-src/http-json.rkt        有超时、大小限制和结构化错误的 HTTPS JSON 传输
-src/evolver.rkt          离线、Responses API 与 DeepSeek Chat provider
-src/evolution-loop.rkt   生成、验证、注册和可选提升的一步闭环
-src/cli.rkt              JSON CLI 和端到端演示
-examples/discount/       初始版本、候选版本和测试案例
-examples/tasks/          完整任务 CRUD 服务与业务场景
-examples/libraries/      text@1 后端无关示例与测试
-web/tasks/               同源响应式测试控制台
-tests/all.rkt             宿主无关语义的起始一致性测试
+rust/crates/
+  yanshu-syntax       Reader、AST、Parser、语言版本门禁
+  yanshu-runtime      解释器、Schema、Value、模式匹配、字节码 VM
+  yanshu-analysis     类型、效果、capability 闭包、审查投影
+  yanshu-compiler     规范字节码、verifier、WASM ABI
+  yanshu-bundle       密封模块图与链接
+  yanshu-package      内容寻址包与锁文件
+  yanshu-library      Rust Library Backend 契约
+  yanshu-cli          面向人类和 Agent 的稳定 JSON CLI
+
+conformance/v1..v4    跨版本可执行语言契约
+examples/             费用审批、任务服务、Bundle 与 package
+docs/                 规范、安全和运维设计
+wiki/                 面向使用者的中文语言 Wiki
 ```
 
-## Rust 迁移原则
+## 项目状态
 
-Rust 版本必须复用 `.ail` 源码、JSON 测试、诊断代码、版本文件和一致性测试。
-只重写 Reader、AST、解释器、资源限制与能力分发。Racket 专属宏、任意宿主
-调用和裸 `eval` 都不属于语言语义。
+当前发布里程碑是 **v0.10**，语言版本是 **v4**。它已经是一个可执行、可分析、可编译的语言内核，但还不是 Rust/C++ 式系统语言，也不是可承诺生产稳定性的通用平台。
 
-当前 Rust host 已迁移 Reader、Parser、解释器、Schema、Library Backend、服务能力、
-事务/文件 KV、版本库、活动版本 HTTP API、认证/脱敏观测、隔离影子运行、离线备份恢复，以及 OpenAI/DeepSeek Provider。运行 `./scripts/check-rust.ps1` 会同时执行第一方 unsafe
-门禁、Rust 测试、Clippy，以及语言、任务服务和版本生命周期的 Racket/Rust 精确差分。
-默认网页服务尚未切换到 Rust，Provider 的真实联网烟雾测试需要操作者配置环境凭据。
+接下来的优先级是修复审计发现、完善 Agent/LSP 工具链和解释器/VM 一致性；更广的标准库与有界结构化并发只会在 capability、fuel、取消和确定性语义明确后加入。路线图是方向，不是兼容性承诺。
 
-## 当前安全边界
+## 参与开发
 
-这是可用于本地业务原型的概念验证，不是公网生产服务器。Rust HTTP 已有 Bearer
-认证、请求身份、脱敏 JSONL 观测、连接并发、读取/正文/响应限制和响应头校验，解释器已有
-fuel 和调用深度限制；生产版仍需细粒度授权、TLS/反向代理、独立 OS 进程、数据库适配器、
-正式数据库/PITR、异地备份、日志轮转/采集、告警，以及审批和灰度门禁。影子运行不是灰度：
-候选永远不服务用户响应，尚不能作为生产流量切换机制。文件后端的离线
-快照、逐文件校验与拒绝覆盖恢复已经可用，见 [备份与恢复](docs/backup-restore.md)。
+提交改动前请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 和 [docs/ai-agent-guide.md](docs/ai-agent-guide.md)。任何语言特性都必须同步 Parser、解释器、VM、静态分析、诊断、conformance 和 Wiki；第一方 Rust 不接受任何形式的 `unsafe`。
+
+完整发布门禁：
+
+```powershell
+cargo fmt --all -- --check
+cargo test --workspace --locked -j 1
+cargo clippy --workspace --all-targets --locked -j 1 -- -D warnings
+cargo deny check
+
+Push-Location wiki
+npm run build
+Pop-Location
+```
+
+## 名称迁移与许可证
+
+旧实验名称到 **Yanshu（衍术）** 的破坏性迁移见 [docs/migration-to-yanshu.md](docs/migration-to-yanshu.md)。
+
+项目采用 [MIT](LICENSE-MIT) 或 [Apache License 2.0](LICENSE-APACHE) 双许可证。

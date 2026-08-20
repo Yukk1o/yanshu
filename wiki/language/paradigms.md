@@ -1,6 +1,6 @@
 # 语言范式
 
-AI-Evolve 不是“给现有语言加一个 LLM API”。它把 **AST、受限解释、显式能力和版本门禁**组合成一套适合人类与 AI 协作的语言范式。
+Yanshu 不是“给现有语言加一个 LLM API”。它把 **AST、受限解释、显式能力和版本门禁**组合成一套适合人类与 AI 协作的语言范式。
 
 ## 1. 代码即数据
 
@@ -85,7 +85,7 @@ guest 默认看不到文件、socket、环境变量和 provider API key。未来
 
 ## 5. 契约进入语言
 
-传统框架常把路由、DTO、错误码、权限和业务实现散在不同库中。AI-Evolve 把关键部分放入同一棵 Program AST：
+传统框架常把路由、DTO、错误码、权限和业务实现散在不同库中。Yanshu 把关键部分放入同一棵 Program AST：
 
 ```lisp
 (schema task-create ...)
@@ -105,7 +105,7 @@ guest 默认看不到文件、socket、环境变量和 provider API key。未来
 
 ## 6. 演化是制品流，不是自修改
 
-运行期演化不等于原地改写正在执行的闭包。AI-Evolve 使用分阶段制品流：
+运行期演化不等于原地改写正在执行的闭包。Yanshu 使用分阶段制品流：
 
 ```text
 active source → LLM candidate → parse → full suite

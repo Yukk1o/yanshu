@@ -1,4 +1,4 @@
-# AI-Evolve v0.1 Proposal
+# Yanshu v0.1 Proposal
 
 ## Why
 

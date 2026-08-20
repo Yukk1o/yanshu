@@ -4,7 +4,7 @@
     {
       "name": "v3-user-data-and-pattern-match",
       "phase": "run",
-      "source": "programs/data.ail",
+      "source": "programs/data.yan",
       "entry": "render",
       "args": [{"$int": "1200"}],
       "expect": {
@@ -15,7 +15,7 @@
     {
       "name": "v3-total-match-negative-branch",
       "phase": "run",
-      "source": "programs/data.ail",
+      "source": "programs/data.yan",
       "entry": "render",
       "args": [{"$int": "-1"}],
       "expect": {

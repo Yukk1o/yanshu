@@ -1,8 +1,8 @@
 #lang racket/base
 
-(provide (struct-out ail-program)
-         (struct-out ail-route)
-         (struct-out ail-schema)
+(provide (struct-out yanshu-program)
+         (struct-out yanshu-route)
+         (struct-out yanshu-schema)
          (struct-out library-requirement)
          (struct-out schema-any)
          (struct-out schema-string)
@@ -11,7 +11,7 @@
          (struct-out schema-list)
          (struct-out schema-object)
          (struct-out schema-field)
-         (struct-out ail-definition)
+         (struct-out yanshu-definition)
          (struct-out ast-binding)
          (struct-out expr-lit)
          (struct-out expr-var)
@@ -28,11 +28,11 @@
 
 (require "library-contract.rkt")
 
-(struct ail-program
+(struct yanshu-program
   (name version capabilities libraries schemas routes definitions exports source)
   #:transparent)
-(struct ail-route (method path handler) #:transparent)
-(struct ail-schema (name specification) #:transparent)
+(struct yanshu-route (method path handler) #:transparent)
+(struct yanshu-schema (name specification) #:transparent)
 (struct schema-any () #:transparent)
 (struct schema-string (minimum-length maximum-length) #:transparent)
 (struct schema-integer (minimum maximum) #:transparent)
@@ -42,7 +42,7 @@
 (struct schema-field
   (name specification required? has-default? default)
   #:transparent)
-(struct ail-definition (name expression) #:transparent)
+(struct yanshu-definition (name expression) #:transparent)
 (struct ast-binding (name expression) #:transparent)
 
 (struct expr-lit (value) #:transparent)
@@ -138,25 +138,25 @@
 (define (program->jsexpr program)
   (hasheq
    'type "program"
-   'name (symbol->string (ail-program-name program))
-   'version (ail-program-version program)
-   'capabilities (map symbol->string (ail-program-capabilities program))
+   'name (symbol->string (yanshu-program-name program))
+   'version (yanshu-program-version program)
+   'capabilities (map symbol->string (yanshu-program-capabilities program))
    'libraries
-   (for/list ([requirement (in-list (ail-program-libraries program))])
+   (for/list ([requirement (in-list (yanshu-program-libraries program))])
      (hasheq 'name (symbol->string (library-requirement-name requirement))
              'version (library-requirement-version requirement)))
    'schemas
-   (for/list ([schema (in-list (ail-program-schemas program))])
-     (hasheq 'name (symbol->string (ail-schema-name schema))
-             'schema (schema->jsexpr (ail-schema-specification schema))))
+   (for/list ([schema (in-list (yanshu-program-schemas program))])
+     (hasheq 'name (symbol->string (yanshu-schema-name schema))
+             'schema (schema->jsexpr (yanshu-schema-specification schema))))
    'routes
-   (for/list ([route (in-list (ail-program-routes program))])
-     (hasheq 'method (ail-route-method route)
-             'path (ail-route-path route)
-             'handler (symbol->string (ail-route-handler route))))
+   (for/list ([route (in-list (yanshu-program-routes program))])
+     (hasheq 'method (yanshu-route-method route)
+             'path (yanshu-route-path route)
+             'handler (symbol->string (yanshu-route-handler route))))
    'definitions
-   (for/list ([definition (in-list (ail-program-definitions program))])
-     (hasheq 'name (symbol->string (ail-definition-name definition))
+   (for/list ([definition (in-list (yanshu-program-definitions program))])
+     (hasheq 'name (symbol->string (yanshu-definition-name definition))
              'expression
-             (ast->jsexpr (ail-definition-expression definition))))
-   'exports (map symbol->string (ail-program-exports program))))
+             (ast->jsexpr (yanshu-definition-expression definition))))
+   'exports (map symbol->string (yanshu-program-exports program))))

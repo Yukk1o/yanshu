@@ -2,7 +2,7 @@
 
 ## Goal
 
-Generate a complete candidate `.ail` program from the active source and a
+Generate a complete candidate `.yan` program from the active source and a
 structured test report, then pass that candidate through the existing parser,
 interpreter, regression suite, version store, and promotion policy.
 
@@ -15,14 +15,14 @@ The host reads configuration only from its environment:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `AI_EVOLVE_PROVIDER` | auto | `openai-responses` or `deepseek-chat` |
-| `AI_EVOLVE_API_KEY` | provider-specific fallback | Bearer credential |
-| `AI_EVOLVE_BASE_URL` | provider-specific | API base URL |
-| `AI_EVOLVE_MODEL` | provider-specific | Explicit model ID |
-| `AI_EVOLVE_REASONING_EFFORT` | `medium` / `high` | Reasoning effort |
-| `AI_EVOLVE_MAX_OUTPUT_TOKENS` | `8192` | Candidate response limit |
-| `AI_EVOLVE_TIMEOUT_SECONDS` | `120` | Wall-clock request limit |
-| `AI_EVOLVE_STORE` | content-derived `.runtime` path | Version store override |
+| `YANSHU_PROVIDER` | auto | `openai-responses` or `deepseek-chat` |
+| `YANSHU_API_KEY` | provider-specific fallback | Bearer credential |
+| `YANSHU_BASE_URL` | provider-specific | API base URL |
+| `YANSHU_MODEL` | provider-specific | Explicit model ID |
+| `YANSHU_REASONING_EFFORT` | `medium` / `high` | Reasoning effort |
+| `YANSHU_MAX_OUTPUT_TOKENS` | `8192` | Candidate response limit |
+| `YANSHU_TIMEOUT_SECONDS` | `120` | Wall-clock request limit |
+| `YANSHU_STORE` | content-derived `.runtime` path | Version store override |
 
 Credentials never enter guest environments, prompts, diagnostics, version
 metadata, or CLI output.
@@ -30,23 +30,23 @@ metadata, or CLI output.
 The same evolution loop can select a locally installed coding agent instead of
 an HTTP API:
 
-| `AI_EVOLVE_PROVIDER` | Executable | Mode |
+| `YANSHU_PROVIDER` | Executable | Mode |
 | --- | --- | --- |
 | `codex-cli` | `codex` | non-interactive workspace-write sandbox |
 | `claude-code-cli` | `claude` | print mode with Read/Edit/Write only |
 | `opencode-cli` | `opencode` | run mode with deny-by-default permissions |
 
-`AI_EVOLVE_AGENT_COMMAND` overrides the executable and
-`AI_EVOLVE_AGENT_TIMEOUT_SECONDS` sets a 1–3600 second timeout (default 600).
+`YANSHU_AGENT_COMMAND` overrides the executable and
+`YANSHU_AGENT_TIMEOUT_SECONDS` sets a 1–3600 second timeout (default 600).
 The optional `--task <task.md>` CLI argument supplies a bounded user objective.
-The agent edits `candidate.ail` in a disposable workspace containing only the
+The agent edits `candidate.yan` in a disposable workspace containing only the
 current source, structured observations, objective, and bounded instructions. The host
 then independently parses, tests, hashes, registers, and optionally promotes
 the candidate. Sensitive environment variable names are removed before spawn;
 agents should use their own secure login stores. This is a host-side development
 adapter, not a replacement for OS process isolation.
 
-When `AI_EVOLVE_PROVIDER` is absent, a base URL containing `deepseek` or a model
+When `YANSHU_PROVIDER` is absent, a base URL containing `deepseek` or a model
 starting with `deepseek-` selects `deepseek-chat`; otherwise the host selects
 `openai-responses`. DeepSeek credentials may also use `DEEPSEEK_API_KEY`; OpenAI
 credentials may use `OPENAI_API_KEY`.
@@ -72,7 +72,7 @@ untrusted data. The input is a JSON string containing:
 
 ```json
 {
-  "source": "complete candidate .ail document",
+  "source": "complete candidate .yan document",
   "notes": "short explanation of the change"
 }
 ```
@@ -115,7 +115,7 @@ only when every test passes.
 
 ## Rust host
 
-`ail-provider` implements the same two adapters behind a `JsonTransport` trait.
+`yanshu-provider` implements the same two adapters behind a `JsonTransport` trait.
 Its deterministic tests capture the endpoint and request document without making
 network calls, then replay completed, refused, truncated, and malformed responses.
 The production transport uses exact-pinned Reqwest 0.13.4 with Rustls, forces
@@ -127,7 +127,7 @@ type deliberately has no `Debug` implementation.
 Rust service evolution is available through:
 
 ```powershell
-cargo run --locked -p ail-cli -- evolve-service `
+cargo run --locked -p yanshu-cli -- evolve-service `
   .runtime\tasks-rust\code `
   examples\tasks\scenarios.json `
   --promote

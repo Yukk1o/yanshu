@@ -50,8 +50,8 @@
     (raise-argument-error 'execute-export
                           "exact-positive-integer?"
                           maximum-depth))
-  (unless (memq export-name (ail-program-exports program))
-    (raise-ail "RUNTIME_NOT_EXPORTED"
+  (unless (memq export-name (yanshu-program-exports program))
+    (raise-yanshu "RUNTIME_NOT_EXPORTED"
                "requested entry point is not exported"
                (hasheq 'name (symbol->string export-name))))
   (define context (execution-context fuel maximum-depth logger))
@@ -59,24 +59,24 @@
   (define module-environment
     (environment (make-hasheq) base-environment))
   (install-libraries! module-environment
-                      (ail-program-libraries program)
+                      (yanshu-program-libraries program)
                       context
                       library-backends)
   (install-capabilities! module-environment
-                         (ail-program-capabilities program)
+                         (yanshu-program-capabilities program)
                          context
                          capability-bindings)
-  (for ([schema (in-list (ail-program-schemas program))])
+  (for ([schema (in-list (yanshu-program-schemas program))])
     (environment-define!
      module-environment
-     (ail-schema-name schema)
-     (schema-value (ail-schema-name schema)
-                   (ail-schema-specification schema))))
-  (for ([definition (in-list (ail-program-definitions program))])
+     (yanshu-schema-name schema)
+     (schema-value (yanshu-schema-name schema)
+                   (yanshu-schema-specification schema))))
+  (for ([definition (in-list (yanshu-program-definitions program))])
     (environment-define!
      module-environment
-     (ail-definition-name definition)
-     (evaluate (ail-definition-expression definition)
+     (yanshu-definition-name definition)
+     (evaluate (yanshu-definition-expression definition)
                module-environment
                context
                0)))
@@ -140,7 +140,7 @@
          (evaluate argument current-environment context depth)))
      (apply-callable callable arguments context (add1 depth))]
     [else
-     (raise-ail "RUNTIME_UNKNOWN_AST"
+     (raise-yanshu "RUNTIME_UNKNOWN_AST"
                 "interpreter received an unknown AST node")]))
 
 (define (apply-callable callable arguments context depth)
@@ -167,7 +167,7 @@
      (check-primitive-arity! callable arguments)
      ((primitive-implementation callable) arguments context)]
     [else
-     (raise-ail "RUNTIME_NOT_CALLABLE"
+     (raise-yanshu "RUNTIME_NOT_CALLABLE"
                 "attempted to call a non-callable value"
                 (hasheq 'kind (value-kind callable)))]))
 
@@ -201,7 +201,7 @@
              (define numerator (expect-integer 'quotient (car arguments)))
              (define denominator (expect-integer 'quotient (cadr arguments)))
              (when (zero? denominator)
-               (raise-ail "RUNTIME_DIVIDE_BY_ZERO"
+               (raise-yanshu "RUNTIME_DIVIDE_BY_ZERO"
                           "quotient denominator cannot be zero"))
              (quotient numerator denominator)))
   (install 'remainder 2 2
@@ -209,7 +209,7 @@
              (define numerator (expect-integer 'remainder (car arguments)))
              (define denominator (expect-integer 'remainder (cadr arguments)))
              (when (zero? denominator)
-               (raise-ail "RUNTIME_DIVIDE_BY_ZERO"
+               (raise-yanshu "RUNTIME_DIVIDE_BY_ZERO"
                           "remainder denominator cannot be zero"))
              (remainder numerator denominator)))
   (install '= 2 2
@@ -259,20 +259,20 @@
            (lambda (arguments _context)
              (define values (expect-list 'first (car arguments)))
              (when (null? values)
-               (raise-ail "RUNTIME_EMPTY_COLLECTION"
+               (raise-yanshu "RUNTIME_EMPTY_COLLECTION"
                           "first cannot read an empty list"))
              (car values)))
   (install 'rest 1 1
            (lambda (arguments _context)
              (define values (expect-list 'rest (car arguments)))
              (when (null? values)
-               (raise-ail "RUNTIME_EMPTY_COLLECTION"
+               (raise-yanshu "RUNTIME_EMPTY_COLLECTION"
                           "rest cannot read an empty list"))
              (cdr values)))
   (install 'map 0 #f
            (lambda (arguments _context)
              (unless (even? (length arguments))
-               (raise-ail "RUNTIME_MAP_ARITY"
+               (raise-yanshu "RUNTIME_MAP_ARITY"
                           "map expects alternating key and value arguments"))
              (for/fold ([result (hash)])
                        ([index (in-range 0 (length arguments) 2)])
@@ -284,7 +284,7 @@
              (define mapping (expect-map 'get (car arguments)))
              (define key (cadr arguments))
              (unless (hash-has-key? mapping key)
-               (raise-ail "RUNTIME_MISSING_KEY"
+               (raise-yanshu "RUNTIME_MISSING_KEY"
                           "map does not contain the requested key"
                           (hasheq 'key (format "~s" key))))
              (hash-ref mapping key)))
@@ -338,7 +338,7 @@
              (cond
                [(ok-value? value) (ok-value-value value)]
                [(err-value? value)
-                (raise-ail "RUNTIME_UNWRAP_ERROR"
+                (raise-yanshu "RUNTIME_UNWRAP_ERROR"
                            "cannot unwrap an Err value"
                            (hasheq 'value
                                    (value->jsexpr (err-value-value value))))]
@@ -358,11 +358,11 @@
              (unless (and (string? code)
                           (<= 1 (string-length code) 128)
                           (regexp-match? #px"^[A-Z][A-Z0-9_]*$" code))
-               (raise-ail "RUNTIME_INVALID_API_ERROR"
+               (raise-yanshu "RUNTIME_INVALID_API_ERROR"
                           "api-error code must be a bounded uppercase identifier"))
              (unless (and (string? message)
                           (<= 1 (string-length message) 512))
-               (raise-ail "RUNTIME_INVALID_API_ERROR"
+               (raise-yanshu "RUNTIME_INVALID_API_ERROR"
                           "api-error message must be a non-empty bounded string"))
              (define details
                (if (= (length arguments) 4) (cadddr arguments) (hash)))
@@ -387,14 +387,14 @@
     (define library-version (library-requirement-version requirement))
     (define contract (find-library-contract library-name library-version))
     (unless contract
-      (raise-ail "RUNTIME_LIBRARY_CONTRACT_MISSING"
+      (raise-yanshu "RUNTIME_LIBRARY_CONTRACT_MISSING"
                  "parsed program refers to an unknown library contract"
                  (hasheq 'library (symbol->string library-name)
                          'version library-version)))
     (define backend
       (hash-ref backends (cons library-name library-version) #f))
     (unless backend
-      (raise-ail "RUNTIME_LIBRARY_UNAVAILABLE"
+      (raise-yanshu "RUNTIME_LIBRARY_UNAVAILABLE"
                  "host did not provide a declared library backend"
                  (hasheq 'library (symbol->string library-name)
                          'version library-version)))
@@ -417,7 +417,7 @@
             (with-handlers
                 ([exn:fail?
                   (lambda (_error)
-                    (raise-ail
+                    (raise-yanshu
                      "RUNTIME_LIBRARY_CONTRACT_FAILURE"
                      "library cost estimator failed"
                      (library-call-details library-name
@@ -427,7 +427,7 @@
               ((library-operation-contract-cost operation-contract)
                arguments)))
           (unless (exact-nonnegative-integer? cost)
-            (raise-ail
+            (raise-yanshu
              "RUNTIME_LIBRARY_CONTRACT_FAILURE"
              "library cost estimator returned an invalid cost"
              (library-call-details library-name
@@ -439,7 +439,7 @@
             (with-handlers
                 ([exn:fail?
                   (lambda (_error)
-                    (raise-ail
+                    (raise-yanshu
                      "RUNTIME_LIBRARY_FAILURE"
                      "library backend operation failed"
                      (library-call-details library-name
@@ -457,7 +457,7 @@
           (unless (library-kind-matches?
                    (library-operation-contract-result-kind operation-contract)
                    result)
-            (raise-ail
+            (raise-yanshu
              "RUNTIME_LIBRARY_INVALID_RESULT"
              "library backend returned a value of the wrong kind"
              (hash-set
@@ -523,7 +523,7 @@
                                        library-version
                                        message
                                        [extra-details (hasheq)])
-  (raise-ail
+  (raise-yanshu
    "RUNTIME_INVALID_LIBRARY_BACKEND"
    message
    (for/fold ([details
@@ -537,7 +537,7 @@
         [argument (in-list arguments)]
         [index (in-naturals)])
     (unless (library-kind-matches? expected argument)
-      (raise-ail
+      (raise-yanshu
        "RUNTIME_TYPE"
        "library function received a value of the wrong type"
        (hasheq 'operation
@@ -567,7 +567,7 @@
                                   provider)
   (define node-count 0)
   (define (invalid message [extra-details (hasheq)])
-    (raise-ail
+    (raise-yanshu
      "RUNTIME_LIBRARY_INVALID_RESULT"
      message
      (for/fold ([details
@@ -642,12 +642,12 @@
       [else
        (define primitives (hash-ref bindings capability #f))
        (unless (hash? primitives)
-         (raise-ail "RUNTIME_CAPABILITY_UNAVAILABLE"
+         (raise-yanshu "RUNTIME_CAPABILITY_UNAVAILABLE"
                     "host did not provide a declared capability"
                     (hasheq 'capability (symbol->string capability))))
        (for ([(name specification) (in-hash primitives)])
          (unless (and (symbol? name) (capability-primitive? specification))
-           (raise-ail "RUNTIME_INVALID_CAPABILITY_BINDING"
+           (raise-yanshu "RUNTIME_INVALID_CAPABILITY_BINDING"
                       "host capability binding is malformed"
                       (hasheq 'capability (symbol->string capability))))
          (define minimum (capability-primitive-minimum-arity specification))
@@ -659,7 +659,7 @@
                           (and (exact-nonnegative-integer? maximum)
                                (>= maximum minimum)))
                       (procedure? implementation))
-           (raise-ail "RUNTIME_INVALID_CAPABILITY_BINDING"
+           (raise-yanshu "RUNTIME_INVALID_CAPABILITY_BINDING"
                       "host capability primitive is malformed"
                       (hasheq 'capability (symbol->string capability)
                               'primitive (symbol->string name))))
@@ -683,7 +683,7 @@
     [(environment-parent target)
      (environment-lookup (environment-parent target) name)]
     [else
-     (raise-ail "RUNTIME_UNBOUND_NAME"
+     (raise-yanshu "RUNTIME_UNBOUND_NAME"
                 "name is not bound in the current environment"
                 (hasheq 'name (symbol->string name)))]))
 
@@ -693,13 +693,13 @@
 (define (consume-fuel-amount! context amount)
   (define remaining (execution-context-fuel context))
   (when (< remaining amount)
-    (raise-ail "RUNTIME_FUEL_EXHAUSTED"
+    (raise-yanshu "RUNTIME_FUEL_EXHAUSTED"
                "execution exhausted its fuel allowance"))
   (set-execution-context-fuel! context (- remaining amount)))
 
 (define (check-depth! context depth)
   (when (> depth (execution-context-maximum-depth context))
-    (raise-ail "RUNTIME_DEPTH_EXHAUSTED"
+    (raise-yanshu "RUNTIME_DEPTH_EXHAUSTED"
                "execution exceeded its maximum call depth"
                (hasheq 'maxDepth
                        (execution-context-maximum-depth context)))))
@@ -716,7 +716,7 @@
                        actual)))
 
 (define (raise-arity-error name minimum maximum actual)
-  (raise-ail "RUNTIME_ARITY"
+  (raise-yanshu "RUNTIME_ARITY"
              "callable received the wrong number of arguments"
              (hasheq 'name name
                      'minimum minimum
@@ -745,7 +745,7 @@
 
 (define (expect-http-status operation value minimum)
   (unless (and (exact-integer? value) (<= minimum value 599))
-    (raise-ail "RUNTIME_INVALID_HTTP_STATUS"
+    (raise-yanshu "RUNTIME_INVALID_HTTP_STATUS"
                "HTTP response status is outside the allowed range"
                (hasheq 'operation (symbol->string operation)
                        'minimum minimum
@@ -755,7 +755,7 @@
   value)
 
 (define (raise-type-error operation expected value)
-  (raise-ail "RUNTIME_TYPE"
+  (raise-yanshu "RUNTIME_TYPE"
              "primitive received a value of the wrong type"
              (hasheq 'operation (if (symbol? operation)
                                     (symbol->string operation)
@@ -791,7 +791,7 @@
                  [(symbol? key) key]
                  [(string? key) (string->symbol key)]
                  [else
-                  (raise-ail "RUNTIME_UNSERIALIZABLE_KEY"
+                  (raise-yanshu "RUNTIME_UNSERIALIZABLE_KEY"
                              "map key cannot be encoded as JSON"
                              (hasheq 'kind (value-kind key)))])
                (value->jsexpr item)))]
@@ -800,7 +800,7 @@
     [(err-value? value)
      (hasheq 'error (value->jsexpr (err-value-value value)))]
     [else
-     (raise-ail "RUNTIME_UNSERIALIZABLE_VALUE"
+     (raise-yanshu "RUNTIME_UNSERIALIZABLE_VALUE"
                 "runtime value cannot be encoded as JSON"
                 (hasheq 'kind (value-kind value)))]))
 
@@ -815,12 +815,12 @@
                  [(symbol? key) (symbol->string key)]
                  [(string? key) key]
                  [else
-                  (raise-ail "INPUT_UNSUPPORTED_JSON_KEY"
+                  (raise-yanshu "INPUT_UNSUPPORTED_JSON_KEY"
                              "JSON object key cannot be converted to a guest string"
                              (hasheq 'key (format "~s" key)))])
                (jsexpr->value item)))]
     [else
-     (raise-ail "INPUT_UNSUPPORTED_JSON"
+     (raise-yanshu "INPUT_UNSUPPORTED_JSON"
                 "JSON input cannot be converted to a guest value"
                 (hasheq 'value (format "~s" value)))]))
 

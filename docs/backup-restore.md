@@ -7,17 +7,17 @@ Rust host 提供离线、可校验、默认拒绝覆盖的服务快照。目标�
 
 ```powershell
 # 服务停止后创建快照；目标目录必须不存在
-cargo run --locked -p ail-cli -- backup-service `
+cargo run --locked -p yanshu-cli -- backup-service `
   .runtime\tasks-rust\code `
   .runtime\tasks-rust\store.json `
   .backups\tasks-2026-08-18
 
 # 可在另一台机器或发布前重复执行，只读校验
-cargo run --locked -p ail-cli -- verify-backup `
+cargo run --locked -p yanshu-cli -- verify-backup `
   .backups\tasks-2026-08-18
 
 # 恢复目标必须都不存在，不会覆盖现有服务
-cargo run --locked -p ail-cli -- restore-service `
+cargo run --locked -p yanshu-cli -- restore-service `
   .backups\tasks-2026-08-18 `
   .runtime\tasks-restored\code `
   .runtime\tasks-restored\store.json
@@ -35,7 +35,7 @@ snapshot/
    ├─ code/
    │  ├─ active.json
    │  ├─ events.jsonl
-   │  ├─ versions/<sha256>.ail
+   │  ├─ versions/<sha256>.yan
    │  └─ metadata/<sha256>.json
    └─ data/store.json       # 原服务尚无写入时可以不存在
 ```
@@ -46,9 +46,9 @@ snapshot/
 
 ## 失败关闭边界
 
-- `ail-server` 在整个进程生命周期持有 `<data-store>.service.lock`；运行中的服务会让离线
+- `yanshu-server` 在整个进程生命周期持有 `<data-store>.service.lock`；运行中的服务会让离线
   backup/restore 返回 `SERVICE_MAINTENANCE_LOCKED`。
-- backup 同时持有版本库的 `.ail-store.lock`，避免候选注册或活动指针切换发生在快照中间。
+- backup 同时持有版本库的 `.yanshu-store.lock`，避免候选注册或活动指针切换发生在快照中间。
 - 源码文件名、源码内容 SHA-256、metadata、活动指针以及 registered/promoted/rolled-back
   事件序列必须形成完整生命周期。
 - KV 必须是当前 v1 文档，符号链接、未知版本库文件、manifest 外文件、路径穿越、超限文件、

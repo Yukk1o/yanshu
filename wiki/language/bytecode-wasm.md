@@ -6,14 +6,14 @@ v0.10 把已通过类型、效果和 package lock 门禁的 v4 程序编译为�
 
 ```powershell
 $store = ".runtime\v0.9-package-store"
-$lock = "examples\packages\typed-expense\ail.lock.json"
+$lock = "examples\packages\typed-expense\yanshu.lock.json"
 
-cargo run --locked -p ail-cli -- `
+cargo run --locked -p yanshu-cli -- `
   package-compile $store $lock `
-  .runtime\typed-expense.aibc.json `
+  .runtime\typed-expense.ybc.json `
   .runtime\typed-expense.wasm
 
-cargo run --locked -p ail-cli -- `
+cargo run --locked -p yanshu-cli -- `
   package-run-compiled $store $lock `
   .runtime\typed-expense.wasm evaluate `
   examples\packages\typed-expense\arguments.json
@@ -38,7 +38,7 @@ cargo run --locked -p ail-cli -- `
 
 ## 为什么先有字节码 VM
 
-AIL 的 `Int` 是任意精度整数，条件只有 `#f` 为假，集合、Schema、Library Backend 和 capability 都有自己的 fuel 成本。直接把它们草率映射成 WASM `i64` 和普通函数调用会改变语义。
+Yanshu 的 `Int` 是任意精度整数，条件只有 `#f` 为假，集合、Schema、Library Backend 和 capability 都有自己的 fuel 成本。直接把它们草率映射成 WASM `i64` 和普通函数调用会改变语义。
 
 v0.10 因此把完整语义放在一个小而可验证的栈式 VM 中。原语仍调用解释器已经验证过的同一套 Rust 实现，避免形成“解释语义”和“编译语义”两套易漂移代码。
 
@@ -66,18 +66,18 @@ VM 在每个源码表达式对应的显式 `charge` 点扣 1 fuel；跳转、栈
 生成的 `.wasm` 是标准 WebAssembly v1 模块，导入：
 
 ```text
-ail_v1.execute
+yanshu_v1.execute
 ```
 
 并导出：
 
 ```text
-ail_format_version() -> i32
-ail_static_instruction_weight() -> i64
-ail_run(export_index: i32, arguments_handle: i32, fuel: i64) -> result_handle: i64
+yanshu_format_version() -> i32
+yanshu_static_instruction_weight() -> i64
+yanshu_run(export_index: i32, arguments_handle: i32, fuel: i64) -> result_handle: i64
 ```
 
-参数和结果用不透明 handle 穿过 ABI；`BigInt`、Map、Result 或用户数据类型都不暴露 Rust 内存布局。`ail_run` 把执行交给加载并验证同一模块字节码段的受信任宿主。
+参数和结果用不透明 handle 穿过 ABI；`BigInt`、Map、Result 或用户数据类型都不暴露 Rust 内存布局。`yanshu_run` 把执行交给加载并验证同一模块字节码段的受信任宿主。
 
 ::: warning 当前边界
 v0.10 已有可实例化 WASM ABI 与完整 fuel 字节码语义，但尚未做原生 WASM 指令级 lowering。这个边界是有意保留的：优化后端必须先证明不会破坏 BigInt、truthiness、效果和 fuel。

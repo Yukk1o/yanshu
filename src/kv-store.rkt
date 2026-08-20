@@ -109,7 +109,7 @@
                (<= (string-length value) 512)
                (not (for/or ([character (in-string value)])
                       (char=? character #\nul))))
-    (raise-ail "KV_INVALID_KEY"
+    (raise-yanshu "KV_INVALID_KEY"
                "KV key must be a non-empty bounded string"
                (hasheq 'operation (symbol->string operation))))
   value)
@@ -121,14 +121,14 @@
   (define document
     (with-handlers ([exn:fail?
                      (lambda (_error)
-                       (raise-ail "KV_INVALID_FILE"
+                       (raise-yanshu "KV_INVALID_FILE"
                                   "KV persistence file is not valid JSON"
                                   (hasheq 'path (path->string path))))])
       (call-with-input-file path read-json)))
   (unless (and (hash? document)
                (equal? (hash-ref document 'version #f) 1)
                (list? (hash-ref document 'entries #f)))
-    (raise-ail "KV_INVALID_FILE"
+    (raise-yanshu "KV_INVALID_FILE"
                "KV persistence file has an invalid document shape"
                (hasheq 'path (path->string path))))
   (for/fold ([result (hash)])
@@ -136,12 +136,12 @@
     (unless (and (hash? entry)
                  (string? (hash-ref entry 'key #f))
                  (hash-has-key? entry 'value))
-      (raise-ail "KV_INVALID_FILE"
+      (raise-yanshu "KV_INVALID_FILE"
                  "KV persistence entry is malformed"
                  (hasheq 'path (path->string path))))
     (define key (expect-kv-key 'load (hash-ref entry 'key)))
     (when (hash-has-key? result key)
-      (raise-ail "KV_INVALID_FILE"
+      (raise-yanshu "KV_INVALID_FILE"
                  "KV persistence file contains a duplicate key"
                  (hasheq 'path (path->string path) 'key key)))
     (hash-set result key (jsexpr->value (hash-ref entry 'value)))))

@@ -28,7 +28,7 @@
   (unless (and (list? datum)
                (pair? datum)
                (eq? (car datum) 'program))
-    (raise-ail "PROGRAM_EXPECTED"
+    (raise-yanshu "PROGRAM_EXPECTED"
                "top-level form must be (program ...)"))
   (define name #f)
   (define version #f)
@@ -42,49 +42,49 @@
   (define definition-names (make-hasheq))
   (for ([form (in-list (cdr datum))])
     (unless (and (list? form) (pair? form) (symbol? (car form)))
-      (raise-ail "PROGRAM_INVALID_FORM"
+      (raise-yanshu "PROGRAM_INVALID_FORM"
                  "program members must be non-empty forms"
                  (hasheq 'form (format "~s" form))))
     (case (car form)
       [(name)
        (unless (and (= (length form) 2) (symbol? (cadr form)))
-         (raise-ail "PROGRAM_INVALID_NAME" "name must contain one symbol"))
+         (raise-yanshu "PROGRAM_INVALID_NAME" "name must contain one symbol"))
        (when name
-         (raise-ail "PROGRAM_DUPLICATE_NAME" "program has multiple name forms"))
+         (raise-yanshu "PROGRAM_DUPLICATE_NAME" "program has multiple name forms"))
        (set! name (cadr form))]
       [(version)
        (unless (and (= (length form) 2)
                     (exact-positive-integer? (cadr form)))
-         (raise-ail "PROGRAM_INVALID_VERSION"
+         (raise-yanshu "PROGRAM_INVALID_VERSION"
                     "version must contain one positive integer"))
        (when version
-         (raise-ail "PROGRAM_DUPLICATE_VERSION"
+         (raise-yanshu "PROGRAM_DUPLICATE_VERSION"
                     "program has multiple version forms"))
        (set! version (cadr form))]
       [(capabilities)
        (when capabilities
-         (raise-ail "PROGRAM_DUPLICATE_CAPABILITIES"
+         (raise-yanshu "PROGRAM_DUPLICATE_CAPABILITIES"
                     "program has multiple capabilities forms"))
        (define values (cdr form))
        (unless (andmap symbol? values)
-         (raise-ail "PROGRAM_INVALID_CAPABILITY"
+         (raise-yanshu "PROGRAM_INVALID_CAPABILITY"
                     "capability names must be symbols"))
        (ensure-unique-symbols values
                               "PROGRAM_DUPLICATE_CAPABILITY"
                               "capability is declared more than once")
        (for ([capability (in-list values)])
          (unless (memq capability supported-capabilities)
-           (raise-ail "PROGRAM_UNKNOWN_CAPABILITY"
+           (raise-yanshu "PROGRAM_UNKNOWN_CAPABILITY"
                       "program declares an unsupported capability"
                       (hasheq 'capability (symbol->string capability)))))
        (set! capabilities values)]
       [(libraries)
        (when libraries
-         (raise-ail "PROGRAM_DUPLICATE_LIBRARIES"
+         (raise-yanshu "PROGRAM_DUPLICATE_LIBRARIES"
                     "program has multiple libraries forms"))
        (define declarations (cdr form))
        (when (> (length declarations) maximum-library-count)
-         (raise-ail "PROGRAM_TOO_MANY_LIBRARIES"
+         (raise-yanshu "PROGRAM_TOO_MANY_LIBRARIES"
                     "program declares too many libraries"
                     (hasheq 'maximum maximum-library-count)))
        (define seen-libraries (make-hasheq))
@@ -96,47 +96,47 @@
                        (valid-library-name? (car declaration))
                        (exact-positive-integer? (cadr declaration))
                        (<= (cadr declaration) maximum-library-version))
-            (raise-ail
+            (raise-yanshu
              "PROGRAM_INVALID_LIBRARY"
              "library declaration must be (lowercase-name VERSION)"
              (hasheq 'library (format "~s" declaration))))
           (define library-name (car declaration))
           (define library-version (cadr declaration))
           (when (hash-has-key? seen-libraries library-name)
-            (raise-ail "PROGRAM_DUPLICATE_LIBRARY"
+            (raise-yanshu "PROGRAM_DUPLICATE_LIBRARY"
                        "program declares a library more than once"
                        (hasheq 'library (symbol->string library-name))))
           (hash-set! seen-libraries library-name #t)
           (unless (find-library-contract library-name library-version)
-            (raise-ail "PROGRAM_UNKNOWN_LIBRARY"
+            (raise-yanshu "PROGRAM_UNKNOWN_LIBRARY"
                        "program declares an unsupported library contract"
                        (hasheq 'library (symbol->string library-name)
                                'version library-version)))
           (library-requirement library-name library-version)))]
       [(schema)
        (unless (and (= (length form) 3) (symbol? (cadr form)))
-         (raise-ail "PROGRAM_INVALID_SCHEMA"
+         (raise-yanshu "PROGRAM_INVALID_SCHEMA"
                     "schema must be (schema name specification)"))
        (when (>= (length schemas) maximum-schemas)
-         (raise-ail "PROGRAM_TOO_MANY_SCHEMAS"
+         (raise-yanshu "PROGRAM_TOO_MANY_SCHEMAS"
                     "program declares too many schemas"
                     (hasheq 'maximum maximum-schemas)))
        (define schema-name (cadr form))
        (when (memq schema-name reserved-schema-names)
-         (raise-ail "PROGRAM_SCHEMA_RESERVED_NAME"
+         (raise-yanshu "PROGRAM_SCHEMA_RESERVED_NAME"
                     "schema name conflicts with a language or capability binding"
                     (hasheq 'name (symbol->string schema-name))))
        (when (hash-has-key? schema-names schema-name)
-         (raise-ail "PROGRAM_DUPLICATE_SCHEMA"
+         (raise-yanshu "PROGRAM_DUPLICATE_SCHEMA"
                     "schema name is not unique"
                     (hasheq 'name (symbol->string schema-name))))
        (when (hash-has-key? definition-names schema-name)
-         (raise-ail "PROGRAM_DUPLICATE_BINDING"
+         (raise-yanshu "PROGRAM_DUPLICATE_BINDING"
                     "schema and definition names must be unique"
                     (hasheq 'name (symbol->string schema-name))))
        (hash-set! schema-names schema-name #t)
        (set! schemas
-             (cons (ail-schema schema-name
+             (cons (yanshu-schema schema-name
                                (parse-schema-specification (caddr form) 0))
                    schemas))]
       [(route)
@@ -144,97 +144,97 @@
                     (symbol? (cadr form))
                     (string? (caddr form))
                     (symbol? (cadddr form)))
-         (raise-ail "PROGRAM_INVALID_ROUTE"
+         (raise-yanshu "PROGRAM_INVALID_ROUTE"
                     "route must be (route METHOD \"/path\" handler)"))
        (define method (string-upcase (symbol->string (cadr form))))
        (define path (caddr form))
        (define handler (cadddr form))
        (unless (member method supported-methods)
-         (raise-ail "PROGRAM_UNSUPPORTED_METHOD"
+         (raise-yanshu "PROGRAM_UNSUPPORTED_METHOD"
                     "route uses an unsupported HTTP method"
                     (hasheq 'method method)))
        (validate-route-path path)
        (for ([existing (in-list routes)])
-         (when (and (string=? method (ail-route-method existing))
-                    (route-patterns-overlap? path (ail-route-path existing)))
-           (raise-ail "PROGRAM_AMBIGUOUS_ROUTE"
+         (when (and (string=? method (yanshu-route-method existing))
+                    (route-patterns-overlap? path (yanshu-route-path existing)))
+           (raise-yanshu "PROGRAM_AMBIGUOUS_ROUTE"
                       "route overlaps an earlier route for the same method"
                       (hasheq 'method method
                               'path path
-                              'existingPath (ail-route-path existing)))))
-       (set! routes (cons (ail-route method path handler) routes))]
+                              'existingPath (yanshu-route-path existing)))))
+       (set! routes (cons (yanshu-route method path handler) routes))]
       [(def)
        (unless (and (= (length form) 3) (symbol? (cadr form)))
-         (raise-ail "PROGRAM_INVALID_DEFINITION"
+         (raise-yanshu "PROGRAM_INVALID_DEFINITION"
                     "definition must be (def name expression)"))
        (define definition-name (cadr form))
        (when (hash-has-key? definition-names definition-name)
-         (raise-ail "PROGRAM_DUPLICATE_DEFINITION"
+         (raise-yanshu "PROGRAM_DUPLICATE_DEFINITION"
                     "definition name is not unique"
                     (hasheq 'name (symbol->string definition-name))))
        (when (hash-has-key? schema-names definition-name)
-         (raise-ail "PROGRAM_DUPLICATE_BINDING"
+         (raise-yanshu "PROGRAM_DUPLICATE_BINDING"
                     "schema and definition names must be unique"
                     (hasheq 'name (symbol->string definition-name))))
        (hash-set! definition-names definition-name #t)
        (set! definitions
-             (cons (ail-definition definition-name
+             (cons (yanshu-definition definition-name
                                    (parse-expression (caddr form)))
                    definitions))]
       [(export)
        (when exports
-         (raise-ail "PROGRAM_DUPLICATE_EXPORT"
+         (raise-yanshu "PROGRAM_DUPLICATE_EXPORT"
                     "program has multiple export forms"))
        (define values (cdr form))
        (unless (and (pair? values) (andmap symbol? values))
-         (raise-ail "PROGRAM_INVALID_EXPORT"
+         (raise-yanshu "PROGRAM_INVALID_EXPORT"
                     "export must contain at least one symbol"))
        (ensure-unique-symbols values
                               "PROGRAM_DUPLICATE_EXPORT_NAME"
                               "export name is listed more than once")
        (set! exports values)]
       [else
-       (raise-ail "PROGRAM_UNKNOWN_FORM"
+       (raise-yanshu "PROGRAM_UNKNOWN_FORM"
                   "unknown top-level program form"
                   (hasheq 'form (symbol->string (car form))))]))
   (unless name
-    (raise-ail "PROGRAM_MISSING_NAME" "program is missing a name form"))
+    (raise-yanshu "PROGRAM_MISSING_NAME" "program is missing a name form"))
   (unless version
-    (raise-ail "PROGRAM_MISSING_VERSION" "program is missing a version form"))
+    (raise-yanshu "PROGRAM_MISSING_VERSION" "program is missing a version form"))
   (unless exports
-    (raise-ail "PROGRAM_MISSING_EXPORT" "program is missing an export form"))
+    (raise-yanshu "PROGRAM_MISSING_EXPORT" "program is missing an export form"))
   (for ([export-name (in-list exports)])
     (unless (hash-has-key? definition-names export-name)
-      (raise-ail "PROGRAM_UNKNOWN_EXPORT"
+      (raise-yanshu "PROGRAM_UNKNOWN_EXPORT"
                  "export does not name a program definition"
                  (hasheq 'name (symbol->string export-name)))))
   (for ([route (in-list routes)])
-    (unless (hash-has-key? definition-names (ail-route-handler route))
-      (raise-ail "PROGRAM_UNKNOWN_ROUTE_HANDLER"
+    (unless (hash-has-key? definition-names (yanshu-route-handler route))
+      (raise-yanshu "PROGRAM_UNKNOWN_ROUTE_HANDLER"
                  "route handler does not name a program definition"
                  (hasheq 'handler
-                         (symbol->string (ail-route-handler route)))))
-    (unless (memq (ail-route-handler route) exports)
-      (raise-ail "PROGRAM_ROUTE_HANDLER_NOT_EXPORTED"
+                         (symbol->string (yanshu-route-handler route)))))
+    (unless (memq (yanshu-route-handler route) exports)
+      (raise-yanshu "PROGRAM_ROUTE_HANDLER_NOT_EXPORTED"
                  "route handler must be exported"
                  (hasheq 'handler
-                         (symbol->string (ail-route-handler route))))))
+                         (symbol->string (yanshu-route-handler route))))))
   (for ([requirement (in-list (or libraries '()))])
     (define namespace-prefix
       (string-append (symbol->string (library-requirement-name requirement))
                      "/"))
     (for ([binding-name
            (in-list
-            (append (map ail-schema-name schemas)
-                    (map ail-definition-name definitions)))])
+            (append (map yanshu-schema-name schemas)
+                    (map yanshu-definition-name definitions)))])
       (when (string-prefix? (symbol->string binding-name) namespace-prefix)
-        (raise-ail "PROGRAM_LIBRARY_NAMESPACE_CONFLICT"
+        (raise-yanshu "PROGRAM_LIBRARY_NAMESPACE_CONFLICT"
                    "guest binding occupies a declared library namespace"
                    (hasheq
                     'library
                     (symbol->string (library-requirement-name requirement))
                     'binding (symbol->string binding-name))))))
-  (ail-program name
+  (yanshu-program name
                version
                (or capabilities '())
                (or libraries '())
@@ -246,7 +246,7 @@
 
 (define (parse-schema-specification datum depth)
   (when (> depth maximum-schema-depth)
-    (raise-ail "PROGRAM_SCHEMA_TOO_DEEP"
+    (raise-yanshu "PROGRAM_SCHEMA_TOO_DEEP"
                "schema exceeds the maximum nesting depth"
                (hasheq 'maximum maximum-schema-depth)))
   (cond
@@ -290,7 +290,7 @@
        [(object)
         (define raw-fields (cdr datum))
         (when (> (length raw-fields) maximum-object-fields)
-          (raise-ail "PROGRAM_SCHEMA_TOO_MANY_FIELDS"
+          (raise-yanshu "PROGRAM_SCHEMA_TOO_MANY_FIELDS"
                      "object schema declares too many fields"
                      (hasheq 'maximum maximum-object-fields)))
         (define fields
@@ -299,7 +299,7 @@
         (define field-names (map schema-field-name fields))
         (define duplicate (check-duplicates field-names string=?))
         (when duplicate
-          (raise-ail "PROGRAM_SCHEMA_DUPLICATE_FIELD"
+          (raise-yanshu "PROGRAM_SCHEMA_DUPLICATE_FIELD"
                      "object schema field name is not unique"
                      (hasheq 'field duplicate)))
         (schema-object fields)]
@@ -316,14 +316,14 @@
                (string? (cadr datum))
                (positive? (string-length (cadr datum)))
                (<= (string-length (cadr datum)) 128))
-    (raise-ail "PROGRAM_INVALID_SCHEMA_FIELD"
+    (raise-yanshu "PROGRAM_INVALID_SCHEMA_FIELD"
                "schema field must have a bounded string name"
                (hasheq 'field (format "~s" datum))))
   (define required? (eq? (car datum) 'required))
   (unless (if required?
               (= (length datum) 3)
               (member (length datum) '(3 4)))
-    (raise-ail
+    (raise-yanshu
      "PROGRAM_INVALID_SCHEMA_FIELD"
      (if required?
          "required field must be (required \"name\" SCHEMA)"
@@ -335,12 +335,12 @@
   (define default (and has-default? (cadddr datum)))
   (when has-default?
     (unless (schema-default-datum? default)
-      (raise-ail "PROGRAM_SCHEMA_INVALID_DEFAULT"
+      (raise-yanshu "PROGRAM_SCHEMA_INVALID_DEFAULT"
                  "schema default must be a portable literal"
                  (hasheq 'field (cadr datum))))
     (define validation (validate-schema specification default))
     (unless (schema-validation-valid? validation)
-      (raise-ail "PROGRAM_SCHEMA_INVALID_DEFAULT"
+      (raise-yanshu "PROGRAM_SCHEMA_INVALID_DEFAULT"
                  "schema default does not satisfy its field schema"
                  (hasheq 'field (cadr datum)
                          'issue (car (schema-validation-issues validation))))))
@@ -357,7 +357,7 @@
     [else #f]))
 
 (define (invalid-schema-specification datum message)
-  (raise-ail "PROGRAM_INVALID_SCHEMA_SPECIFICATION"
+  (raise-yanshu "PROGRAM_INVALID_SCHEMA_SPECIFICATION"
              message
              (hasheq 'schema (format "~s" datum))))
 
@@ -384,14 +384,14 @@
           (invalid-special-form 'let datum))
         (define raw-bindings (cadr datum))
         (unless (list? raw-bindings)
-          (raise-ail "PARSE_INVALID_LET_BINDINGS"
+          (raise-yanshu "PARSE_INVALID_LET_BINDINGS"
                      "let bindings must be a proper list"))
         (define binding-names
           (for/list ([binding (in-list raw-bindings)])
             (unless (and (list? binding)
                          (= (length binding) 2)
                          (symbol? (car binding)))
-              (raise-ail "PARSE_INVALID_LET_BINDING"
+              (raise-yanshu "PARSE_INVALID_LET_BINDING"
                          "let binding must be (name expression)"
                          (hasheq 'binding (format "~s" binding))))
             (car binding)))
@@ -408,7 +408,7 @@
           (invalid-special-form 'fn datum))
         (define parameters (cadr datum))
         (unless (and (list? parameters) (andmap symbol? parameters))
-          (raise-ail "PARSE_INVALID_PARAMETERS"
+          (raise-yanshu "PARSE_INVALID_PARAMETERS"
                      "function parameters must be a proper list of symbols"))
         (ensure-unique-symbols parameters
                                "PARSE_DUPLICATE_PARAMETER"
@@ -424,7 +424,7 @@
         (expr-call (parse-expression head)
                    (map parse-expression (cdr datum)))])]
     [else
-     (raise-ail "PARSE_INVALID_EXPRESSION"
+     (raise-yanshu "PARSE_INVALID_EXPRESSION"
                 "datum cannot be used as an expression"
                 (hasheq 'datum (format "~s" datum)))]))
 
@@ -432,11 +432,11 @@
   (define seen (make-hasheq))
   (for ([symbol (in-list symbols)])
     (when (hash-has-key? seen symbol)
-      (raise-ail code message (hasheq 'name (symbol->string symbol))))
+      (raise-yanshu code message (hasheq 'name (symbol->string symbol))))
     (hash-set! seen symbol #t)))
 
 (define (invalid-special-form name datum)
-  (raise-ail "PARSE_INVALID_SPECIAL_FORM"
+  (raise-yanshu "PARSE_INVALID_SPECIAL_FORM"
              "special form has an invalid shape"
              (hasheq 'form (symbol->string name)
                      'datum (format "~s" datum))))
@@ -449,24 +449,24 @@
                (not (string-contains? path "#"))
                (not (for/or ([character (in-string path)])
                       (char-whitespace? character))))
-    (raise-ail "PROGRAM_INVALID_ROUTE_PATH"
+    (raise-yanshu "PROGRAM_INVALID_ROUTE_PATH"
                "route path must be an absolute path without query or fragment"
                (hasheq 'path path)))
   (define segments (route-segments path))
   (when (member "" segments)
-    (raise-ail "PROGRAM_INVALID_ROUTE_PATH"
+    (raise-yanshu "PROGRAM_INVALID_ROUTE_PATH"
                "route path cannot contain empty segments or a trailing slash"
                (hasheq 'path path)))
   (define parameter-names '())
   (for ([segment (in-list segments)])
     (when (string-prefix? segment ":")
       (unless (regexp-match? #px"^:[A-Za-z_][A-Za-z0-9_-]*$" segment)
-        (raise-ail "PROGRAM_INVALID_ROUTE_PARAMETER"
+        (raise-yanshu "PROGRAM_INVALID_ROUTE_PARAMETER"
                    "route parameter has an invalid name"
                    (hasheq 'path path 'segment segment)))
       (define parameter-name (substring segment 1))
       (when (member parameter-name parameter-names)
-        (raise-ail "PROGRAM_DUPLICATE_ROUTE_PARAMETER"
+        (raise-yanshu "PROGRAM_DUPLICATE_ROUTE_PARAMETER"
                    "route parameter name is repeated"
                    (hasheq 'path path 'parameter parameter-name)))
       (set! parameter-names (cons parameter-name parameter-names)))))

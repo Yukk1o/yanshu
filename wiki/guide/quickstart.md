@@ -1,6 +1,6 @@
 # 5 分钟上手
 
-这一页只使用当前 Rust 工具链：先解析一个 `.ail` 程序，再运行完整业务场景，最后启动活动版本 JSON API。所有命令都在仓库根目录执行。
+这一页只使用当前 Rust 工具链：先解析一个 `.yan` 程序，再运行完整业务场景，最后启动活动版本 JSON API。所有命令都在仓库根目录执行。
 
 ## 1. 检查工具链
 
@@ -16,8 +16,8 @@ cargo --version
 ## 2. 让 Parser 读取程序
 
 ```powershell
-cargo run --quiet --locked -p ail-cli -- `
-  inspect examples\discount\v2.ail
+cargo run --quiet --locked -p yanshu-cli -- `
+  inspect examples\discount\v2.yan
 ```
 
 输出是 JSON，不是简单回显：
@@ -33,7 +33,7 @@ cargo run --quiet --locked -p ail-cli -- `
 }
 ```
 
-`program` 字段包含 Parser 看到的 AST 摘要。命令实现见 [ail-cli](/source/rust/crates/ail-cli/src/main.rs.txt)，示例源码见 [discount/v2.ail](/source/examples/discount/v2.ail.txt)。
+`program` 字段包含 Parser 看到的 AST 摘要。命令实现见 [yanshu-cli](/source/rust/crates/yanshu-cli/src/main.rs.txt)，示例源码见 [discount/v2.yan](/source/examples/discount/v2.yan.txt)。
 
 ## 3. 运行语言与业务验证
 
@@ -46,12 +46,12 @@ cargo test --workspace --locked
 再运行可移植语言语料与任务业务场景：
 
 ```powershell
-cargo run --quiet --locked -p ail-cli -- `
+cargo run --quiet --locked -p yanshu-cli -- `
   conformance conformance\v1\manifest.json
 
-cargo run --quiet --locked -p ail-cli -- `
+cargo run --quiet --locked -p yanshu-cli -- `
   test-service `
-  examples\tasks\service.ail `
+  examples\tasks\service.yan `
   examples\tasks\scenarios.json
 ```
 
@@ -77,7 +77,7 @@ server 始终拒绝非 loopback 地址。要启用本地单 token 认证，终�
 
 ```powershell
 $secret = Read-Host "Local Bearer token" -AsSecureString
-$env:AI_EVOLVE_HTTP_BEARER_TOKEN = `
+$env:YANSHU_HTTP_BEARER_TOKEN = `
   [Net.NetworkCredential]::new("", $secret).Password
 .\scripts\serve-tasks-rust.ps1
 ```
@@ -86,9 +86,9 @@ $env:AI_EVOLVE_HTTP_BEARER_TOKEN = `
 
 ```powershell
 $secret = Read-Host "Same local Bearer token" -AsSecureString
-$env:AI_EVOLVE_HTTP_BEARER_TOKEN = `
+$env:YANSHU_HTTP_BEARER_TOKEN = `
   [Net.NetworkCredential]::new("", $secret).Password
-$headers = @{ Authorization = "Bearer $env:AI_EVOLVE_HTTP_BEARER_TOKEN" }
+$headers = @{ Authorization = "Bearer $env:YANSHU_HTTP_BEARER_TOKEN" }
 $response = Invoke-WebRequest `
   -Headers $headers `
   -Uri http://127.0.0.1:8081/tasks
@@ -96,7 +96,7 @@ $response.StatusCode
 $response.Headers["X-Request-Id"]
 ```
 
-不设置 `AI_EVOLVE_HTTP_BEARER_TOKEN` 时认证关闭，但 loopback 限制仍然存在。客户端传入的 `x-request-id`、`authorization`、`cookie`、`proxy-authorization` 和 `x-api-key` 不会进入 `.ail` request headers。
+不设置 `YANSHU_HTTP_BEARER_TOKEN` 时认证关闭，但 loopback 限制仍然存在。客户端传入的 `x-request-id`、`authorization`、`cookie`、`proxy-authorization` 和 `x-api-key` 不会进入 `.yan` request headers。
 
 ## 6. 查看脱敏观测
 
@@ -115,21 +115,21 @@ Get-Content .runtime\tasks-rust\store.json.observations.jsonl
 先复制示例到自己的工作分支并修改，再检查和运行完整 suite：
 
 ```powershell
-cargo run --quiet --locked -p ail-cli -- `
-  check examples\tasks\service.ail
+cargo run --quiet --locked -p yanshu-cli -- `
+  check examples\tasks\service.yan
 
-cargo run --quiet --locked -p ail-cli -- `
+cargo run --quiet --locked -p yanshu-cli -- `
   test-service `
-  examples\tasks\service.ail `
+  examples\tasks\service.yan `
   examples\tasks\scenarios.json
 ```
 
 需要进入版本库时使用 `deploy-service`；它只会在场景全通过后晋升：
 
 ```powershell
-cargo run --quiet --locked -p ail-cli -- `
+cargo run --quiet --locked -p yanshu-cli -- `
   deploy-service `
-  examples\tasks\service.ail `
+  examples\tasks\service.yan `
   examples\tasks\scenarios.json `
   .runtime\tasks-rust\code
 ```
@@ -145,13 +145,13 @@ AI 候选应先执行不带 `--promote` 的 `evolve-service`，让候选保持 s
 ### 8081 端口被占用
 
 ```powershell
-$env:AI_EVOLVE_RUST_HTTP_BIND = "127.0.0.1:9001"
+$env:YANSHU_RUST_HTTP_BIND = "127.0.0.1:9001"
 .\scripts\serve-tasks-rust.ps1
 ```
 
 ### 服务启动前退出
 
-查看 CLI 的结构化 JSON。最常见原因是 `.ail` 解析失败、11 个业务场景未全部通过、活动版本损坏或 bind 地址不是 loopback。
+查看 CLI 的结构化 JSON。最常见原因是 `.yan` 解析失败、11 个业务场景未全部通过、活动版本损坏或 bind 地址不是 loopback。
 
 ### 如何运行这份 Wiki
 

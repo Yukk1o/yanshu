@@ -33,11 +33,11 @@ try {
     cargo clippy --locked --workspace --all-targets -- -D warnings
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-    if ($env:AI_EVOLVE_CHECK_V1_REFERENCE -eq "1") {
+    if ($env:YANSHU_CHECK_V1_REFERENCE -eq "1") {
         & (Join-Path $PSScriptRoot "diff-frontends.ps1")
         exit $LASTEXITCODE
     }
-    Write-Output "ok - frozen v1 reference differential skipped (set AI_EVOLVE_CHECK_V1_REFERENCE=1 to enable)"
+    Write-Output "ok - frozen v1 reference differential skipped (set YANSHU_CHECK_V1_REFERENCE=1 to enable)"
     exit 0
 }
 finally {

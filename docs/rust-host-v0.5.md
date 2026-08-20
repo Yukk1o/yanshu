@@ -5,37 +5,37 @@ language host. It does not switch production traffic yet.
 
 ## Implemented
 
-- `ail-diagnostic`: stable public diagnostics plus non-public source spans;
-- `ail-syntax`: bounded UTF-8 Reader, AST, complete program/parser forms, schema
+- `yanshu-diagnostic`: stable public diagnostics plus non-public source spans;
+- `yanshu-syntax`: bounded UTF-8 Reader, AST, complete program/parser forms, schema
   metadata, and JSON inspection;
-- `ail-runtime`: arbitrary-precision Values, lexical environments, recursive
+- `yanshu-runtime`: arbitrary-precision Values, lexical environments, recursive
   closures, sequential `let`, bounded evaluation, pure primitives, Schema
   normalization, and the `text@1` reference backend;
-- `ail-conformance`: the same v1 JSON manifest/fixture codec used by Racket;
-- `ail-store`: shared atomic file replacement plus content-addressed versions,
+- `yanshu-conformance`: the same v1 JSON manifest/fixture codec used by Racket;
+- `yanshu-store`: shared atomic file replacement plus content-addressed versions,
   immutable source verification, cross-process locking, promotion, and rollback;
-- `ail-service`: explicit capability trait, route dispatch, response validation,
+- `yanshu-service`: explicit capability trait, route dispatch, response validation,
   transactional memory KV, Racket-compatible persisted file KV, fixed clock/log
   adapters, and scenario runner;
-- `ail-http`: Axum/Tokio HTTP/1.1 adapter with bounded targets, headers, bodies,
+- `yanshu-http`: Axum/Tokio HTTP/1.1 adapter with bounded targets, headers, bodies,
   responses, concurrency and body-read deadlines; each request loads and pins one
   active program before execution; host-owned random request IDs, optional
   constant-time Bearer authentication, sensitive-header filtering, exact
   pinned-version identity, and bounded redacted JSONL observations remain outside
   the guest;
-- `ail-server`: independently deployable TCP process with structured startup and
+- `yanshu-server`: independently deployable TCP process with structured startup and
   failure output plus graceful Ctrl+C shutdown; it refuses non-loopback binds;
-- `ail-provider`: offline and live proposal interfaces, OpenAI Responses and
+- `yanshu-provider`: offline and live proposal interfaces, OpenAI Responses and
   DeepSeek Chat request/response validation, bounded Reqwest/Rustls transport,
   HTTPS-only endpoints, redirect refusal, credential zeroization, and stable
   diagnostics;
-- `ail-ops`: offline service leases, bounded snapshots, per-file SHA-256
+- `yanshu-ops`: offline service leases, bounded snapshots, per-file SHA-256
   manifests, version/event/KV semantic verification, tamper detection, and
   no-overwrite restore;
-- `ail-rollout`: deterministic shadow sampling, exact candidate loading,
+- `yanshu-rollout`: deterministic shadow sampling, exact candidate loading,
   in-memory response/headers comparison, categorized differences, and bounded
   redacted JSONL observations;
-- `ail-cli`: Rust `check`, `inspect`, `conformance`, `test-service`,
+- `yanshu-cli`: Rust `check`, `inspect`, `conformance`, `test-service`,
   `deploy-service`, `evolve-service`, `backup-service`, `verify-backup`,
   `restore-service`, and `version-conformance` commands.
 

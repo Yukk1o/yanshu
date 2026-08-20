@@ -1,17 +1,17 @@
-# AIL v0.9 package and Rust Library Backend contract
+# Yanshu v0.9 package and Rust Library Backend contract
 
 Status: implemented Rust host contract. Guest language version remains `4`; workspace release is `0.9.0`.
 
 ## Content-addressed packages
 
-A source workspace has one `ail-package.source.json`. It names the package, a canonical `major.minor.patch` version, its entry module, local `.ail` module paths, and direct source dependencies. Dependency paths are development inputs only. They must be canonical relative paths contained by the root workspace.
+A source workspace has one `yanshu-package.source.json`. It names the package, a canonical `major.minor.patch` version, its entry module, local `.yan` module paths, and direct source dependencies. Dependency paths are development inputs only. They must be canonical relative paths contained by the root workspace.
 
 Packing recursively parses every module and dependency, checks direct import ownership, and writes immutable artifacts below:
 
 ```text
 <store>/sha256/<package-hash>/
   package.json
-  <module>.ail
+  <module>.yan
 ```
 
 The package manifest contains exact module SHA-256 values and exact dependency package hashes. Its canonical compact JSON SHA-256 is the package hash. The artifact contains no install script, executable hook, Cargo manifest, dynamic library, registry URL, or development path.
@@ -20,7 +20,7 @@ Publishing uses a same-filesystem temporary directory followed by rename. An exi
 
 ## Lockfile
 
-`ail.lock.json` format 1 contains:
+`yanshu.lock.json` format 1 contains:
 
 - the root package hash;
 - entry module and language version;
@@ -33,7 +33,7 @@ One package name maps to one hash in a lock closure. Multiple versions under the
 
 ## Rust Library Backend
 
-`ail-library` owns trusted contracts independently from the interpreter. `LibraryBackend` implementations provide:
+`yanshu-library` owns trusted contracts independently from the interpreter. `LibraryBackend` implementations provide:
 
 - a bounded provider label;
 - exact library name and version;
@@ -50,11 +50,11 @@ Custom backends are supplied explicitly through `execute_export_with_libraries` 
 
 ```text
 package-pack <workspace> <store>
-package-lock <workspace> <store> <ail.lock.json>
+package-lock <workspace> <store> <yanshu.lock.json>
 package-verify <store> <content-hash>
-package-inspect <store> <ail.lock.json>
-package-review <store> <ail.lock.json> [--text]
-package-run <store> <ail.lock.json> <export> <arguments.json>
+package-inspect <store> <yanshu.lock.json>
+package-review <store> <yanshu.lock.json> [--text]
+package-run <store> <yanshu.lock.json> <export> <arguments.json>
 ```
 
 `package-review --text` is still a one-way `rust-readonly-v1` projection. Locking and packages add no structured editor or reverse parser.

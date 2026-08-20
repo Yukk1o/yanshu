@@ -1,6 +1,6 @@
 # Web DSL 与路由
 
-`.ail` 只声明业务路由和 handler；socket、HTTP 解析、JSON、超时、事务和版本选择都在宿主侧。这个分工类似 Go/Rust Web 框架把 transport adapter 与业务 service 分开。
+`.yan` 只声明业务路由和 handler；socket、HTTP 解析、JSON、超时、事务和版本选择都在宿主侧。这个分工类似 Go/Rust Web 框架把 transport adapter 与业务 service 分开。
 
 ## 声明路由
 
@@ -97,11 +97,11 @@ type ServiceRequest struct {
 4. 找到则 200 返回任务；
 5. 否则返回稳定错误码 `TASK_NOT_FOUND`。
 
-真实版本：[examples/tasks/service.ail](/source/examples/tasks/service.ail.txt)。
+真实版本：[examples/tasks/service.yan](/source/examples/tasks/service.yan.txt)。
 
 ## 每个请求一个事务
 
-[ail-service](/source/rust/crates/ail-service/src/lib.rs.txt) 为请求建立 working set，handler 只操作当前事务视图：
+[yanshu-service](/source/rust/crates/yanshu-service/src/lib.rs.txt) 为请求建立 working set，handler 只操作当前事务视图：
 
 ```text
 store snapshot → working copy → handler
@@ -124,7 +124,7 @@ store snapshot → working copy → handler
 
 ## HTTP host 的限制
 
-[ail-http](/source/rust/crates/ail-http/src/lib.rs.txt) 当前提供：
+[yanshu-http](/source/rust/crates/yanshu-http/src/lib.rs.txt) 当前提供：
 
 - 只监听配置的 host，演示默认 `127.0.0.1`；
 - 固定 worker 并发上限；
@@ -136,14 +136,14 @@ store snapshot → working copy → handler
 - 对外隐藏内部诊断，只暴露 request ID。
 
 当前 HTTP 宿主使用 Axum/Tokio HTTP/1.1 adapter，并由
-[ail-server](/source/rust/crates/ail-server/src/main.rs.txt) 提供独立进程入口。它保留目标、
+[yanshu-server](/source/rust/crates/yanshu-server/src/main.rs.txt) 提供独立进程入口。它保留目标、
 header、body、响应和并发上限，使用成熟协议栈处理连接，并在每个请求开始时从兼容版本库
 加载一次活动源码。真实 loopback TCP 测试覆盖监听、请求、解释执行、响应和优雅关闭。
 
 server 只允许 loopback 监听，公网部署必须放在可信 TLS 反向代理后面。设置
-`AI_EVOLVE_HTTP_BEARER_TOKEN` 可启用 Bearer 认证；宿主保存 token 摘要并做常量时间比较，
+`YANSHU_HTTP_BEARER_TOKEN` 可启用 Bearer 认证；宿主保存 token 摘要并做常量时间比较，
 `authorization`、`cookie`、`proxy-authorization`、`x-api-key` 和客户端伪造的
-`x-request-id` 不会传给 `.ail` handler。
+`x-request-id` 不会传给 `.yan` handler。
 每个响应都有 `X-Request-Id`，内部错误公开正文中的 ID 与宿主诊断使用同一个值。
 
 独立 server 默认把每个请求的脱敏观测追加到 `<data-store>.observations.jsonl`。每行是一个
@@ -176,7 +176,7 @@ KV 快照，只在有并发上限的后台内存 store 中执行。候选的写�
 | 并发槽耗尽或活动 store 不可用 | 503 |
 | 客体诊断或非法 response | 500 + public request ID |
 
-业务 400、404、409 等由 `.ail` handler 使用 `api-error` 返回。
+业务 400、404、409 等由 `.yan` handler 使用 `api-error` 返回。
 
 ## 当前边界
 

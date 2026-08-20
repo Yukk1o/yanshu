@@ -1,4 +1,4 @@
-# AI-Evolve v0.1 Design
+# Yanshu v0.1 Design
 
 ## Portability boundary
 
@@ -8,7 +8,7 @@ the project runtime. Guest code never reaches Racket `eval`.
 
 The following artifacts are intended to survive a Rust migration unchanged:
 
-- `.ail` source programs
+- `.yan` source programs
 - JSON test suites and reports
 - diagnostic codes
 - provider request and response shapes

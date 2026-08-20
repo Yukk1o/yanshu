@@ -1,4 +1,4 @@
-# AI-Evolve Language Specification v0.1
+# Yanshu Language Specification v0.1
 
 ## Program
 

@@ -19,7 +19,7 @@ manifest, and an exact expected outcome:
 {
   "name": "recursive-factorial",
   "phase": "run",
-  "source": "programs/core.ail",
+  "source": "programs/core.yan",
   "entry": "factorial",
   "args": [{"$int": "5"}],
   "expect": {"kind": "value", "value": {"$int": "120"}}

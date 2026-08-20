@@ -202,9 +202,9 @@ fn create_task(request: Request) -> Response {
 这个视图必须满足：
 
 1. 从 AST 单向生成，用户不能编辑它再反向执行；
-2. 每个节点可追踪回原 `.ail` 源码位置和 AST ID；
+2. 每个节点可追踪回原 `.yan` 源码位置和 AST ID；
 3. 明确标注简化或无法等价显示的节点；
 4. 同屏展示 route/schema/capability/错误码的结构化 diff；
-5. 仍以 `.ail` AST、测试和宿主策略作为执行真相。
+5. 仍以 `.yan` AST、测试和宿主策略作为执行真相。
 
 它的价值是降低审查门槛，不是创建第二门可执行语言。路线位置见 [Rust 宿主与生态路线](/development/rust-roadmap)。

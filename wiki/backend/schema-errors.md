@@ -1,6 +1,6 @@
 # Schema 与统一错误
 
-AI-Evolve 把“请求 body 是不是合法业务数据”从 handler 的手写分支移入 Parser 持有的 Schema。它类似 Go validator 的声明，但会先编译成语言自己的 Schema AST；也类似 Rust 中用一个受限 schema enum 驱动校验。
+Yanshu 把“请求 body 是不是合法业务数据”从 handler 的手写分支移入 Parser 持有的 Schema。它类似 Go validator 的声明，但会先编译成语言自己的 Schema AST；也类似 Rust 中用一个受限 schema enum 驱动校验。
 
 ## 声明一个对象 Schema
 
@@ -52,7 +52,7 @@ Parser 限制 Schema 数量、嵌套深度、字段数和集合最大长度；�
     (required "externalRef" (union integer (string 1 64)))))
 ```
 
-真实实现：[Parser 中的 Schema 语法](/source/rust/crates/ail-syntax/src/parser.rs.txt)、[校验器](/source/rust/crates/ail-runtime/src/schema.rs.txt)、[Schema AST](/source/rust/crates/ail-syntax/src/ast.rs.txt)。
+真实实现：[Parser 中的 Schema 语法](/source/rust/crates/yanshu-syntax/src/parser.rs.txt)、[校验器](/source/rust/crates/yanshu-runtime/src/schema.rs.txt)、[Schema AST](/source/rust/crates/yanshu-syntax/src/ast.rs.txt)。
 
 ## `validate` 返回 Result
 

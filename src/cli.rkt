@@ -67,7 +67,7 @@
            (call-with-input-file argument-input read-json)
            (string->jsexpr argument-input)))
      (unless (list? argument-document)
-       (raise-ail "INPUT_ARGUMENTS_NOT_ARRAY"
+       (raise-yanshu "INPUT_ARGUMENTS_NOT_ARRAY"
                   "run arguments must be a JSON array"))
      (define result
        (execute-export program
@@ -78,13 +78,13 @@
           (string=? (car arguments) "evolve"))
      (when (and (= (length arguments) 4)
                 (not (string=? (list-ref arguments 3) "--promote")))
-       (raise-ail "CLI_INVALID_OPTION"
+       (raise-yanshu "CLI_INVALID_OPTION"
                   "the only evolve option is --promote"))
      (define program-path (cadr arguments))
      (define tests-path (caddr arguments))
      (define current-source (file->string program-path))
      (define suite (load-test-suite tests-path))
-     (define configured-store (getenv "AI_EVOLVE_STORE"))
+     (define configured-store (getenv "YANSHU_STORE"))
      (define store-root
        (if (and configured-store
                 (not (string=? configured-store "")))
@@ -126,7 +126,7 @@
           (string=? (car arguments) "evolve-service"))
      (when (and (= (length arguments) 4)
                 (not (string=? (list-ref arguments 3) "--promote")))
-       (raise-ail "CLI_INVALID_OPTION"
+       (raise-yanshu "CLI_INVALID_OPTION"
                   "the only evolve-service option is --promote"))
      (define code-store (string->path (cadr arguments)))
      (define suite (load-service-test-suite (caddr arguments)))
@@ -159,7 +159,7 @@
 (define (serve-loader program-loader program-label port-text store-path)
   (define port (string->number port-text))
   (unless (and (exact-integer? port) (<= 0 port 65535))
-    (raise-ail "CLI_INVALID_PORT"
+    (raise-yanshu "CLI_INVALID_PORT"
                "serve port must be an integer from 0 through 65535"))
   (program-loader)
   (define store (open-file-kv-store store-path))
@@ -204,8 +204,8 @@
 
 (define (run-demo)
   (define example-root (build-path project-root "examples" "discount"))
-  (define initial-path (build-path example-root "v1.ail"))
-  (define candidate-path (build-path example-root "v2.ail"))
+  (define initial-path (build-path example-root "v1.yan"))
+  (define candidate-path (build-path example-root "v2.yan"))
   (define test-path (build-path example-root "tests.json"))
   (define store-root
     (build-path project-root
@@ -231,7 +231,7 @@
 
   (define initial-report (run-test-suite initial-program suite))
   (when (hash-ref initial-report 'passed)
-    (raise-ail "DEMO_INITIAL_VERSION_UNEXPECTEDLY_PASSED"
+    (raise-yanshu "DEMO_INITIAL_VERSION_UNEXPECTEDLY_PASSED"
                "demo requires the initial version to expose a failing case"))
 
   (define provider (make-file-provider candidate-path))
@@ -242,7 +242,7 @@
   (define candidate-program (load-program-source candidate-source))
   (define candidate-report (run-test-suite candidate-program suite))
   (unless (hash-ref candidate-report 'passed)
-    (raise-ail "DEMO_CANDIDATE_FAILED"
+    (raise-yanshu "DEMO_CANDIDATE_FAILED"
                "offline provider candidate did not pass the complete suite"
                (hasheq 'report candidate-report)))
 
@@ -292,25 +292,25 @@
     'ok #f
     'usage
     (list "demo"
-          "check <program.ail>"
-          "inspect <program.ail>"
+          "check <program.yan>"
+          "inspect <program.yan>"
           "conformance <manifest.json>"
-          "test <program.ail> <tests.json>"
-          "run <program.ail> <entry> <args-json-or-file>"
-          "evolve <program.ail> <tests.json> [--promote]"
-          "test-service <program.ail> <scenarios.json>"
-          "version-conformance <initial.ail> <candidate.ail>"
-          "deploy-service <program.ail> <scenarios.json> <code-store>"
-          "serve <program.ail> <port> <data-store.json>"
+          "test <program.yan> <tests.json>"
+          "run <program.yan> <entry> <args-json-or-file>"
+          "evolve <program.yan> <tests.json> [--promote]"
+          "test-service <program.yan> <scenarios.json>"
+          "version-conformance <initial.yan> <candidate.yan>"
+          "deploy-service <program.yan> <scenarios.json> <code-store>"
+          "serve <program.yan> <port> <data-store.json>"
           "serve-active <code-store> <port> <data-store.json>"
           "evolve-service <code-store> <scenarios.json> [--promote]"
           "rollback-service <code-store>"))))
 
 (module+ main
   (with-handlers
-      ([exn:fail:ail?
+      ([exn:fail:yanshu?
         (lambda (error)
-          (emit (ail-error->jsexpr error))
+          (emit (yanshu-error->jsexpr error))
           (exit 1))]
        [exn:fail?
         (lambda (error)

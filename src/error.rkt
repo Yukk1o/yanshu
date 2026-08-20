@@ -1,22 +1,22 @@
 #lang racket/base
 
-(provide (struct-out exn:fail:ail)
-         raise-ail
-         ail-error->jsexpr)
+(provide (struct-out exn:fail:yanshu)
+         raise-yanshu
+         yanshu-error->jsexpr)
 
-(struct exn:fail:ail exn:fail (code details) #:transparent)
+(struct exn:fail:yanshu exn:fail (code details) #:transparent)
 
-(define (raise-ail code message [details (hasheq)])
+(define (raise-yanshu code message [details (hasheq)])
   (raise
-   (exn:fail:ail message
+   (exn:fail:yanshu message
                  (current-continuation-marks)
                  code
                  details)))
 
-(define (ail-error->jsexpr error)
+(define (yanshu-error->jsexpr error)
   (hasheq 'ok #f
           'error
-          (hasheq 'code (exn:fail:ail-code error)
+          (hasheq 'code (exn:fail:yanshu-code error)
                   'message (exn-message error)
-                  'details (exn:fail:ail-details error))))
+                  'details (exn:fail:yanshu-details error))))
 

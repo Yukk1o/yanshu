@@ -1,6 +1,6 @@
 # 标准库与 Library Backend
 
-AI-Evolve 把“语言可调用的 API”与“宿主怎样实现它”分开。guest 只声明版本化标准库契约，不能直接指定 crates.io 包、动态库路径或任意函数名。
+Yanshu 把“语言可调用的 API”与“宿主怎样实现它”分开。guest 只声明版本化标准库契约，不能直接指定 crates.io 包、动态库路径或任意函数名。
 
 ## 声明标准库
 
@@ -37,14 +37,14 @@ AI-Evolve 把“语言可调用的 API”与“宿主怎样实现它”分开。
 (text/replace "AI language" "AI" "机器")
 ```
 
-可运行示例见 [examples/libraries/text.ail](/source/examples/libraries/text.ail.txt)。v0.9 的契约在独立 [ail-library contract](/source/rust/crates/ail-library/src/contract.rs.txt)，Rust 实现在 [text backend](/source/rust/crates/ail-library/src/text.rs.txt)，解释器只负责注册和调用边界。
+可运行示例见 [examples/libraries/text.yan](/source/examples/libraries/text.yan.txt)。v0.9 的契约在独立 [yanshu-library contract](/source/rust/crates/yanshu-library/src/contract.rs.txt)，Rust 实现在 [text backend](/source/rust/crates/yanshu-library/src/text.rs.txt)，解释器只负责注册和调用边界。
 
 ## 为什么不直接导入 Cargo crate
 
 如果 guest 能按字符串加载任意依赖，模型就可能扩大权限、改变语义或引入不可审计的供应链。Library Backend 使用三层边界：
 
 ```text
-.ail portable API
+.yan portable API
         │
         ▼
 versioned contract
@@ -78,7 +78,7 @@ trait LibraryBackend: Send {
         &mut self,
         operation: &str,
         arguments: &[LibraryValue],
-    ) -> AilResult<LibraryValue>;
+    ) -> YanshuResult<LibraryValue>;
 }
 ```
 
@@ -98,7 +98,7 @@ trait LibraryBackend: Send {
 ## crates.io、FFI 与第三方生态路线
 
 ::: warning 当前状态
-`ail-library` 和可替换 Rust Backend 已落地，但 workspace 仍是 `publish = false`；项目没有稳定 C ABI、动态库 ABI 或让 guest 任意加载 crates.io 的入口。
+`yanshu-library` 和可替换 Rust Backend 已落地，但 workspace 仍是 `publish = false`；项目没有稳定 C ABI、动态库 ABI 或让 guest 任意加载 crates.io 的入口。
 :::
 
 合理的生态顺序是：

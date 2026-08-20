@@ -1,10 +1,10 @@
 # 数据模型
 
-AI-Evolve 的值系统刻意保持小而可移植。值既要能被解释器执行，也要能跨 JSON、版本库和 Library Backend 安全传递。
+Yanshu 的值系统刻意保持小而可移植。值既要能被解释器执行，也要能跨 JSON、版本库和 Library Backend 安全传递。
 
 ## 值类型总览
 
-| `.ail` 类型 | 示例 | Rust 心智模型 | 可作为 JSON 输出 |
+| `.yan` 类型 | 示例 | Rust 心智模型 | 可作为 JSON 输出 |
 | --- | --- | --- | --- |
 | Nil | `'()`；输入 JSON `null` 或 `[]` | `Value::Nil` | 是，统一编码为 `[]` |
 | Bool | `#t`、`#f` | `Value::Bool(bool)` | 是 |
@@ -18,7 +18,7 @@ AI-Evolve 的值系统刻意保持小而可移植。值既要能被解释器执�
 | Closure | `(fn (x) (+ x 1))` | 受检查 arena 中的闭包 | 否 |
 | Primitive | `+`、`validate` | 可信宿主操作 | 否 |
 
-真实实现见 [Value](/source/rust/crates/ail-runtime/src/value.rs.txt)；语法字面量见 [AST](/source/rust/crates/ail-syntax/src/ast.rs.txt)。
+真实实现见 [Value](/source/rust/crates/yanshu-runtime/src/value.rs.txt)；语法字面量见 [AST](/source/rust/crates/yanshu-syntax/src/ast.rs.txt)。
 
 ## Int 是任意精度整数
 

@@ -38,14 +38,14 @@
   (define base-bindings
     (merge-capability-bindings clock-bindings extra-capability-bindings))
   (with-handlers
-      ([exn:fail:ail?
+      ([exn:fail:yanshu?
         (lambda (error)
           (internal-dispatch-result request error #f))]
        [exn:fail?
         (lambda (_error)
           (internal-dispatch-result
            request
-           (exn:fail:ail "service host failed"
+           (exn:fail:yanshu "service host failed"
                          (current-continuation-marks)
                          "SERVICE_HOST_FAILURE"
                          (hasheq))
@@ -86,14 +86,14 @@
   (define method (string-upcase (service-request-method request)))
   (define path (service-request-path request))
   (define path-matches
-    (for/list ([route (in-list (ail-program-routes program))]
+    (for/list ([route (in-list (yanshu-program-routes program))]
                #:do [(define parameters
-                       (match-route-path (ail-route-path route) path))]
+                       (match-route-path (yanshu-route-path route) path))]
                #:when parameters)
       (cons route parameters)))
   (define selected
     (for/first ([match (in-list path-matches)]
-                #:when (string=? method (ail-route-method (car match))))
+                #:when (string=? method (yanshu-route-method (car match))))
       match))
   (cond
     [(not selected)
@@ -106,7 +106,7 @@
                    (string-join
                     (remove-duplicates
                      (map (lambda (match)
-                            (ail-route-method (car match)))
+                            (yanshu-route-method (car match)))
                           path-matches))
                     ", "))
            (hasheq 'error
@@ -129,19 +129,19 @@
      (define route (car selected))
      (define parameters (cdr selected))
      (with-handlers
-         ([exn:fail:ail?
+         ([exn:fail:yanshu?
            (lambda (error)
              (internal-dispatch-result
-              request error (ail-route-handler route)))]
+              request error (yanshu-route-handler route)))]
           [exn:fail?
            (lambda (_error)
              (internal-dispatch-result
               request
-              (exn:fail:ail "guest handler host boundary failed"
+              (exn:fail:yanshu "guest handler host boundary failed"
                             (current-continuation-marks)
                             "SERVICE_HANDLER_FAILURE"
                             (hasheq))
-              (ail-route-handler route)))])
+              (yanshu-route-handler route)))])
        (define guest-request
          (hash "method" method
                "path" path
@@ -151,7 +151,7 @@
                "body" (service-request-body request)))
        (define raw-response
          (execute-export program
-                         (ail-route-handler route)
+                         (yanshu-route-handler route)
                          (list guest-request)
                          #:fuel fuel
                          #:max-depth maximum-depth
@@ -160,7 +160,7 @@
                          #:capability-bindings capability-bindings))
        (dispatch-result (validate-guest-response raw-response)
                         #f
-                        (ail-route-handler route)))]))
+                        (yanshu-route-handler route)))]))
 
 (define (validate-service-request request)
   (unless (service-request? request)
@@ -170,21 +170,21 @@
                (string-prefix? (service-request-path request) "/")
                (hash? (service-request-query request))
                (hash? (service-request-headers request)))
-    (raise-ail "SERVICE_INVALID_REQUEST"
+    (raise-yanshu "SERVICE_INVALID_REQUEST"
                "service request has an invalid shape")))
 
 (define (validate-guest-response value)
   (unless (and (hash? value) (= (hash-count value) 3))
-    (raise-ail "SERVICE_INVALID_RESPONSE"
+    (raise-yanshu "SERVICE_INVALID_RESPONSE"
                "handler response must contain status, headers, and body"))
   (define status (compatible-hash-ref value "status"))
   (define headers (compatible-hash-ref value "headers"))
   (define body (compatible-hash-ref value "body"))
   (unless (and (exact-integer? status) (<= 100 status 599))
-    (raise-ail "SERVICE_INVALID_RESPONSE_STATUS"
+    (raise-yanshu "SERVICE_INVALID_RESPONSE_STATUS"
                "handler response status must be an integer from 100 through 599"))
   (unless (hash? headers)
-    (raise-ail "SERVICE_INVALID_RESPONSE_HEADERS"
+    (raise-yanshu "SERVICE_INVALID_RESPONSE_HEADERS"
                "handler response headers must be a map"))
   (define normalized-headers
     (for/hasheq ([(key item) (in-hash headers)])
@@ -193,18 +193,18 @@
           [(string? key) key]
           [(symbol? key) (symbol->string key)]
           [else
-           (raise-ail "SERVICE_INVALID_RESPONSE_HEADERS"
+           (raise-yanshu "SERVICE_INVALID_RESPONSE_HEADERS"
                       "response header names must be strings")]))
       (unless (regexp-match? #px"^[A-Za-z0-9-]+$" key-string)
-        (raise-ail "SERVICE_INVALID_RESPONSE_HEADERS"
+        (raise-yanshu "SERVICE_INVALID_RESPONSE_HEADERS"
                    "response header name contains invalid characters"))
       (unless (string? item)
-        (raise-ail "SERVICE_INVALID_RESPONSE_HEADERS"
+        (raise-yanshu "SERVICE_INVALID_RESPONSE_HEADERS"
                    "response header values must be strings"
                    (hasheq 'header key-string)))
       (when (or (string-contains? item "\r")
                 (string-contains? item "\n"))
-        (raise-ail "SERVICE_INVALID_RESPONSE_HEADERS"
+        (raise-yanshu "SERVICE_INVALID_RESPONSE_HEADERS"
                    "response header value contains a line break"
                    (hasheq 'header key-string)))
       (values (string->symbol (string-downcase key-string)) item)))
@@ -223,7 +223,7 @@
     [(hash-has-key? mapping (string->symbol key))
      (hash-ref mapping (string->symbol key))]
     [else
-     (raise-ail "SERVICE_INVALID_RESPONSE"
+     (raise-yanshu "SERVICE_INVALID_RESPONSE"
                 "handler response is missing a required field"
                 (hasheq 'field key))]))
 
@@ -268,7 +268,7 @@
            'path (and (service-request? request)
                       (service-request-path request))
            'handler (if handler (symbol->string handler) #f)
-           'error (hash-ref (ail-error->jsexpr error) 'error))
+           'error (hash-ref (yanshu-error->jsexpr error) 'error))
    handler))
 
 (define (merge-capability-bindings left right)

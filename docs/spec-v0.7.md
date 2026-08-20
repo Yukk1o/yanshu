@@ -1,4 +1,4 @@
-# AIL v0.7 language contract
+# Yanshu v0.7 language contract
 
 Status: implemented Rust contract. Guest language version: `3`.
 
@@ -31,7 +31,7 @@ Every v3 match must end with `_`. v0.8 may remove that requirement when its type
 Loading rejects:
 
 - module hash or declared-name mismatch;
-- absolute, parent-relative, backslash, symlink-escaping, or non-`.ail` paths;
+- absolute, parent-relative, backslash, symlink-escaping, or non-`.yan` paths;
 - missing imports, cycles, and modules unreachable from the entry;
 - duplicate names or paths and non-canonical module order;
 - incompatible language/library versions;
@@ -43,16 +43,16 @@ The linker prefixes every private binding with its module name, resolves lexical
 ## CLI
 
 ```text
-ail-cli seal-bundle <directory> <entry> <module.ail>...
-ail-cli inspect-bundle <directory>
-ail-cli run-bundle <directory> <export> <arguments.json>
+yanshu-cli seal-bundle <directory> <entry> <module.yan>...
+yanshu-cli inspect-bundle <directory>
+yanshu-cli run-bundle <directory> <export> <arguments.json>
 ```
 
 For the checked-in example:
 
 ```text
-cargo run -p ail-cli -- seal-bundle examples/bundles/expense-approval expense-app app.ail policy.ail
-cargo run -p ail-cli -- run-bundle examples/bundles/expense-approval evaluate examples/bundles/expense-approval/arguments.json
+cargo run -p yanshu-cli -- seal-bundle examples/bundles/expense-approval expense-app app.yan policy.yan
+cargo run -p yanshu-cli -- run-bundle examples/bundles/expense-approval evaluate examples/bundles/expense-approval/arguments.json
 ```
 
 ## Security invariant

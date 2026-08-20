@@ -33,7 +33,7 @@ v3 把“单文件可审计”扩展成“依赖闭包可审计”：源码可�
   (export evaluate))
 ```
 
-完整源码在[费用审批 Bundle](/source/examples/bundles/expense-approval/app.ail.txt)和[策略模块](/source/examples/bundles/expense-approval/policy.ail.txt)。
+完整源码在[费用审批 Bundle](/source/examples/bundles/expense-approval/app.yan.txt)和[策略模块](/source/examples/bundles/expense-approval/policy.yan.txt)。
 
 ## Bundle 是执行边界
 
@@ -45,8 +45,8 @@ v3 把“单文件可审计”扩展成“依赖闭包可审计”：源码可�
   "languageVersion": 3,
   "entry": "expense-app",
   "modules": [
-    {"name":"expense-app","path":"app.ail","sha256":"..."},
-    {"name":"policy","path":"policy.ail","sha256":"..."}
+    {"name":"expense-app","path":"app.yan","sha256":"..."},
+    {"name":"policy","path":"policy.yan","sha256":"..."}
   ]
 }
 ```
@@ -72,7 +72,7 @@ entry + language version ────────┘
 加载器在解释任何 guest 表达式前验证：
 
 - manifest 字段精确、模块唯一且有序；
-- 路径是规范化的相对 `.ail` 路径，解析后仍在 Bundle 目录内；
+- 路径是规范化的相对 `.yan` 路径，解析后仍在 Bundle 目录内；
 - 实际源码 hash、program name 和 language version 与 manifest 一致；
 - imports 全部存在、无环，并且每个模块都可从入口到达；
 - 只有入口可以声明 route；
@@ -90,10 +90,10 @@ capability 仍由源码声明、宿主注入。模块不能获得文件系统、
 ## 运行示例
 
 ```powershell
-cargo run --locked -p ail-cli -- inspect-bundle examples\bundles\expense-approval
-cargo run --locked -p ail-cli -- run-bundle examples\bundles\expense-approval evaluate examples\bundles\expense-approval\arguments.json
+cargo run --locked -p yanshu-cli -- inspect-bundle examples\bundles\expense-approval
+cargo run --locked -p yanshu-cli -- run-bundle examples\bundles\expense-approval evaluate examples\bundles\expense-approval\arguments.json
 ```
 
-示例结果是 `status = review`，并同时返回金额与人工审批原因。实现入口见 [ail-bundle manifest](/source/rust/crates/ail-bundle/src/manifest.rs.txt)、[依赖图](/source/rust/crates/ail-bundle/src/graph.rs.txt)和[链接器](/source/rust/crates/ail-bundle/src/linker.rs.txt)。
+示例结果是 `status = review`，并同时返回金额与人工审批原因。实现入口见 [yanshu-bundle manifest](/source/rust/crates/yanshu-bundle/src/manifest.rs.txt)、[依赖图](/source/rust/crates/yanshu-bundle/src/graph.rs.txt)和[链接器](/source/rust/crates/yanshu-bundle/src/linker.rs.txt)。
 
 需要跨 Bundle/工程复用时，继续阅读[内容寻址包与锁文件](/language/packages-lockfiles)。package 复用 Bundle 的链接与类型/效果门禁，但额外锁住整个 package 依赖闭包。

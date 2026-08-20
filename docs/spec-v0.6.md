@@ -1,4 +1,4 @@
-# AI-Evolve General-Purpose Foundation v0.6
+# Yanshu General-Purpose Foundation v0.6
 
 This document defines the Rust-first general-purpose language foundation exposed
 by guest language `(version 2)`. The expense service is an acceptance program,
@@ -81,7 +81,7 @@ failure or host failure.
 
 ## Reference program
 
-`examples/expenses/service.ail` combines v2 boolean forms, list aggregation,
+`examples/expenses/service.yan` combines v2 boolean forms, list aggregation,
 numeric key construction, enum/union schemas, quantified validation and
 recoverable division. Its scenario suite is
 `examples/expenses/scenarios.json`.

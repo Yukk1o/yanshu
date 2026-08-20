@@ -5,12 +5,12 @@
   "modules": [
     {
       "name": "expense-app",
-      "path": "app.ail",
+      "path": "app.yan",
       "sha256": "80c34aaed329452f866efa50bd8019250a5d93a8545813a79ab5cbb11d5cbcd2"
     },
     {
       "name": "policy",
-      "path": "policy.ail",
+      "path": "policy.yan",
       "sha256": "5e4e72fea3e5e6ceda63f10efc70fe2a4aeaaef8e90e24fc6acfe23d946d0f31"
     }
   ]

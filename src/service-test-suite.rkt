@@ -20,15 +20,15 @@
 (define (load-service-test-suite path)
   (define document (call-with-input-file path read-json))
   (unless (hash? document)
-    (raise-ail "SERVICE_TEST_INVALID_DOCUMENT"
+    (raise-yanshu "SERVICE_TEST_INVALID_DOCUMENT"
                "service test suite must be a JSON object"))
   (define clock-ms (hash-ref document 'clockMs 1700000000000))
   (unless (exact-integer? clock-ms)
-    (raise-ail "SERVICE_TEST_INVALID_CLOCK"
+    (raise-yanshu "SERVICE_TEST_INVALID_CLOCK"
                "service test clockMs must be an integer"))
   (define cases (required-key document 'cases))
   (unless (list? cases)
-    (raise-ail "SERVICE_TEST_INVALID_CASES"
+    (raise-yanshu "SERVICE_TEST_INVALID_CASES"
                "service test cases must be a JSON array"))
   (service-test-suite
    clock-ms
@@ -38,7 +38,7 @@
 
 (define (parse-service-test-case document index)
   (unless (hash? document)
-    (raise-ail "SERVICE_TEST_INVALID_CASE"
+    (raise-yanshu "SERVICE_TEST_INVALID_CASE"
                "service test case must be a JSON object"
                (hasheq 'index index)))
   (define name (hash-ref document 'name (format "case-~a" index)))
@@ -50,19 +50,19 @@
                (string? path)
                (exact-integer? expected-status)
                (<= 100 expected-status 599))
-    (raise-ail "SERVICE_TEST_INVALID_CASE"
+    (raise-yanshu "SERVICE_TEST_INVALID_CASE"
                "service test case has invalid name, request, or status"
                (hasheq 'index index)))
   (define raw-query (hash-ref document 'query (hasheq)))
   (define raw-headers (hash-ref document 'headers (hasheq)))
   (unless (and (hash? raw-query) (hash? raw-headers))
-    (raise-ail "SERVICE_TEST_INVALID_CASE"
+    (raise-yanshu "SERVICE_TEST_INVALID_CASE"
                "service test query and headers must be JSON objects"
                (hasheq 'name name)))
   (define has-exact? (hash-has-key? document 'expectBody))
   (define has-contains? (hash-has-key? document 'expectBodyContains))
   (when (and has-exact? has-contains?)
-    (raise-ail "SERVICE_TEST_AMBIGUOUS_EXPECTATION"
+    (raise-yanshu "SERVICE_TEST_AMBIGUOUS_EXPECTATION"
                "service test cannot define both expectBody and expectBodyContains"
                (hasheq 'name name)))
   (service-test-case
@@ -100,11 +100,11 @@
 
 (define (run-service-test-case program store clock-ms test-case)
   (with-handlers
-      ([exn:fail:ail?
+      ([exn:fail:yanshu?
         (lambda (error)
           (hasheq 'name (service-test-case-name test-case)
                   'reason "suite-error"
-                  'actual (hash-ref (ail-error->jsexpr error) 'error)))])
+                  'actual (hash-ref (yanshu-error->jsexpr error) 'error)))])
     (define result
       (handle-service-request
        program
@@ -163,6 +163,6 @@
    document
    key
    (lambda ()
-     (raise-ail "SERVICE_TEST_MISSING_FIELD"
+     (raise-yanshu "SERVICE_TEST_MISSING_FIELD"
                 "service test document is missing a required field"
                 (hasheq 'field (symbol->string key))))))

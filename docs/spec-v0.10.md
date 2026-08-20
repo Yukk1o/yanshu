@@ -1,4 +1,4 @@
-# AI-Evolve v0.10：fuel 字节码与 WASM ABI
+# Yanshu v0.10：fuel 字节码与 WASM ABI
 
 状态：已实现。本文只规定编译产物与执行边界；语言源码语义仍由 v4 AST、v0.8 类型/效果契约和 v0.9 package lock 共同定义。
 
@@ -6,8 +6,8 @@
 
 v0.10 增加两个确定性编译目标：
 
-1. `ail-bytecode-v1`：经过验证的栈式字节码，由 Rust `ail-runtime` VM 执行；
-2. `ail-wasm-bytecode-v1`：标准 WebAssembly 模块，携带同一份内容寻址字节码，并通过稳定的受信任宿主 ABI 执行。
+1. `yanshu-bytecode-v1`：经过验证的栈式字节码，由 Rust `yanshu-runtime` VM 执行；
+2. `yanshu-wasm-bytecode-v1`：标准 WebAssembly 模块，携带同一份内容寻址字节码，并通过稳定的受信任宿主 ABI 执行。
 
 编译不能绕过 Parser、链接器、类型/效果分析、capability 闭包、Library Backend contract、export 输入/输出类型或运行时资源预算。
 
@@ -27,7 +27,7 @@ v0.10 增加两个确定性编译目标：
 每个顶层 definition 与匿名函数对应一个 `CodeBlock`。指令集只包含：
 
 - 常量、名字读取、栈丢弃；
-- 无条件跳转、按 AIL truthiness 跳转、保留操作数的短路跳转；
+- 无条件跳转、按 Yanshu truthiness 跳转、保留操作数的短路跳转；
 - 词法 scope 进入、绑定和退出；
 - 闭包创建与调用；
 - pattern 尝试、match 失败；
@@ -85,14 +85,14 @@ fuel 不足在执行副作用或 Library Backend 之前失败。正常执行报�
 
 输出以标准 `\0asm` magic 和 WebAssembly version 1 开头，可被标准引擎验证和实例化。模块包含：
 
-- import：`ail_v1.execute`；
-- export：`ail_format_version() -> i32`；
-- export：`ail_static_instruction_weight() -> i64`；
-- export：`ail_run(export_index: i32, arguments_handle: i32, fuel: i64) -> result_handle: i64`；
-- custom section：`ail.meta.v1`；
-- custom section：`ail.bytecode.v1`。
+- import：`yanshu_v1.execute`；
+- export：`yanshu_format_version() -> i32`；
+- export：`yanshu_static_instruction_weight() -> i64`；
+- export：`yanshu_run(export_index: i32, arguments_handle: i32, fuel: i64) -> result_handle: i64`；
+- custom section：`yanshu.meta.v1`；
+- custom section：`yanshu.bytecode.v1`。
 
-`ail_run` 把 export 索引、不透明参数句柄和 fuel 传给受信任宿主。宿主必须从同一模块的 `ail.bytecode.v1` 加载并验证字节码，用显式语义计费点执行，再返回不透明结果句柄。
+`yanshu_run` 把 export 索引、不透明参数句柄和 fuel 传给受信任宿主。宿主必须从同一模块的 `yanshu.bytecode.v1` 加载并验证字节码，用显式语义计费点执行，再返回不透明结果句柄。
 
 这是显式的 handle ABI，不暴露 Rust enum 布局，也不把 `BigInt` 偷换成 `i64`。v0.10 没有声称完成原生 WASM 指令级 lowering；未来可在保持 ABI、类型/效果和 fuel 语义的前提下增加经证明等价的优化后端。
 
@@ -101,25 +101,25 @@ fuel 不足在执行副作用或 Library Backend 之前失败。正常执行报�
 单文件：
 
 ```text
-compile-bytecode <program.ail> <artifact.aibc.json>
-inspect-bytecode <program.ail> <artifact.aibc.json>
-run-bytecode <program.ail> <artifact.aibc.json> <export> <arguments.json>
-compile-wasm <program.ail> <artifact.wasm>
-inspect-wasm <program.ail> <artifact.wasm>
-run-wasm <program.ail> <artifact.wasm> <export> <arguments.json>
+compile-bytecode <program.yan> <artifact.ybc.json>
+inspect-bytecode <program.yan> <artifact.ybc.json>
+run-bytecode <program.yan> <artifact.ybc.json> <export> <arguments.json>
+compile-wasm <program.yan> <artifact.wasm>
+inspect-wasm <program.yan> <artifact.wasm>
+run-wasm <program.yan> <artifact.wasm> <export> <arguments.json>
 ```
 
 内容寻址 package：
 
 ```text
-package-compile <store> <ail.lock.json> <artifact.aibc.json> <artifact.wasm>
-package-run-compiled <store> <ail.lock.json> <artifact.wasm> <export> <arguments.json>
+package-compile <store> <yanshu.lock.json> <artifact.ybc.json> <artifact.wasm>
+package-run-compiled <store> <yanshu.lock.json> <artifact.wasm> <export> <arguments.json>
 ```
 
 密封 Bundle：
 
 ```text
-compile-bundle <directory> <artifact.aibc.json> <artifact.wasm>
+compile-bundle <directory> <artifact.ybc.json> <artifact.wasm>
 run-bundle-compiled <directory> <artifact.wasm> <export> <arguments.json>
 ```
 

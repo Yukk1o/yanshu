@@ -4,7 +4,7 @@
     {
       "name": "v2-collection-filter-and-sum",
       "phase": "run",
-      "source": "programs/business.ail",
+      "source": "programs/business.yan",
       "entry": "total",
       "args": [[{"$int": "-5"}, {"$int": "40"}, {"$int": "70"}]],
       "expect": {"kind": "value", "value": {"$int": "110"}}
@@ -12,7 +12,7 @@
     {
       "name": "v2-cond-and-result",
       "phase": "run",
-      "source": "programs/business.ail",
+      "source": "programs/business.yan",
       "entry": "decide",
       "args": ["approve", [{"$int": "40"}, {"$int": "70"}]],
       "expect": {
@@ -23,7 +23,7 @@
     {
       "name": "v2-explicit-business-error",
       "phase": "run",
-      "source": "programs/business.ail",
+      "source": "programs/business.yan",
       "entry": "decide",
       "args": ["hold", []],
       "expect": {"kind": "value", "value": {"$err": "invalid-action"}}

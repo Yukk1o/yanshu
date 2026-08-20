@@ -1,6 +1,6 @@
-# AI-Evolve 是什么语言
+# Yanshu 是什么语言
 
-AI-Evolve 是一门把程序当作**可验证数据**的实验性通用语言。它不复制 Rust 的系统编程定位；目标是让 AI 可以持续生成应用代码，同时让候选容易理解、容易验证，又不能绕过测试和发布边界直接进入运行时。
+Yanshu 是一门把程序当作**可验证数据**的实验性通用语言。它不复制 Rust 的系统编程定位；目标是让 AI 可以持续生成应用代码，同时让候选容易理解、容易验证，又不能绕过测试和发布边界直接进入运行时。
 
 它的核心承诺是：**AI 有提案权，语言宿主保留解释权、验证权和发布权。**
 
@@ -33,7 +33,7 @@ Program {
 }
 ```
 
-这就是“代码即数据”：模型可以生成完整程序，工具可以比较 AST，解释器只执行语言允许的节点。源码示例见 [discount/v2.ail](/source/examples/discount/v2.ail.txt)，结构定义见 [ail-syntax AST](/source/rust/crates/ail-syntax/src/ast.rs.txt)。
+这就是“代码即数据”：模型可以生成完整程序，工具可以比较 AST，解释器只执行语言允许的节点。源码示例见 [discount/v2.yan](/source/examples/discount/v2.yan.txt)，结构定义见 [yanshu-syntax AST](/source/rust/crates/yanshu-syntax/src/ast.rs.txt)。
 
 ## 语言为 AI 做了哪些取舍
 
@@ -52,7 +52,7 @@ Program {
 ## 语言由哪些部分组成
 
 ```text
-.ail 源码
+.yan 源码
    │
    ▼
 受限 Reader ──► Parser ──► AST
@@ -86,11 +86,11 @@ Program {
 - 需要模型提出候选、由完整场景验证后再晋升的程序；
 - 研究 AST patch、结构化 diff 和只读审查视图。
 
-完整案例包括覆盖 11 个有状态场景的[任务 CRUD 服务](/source/examples/tasks/service.ail.txt)，验证 v2 条件、集合、enum/union、校验成本和业务 Result 的[费用审批服务](/source/examples/expenses/service.ail.txt)，以及验证 v3 模块、封闭数据、模式匹配和内容密封的[多模块费用审批 Bundle](/language/modules-bundles)。这些是通用语言内核的验收程序，不是最终应用边界。
+完整案例包括覆盖 11 个有状态场景的[任务 CRUD 服务](/source/examples/tasks/service.yan.txt)，验证 v2 条件、集合、enum/union、校验成本和业务 Result 的[费用审批服务](/source/examples/expenses/service.yan.txt)，以及验证 v3 模块、封闭数据、模式匹配和内容密封的[多模块费用审批 Bundle](/language/modules-bundles)。这些是通用语言内核的验收程序，不是最终应用边界。
 
 ## 通用语言目标与当前边界
 
-AI-Evolve v0.10 已有用户模块、typed 封闭数据、模式匹配、密封 Bundle、导出签名、静态 capability 闭包、Rust 风格只读审查、内容寻址包/锁文件、可替换 Rust Library Backend，以及 fuel 字节码 VM 与可实例化 WASM ABI，但仍处于通用语言的安全内核阶段，还不是通用系统语言或公网生产框架。它尚无原生 WASM lowering、并发、浮点数及通用文件/网络 API；宿主侧也仍缺少独立进程沙箱、正式数据库/PITR、异地备份、指标告警和 canary 自动化。
+Yanshu v0.10 已有用户模块、typed 封闭数据、模式匹配、密封 Bundle、导出签名、静态 capability 闭包、Rust 风格只读审查、内容寻址包/锁文件、可替换 Rust Library Backend，以及 fuel 字节码 VM 与可实例化 WASM ABI，但仍处于通用语言的安全内核阶段，还不是通用系统语言或公网生产框架。它尚无原生 WASM lowering、并发、浮点数及通用文件/网络 API；宿主侧也仍缺少独立进程沙箱、正式数据库/PITR、异地备份、指标告警和 canary 自动化。
 
 这些既是阶段性功能缺口，也是不可绕过的设计约束。新能力必须通过版本化语义、密封 Bundle 和明确 capability/effect 引入，不能让模型靠调用未知宿主函数越过边界。目标是安全的通用应用语言，而不是拥有环境权限和任意 `unsafe` 的系统语言。
 

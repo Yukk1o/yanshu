@@ -4,7 +4,7 @@
     {
       "name": "core-program-summary",
       "phase": "inspect",
-      "source": "programs/core.ail",
+      "source": "programs/core.yan",
       "expect": {
         "kind": "program",
         "program": {
@@ -36,7 +36,7 @@
     {
       "name": "recursive-factorial",
       "phase": "run",
-      "source": "programs/core.ail",
+      "source": "programs/core.yan",
       "entry": "factorial",
       "args": [{"$int": "5"}],
       "expect": {"kind": "value", "value": {"$int": "120"}}
@@ -44,7 +44,7 @@
     {
       "name": "sequential-let-sees-earlier-binding",
       "phase": "run",
-      "source": "programs/core.ail",
+      "source": "programs/core.yan",
       "entry": "sequential-let",
       "args": [{"$int": "5"}],
       "expect": {"kind": "value", "value": {"$int": "7"}}
@@ -52,7 +52,7 @@
     {
       "name": "only-false-is-false",
       "phase": "run",
-      "source": "programs/core.ail",
+      "source": "programs/core.yan",
       "entry": "truthy",
       "args": [false],
       "expect": {"kind": "value", "value": {"$int": "0"}}
@@ -60,7 +60,7 @@
     {
       "name": "nil-is-truthy",
       "phase": "run",
-      "source": "programs/core.ail",
+      "source": "programs/core.yan",
       "entry": "truthy",
       "args": [{"$nil": true}],
       "expect": {"kind": "value", "value": {"$int": "1"}}
@@ -68,7 +68,7 @@
     {
       "name": "integer-is-not-limited-to-i64",
       "phase": "run",
-      "source": "programs/core.ail",
+      "source": "programs/core.yan",
       "entry": "big-add",
       "args": [{"$int": "9223372036854775808"}],
       "expect": {
@@ -79,7 +79,7 @@
     {
       "name": "divide-by-zero-diagnostic",
       "phase": "run",
-      "source": "programs/core.ail",
+      "source": "programs/core.yan",
       "entry": "divide-by-zero",
       "args": [{"$int": "1"}],
       "expect": {
@@ -92,7 +92,7 @@
     {
       "name": "function-arity-diagnostic",
       "phase": "run",
-      "source": "programs/core.ail",
+      "source": "programs/core.yan",
       "entry": "factorial",
       "args": [],
       "expect": {
@@ -105,7 +105,7 @@
     {
       "name": "fuel-stops-recursion",
       "phase": "run",
-      "source": "programs/core.ail",
+      "source": "programs/core.yan",
       "entry": "forever",
       "args": [],
       "fuel": 20,
@@ -120,7 +120,7 @@
     {
       "name": "schema-default-normalization",
       "phase": "run",
-      "source": "programs/schema.ail",
+      "source": "programs/schema.yan",
       "entry": "check",
       "args": [{"id": "a"}],
       "expect": {
@@ -131,7 +131,7 @@
     {
       "name": "schema-issues-are-stable-data",
       "phase": "run",
-      "source": "programs/schema.ail",
+      "source": "programs/schema.yan",
       "entry": "check",
       "args": [{"id": "", "extra": 1}],
       "expect": {
@@ -157,7 +157,7 @@
     {
       "name": "library-program-summary",
       "phase": "inspect",
-      "source": "programs/library.ail",
+      "source": "programs/library.yan",
       "expect": {
         "kind": "program",
         "program": {
@@ -175,7 +175,7 @@
     {
       "name": "text-library-reference-semantics",
       "phase": "run",
-      "source": "programs/library.ail",
+      "source": "programs/library.yan",
       "entry": "inspect",
       "args": ["AI语言"],
       "expect": {
@@ -186,7 +186,7 @@
     {
       "name": "text-library-type-diagnostic",
       "phase": "run",
-      "source": "programs/library.ail",
+      "source": "programs/library.yan",
       "entry": "measure",
       "args": [{"$int": "42"}],
       "expect": {
@@ -204,7 +204,7 @@
     {
       "name": "declared-library-requires-a-backend",
       "phase": "run",
-      "source": "programs/library.ail",
+      "source": "programs/library.yan",
       "entry": "measure",
       "args": ["value"],
       "libraryBackends": "none",
@@ -218,7 +218,7 @@
     {
       "name": "reader-rejects-multiple-programs",
       "phase": "load",
-      "source": "invalid/multiple-forms.ail",
+      "source": "invalid/multiple-forms.yan",
       "expect": {
         "kind": "diagnostic",
         "code": "READ_MULTIPLE_FORMS",
@@ -229,7 +229,7 @@
     {
       "name": "parser-rejects-unknown-library-version",
       "phase": "load",
-      "source": "invalid/unknown-library.ail",
+      "source": "invalid/unknown-library.yan",
       "expect": {
         "kind": "diagnostic",
         "code": "PROGRAM_UNKNOWN_LIBRARY",

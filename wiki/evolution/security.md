@@ -1,12 +1,12 @@
 # 安全模型与能力边界
 
-AI-Evolve 假设 `.ail` 源码、LLM 候选、HTTP 输入和模型说明都不可信。可信部分是语言前端、解释器预算、能力 dispatcher、测试 runner、版本库和晋升策略。
+Yanshu 假设 `.yan` 源码、LLM 候选、HTTP 输入和模型说明都不可信。可信部分是语言前端、解释器预算、能力 dispatcher、测试 runner、版本库和晋升策略。
 
 ## 信任边界
 
 | 可信控制面 | 不可信输入 |
 | --- | --- |
-| Reader / Parser / AST 规则 | `.ail` 源码与 LLM 候选 |
+| Reader / Parser / AST 规则 | `.yan` 源码与 LLM 候选 |
 | fuel、调用深度、Schema 与 HTTP 上限 | 候选的循环、递归和大型数据 |
 | capability dispatcher | guest 请求的 KV、clock、log 调用 |
 | 测试集与比较器 | provider notes 和候选自述 |
@@ -59,7 +59,7 @@ Codex、Claude Code 与 OpenCode Agent Backend 不继承名称包含 key/token/s
 当前 Rust server：
 
 - 只允许 IPv4 / IPv6 loopback 监听；
-- 可用 `AI_EVOLVE_HTTP_BEARER_TOKEN` 启用单 token Bearer 认证；
+- 可用 `YANSHU_HTTP_BEARER_TOKEN` 启用单 token Bearer 认证；
 - 由宿主生成 request ID，不信任客户端 `x-request-id`；
 - 不把认证、cookie、credential/secret token 与宿主 request ID 传给 guest；
 - 拒绝 guest 设置 `content-length`、`transfer-encoding`、`connection`、`upgrade`、认证和 cookie 等宿主专属响应头；

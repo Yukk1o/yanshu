@@ -1,4 +1,4 @@
-# Claude Code entry for AI-Evolve
+# Claude Code entry for Yanshu
 
 Read [`docs/ai-agent-guide.md`](docs/ai-agent-guide.md) in full before editing. That file is the single shared agent contract; do not create a separate Claude-only interpretation of the language.
 

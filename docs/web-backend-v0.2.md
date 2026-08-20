@@ -2,7 +2,7 @@
 
 ## Objective
 
-Run an AI-Evolve program as a real JSON HTTP service while preserving the core
+Run an Yanshu program as a real JSON HTTP service while preserving the core
 trust boundary: guest source defines business policy; the host owns sockets,
 resource limits, persistence, version selection, and promotion.
 

@@ -1,0 +1,19 @@
+[package]
+name = "yanshu-conformance"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+yanshu-bundle = { path = "../yanshu-bundle", version = "=0.10.0" }
+yanshu-compiler = { path = "../yanshu-compiler", version = "=0.10.0" }
+yanshu-diagnostic = { path = "../yanshu-diagnostic", version = "=0.10.0" }
+yanshu-runtime = { path = "../yanshu-runtime", version = "=0.10.0" }
+yanshu-syntax = { path = "../yanshu-syntax", version = "=0.10.0" }
+num-bigint.workspace = true
+serde_json.workspace = true

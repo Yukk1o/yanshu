@@ -28,16 +28,16 @@
   (define outcome (sync/timeout timeout-seconds result-channel))
   (custodian-shutdown-all request-custodian)
   (unless outcome
-    (raise-ail "PROVIDER_TIMEOUT"
+    (raise-yanshu "PROVIDER_TIMEOUT"
                "LLM provider request exceeded its wall-clock timeout"
                (hasheq 'timeoutSeconds timeout-seconds)))
   (case (vector-ref outcome 0)
     [(ok) (vector-ref outcome 1)]
     [else
      (define error (vector-ref outcome 1))
-     (if (exn:fail:ail? error)
+     (if (exn:fail:yanshu? error)
          (raise error)
-         (raise-ail "PROVIDER_NETWORK_ERROR"
+         (raise-yanshu "PROVIDER_NETWORK_ERROR"
                     "LLM provider request failed"))]))
 
 (define (perform-request endpoint headers document)
@@ -54,7 +54,7 @@
       (lambda () (close-input-port input))))
   (define status-code (parse-status-code status-line))
   (unless (and (>= status-code 200) (< status-code 300))
-    (raise-ail "PROVIDER_HTTP_ERROR"
+    (raise-yanshu "PROVIDER_HTTP_ERROR"
                "LLM provider returned a non-success HTTP status"
                (hasheq 'status status-code
                        'body
@@ -63,7 +63,7 @@
                         (authorization-secrets headers)))))
   (with-handlers ([exn:fail?
                    (lambda (_error)
-                     (raise-ail "PROVIDER_INVALID_HTTP_JSON"
+                     (raise-yanshu "PROVIDER_INVALID_HTTP_JSON"
                                 "LLM provider returned invalid JSON"
                                 (hasheq 'status status-code)))])
     (bytes->jsexpr body)))
@@ -72,7 +72,7 @@
   (define match
     (regexp-match #px#"^HTTP/[^ ]+[ ]+([0-9]{3})" status-line))
   (unless match
-    (raise-ail "PROVIDER_INVALID_HTTP_STATUS"
+    (raise-yanshu "PROVIDER_INVALID_HTTP_STATUS"
                "LLM provider returned an unrecognized HTTP status line"))
   (string->number (bytes->string/utf-8 (cadr match))))
 
@@ -85,7 +85,7 @@
       [else
        (define next-total (+ total (bytes-length chunk)))
        (when (> next-total limit)
-         (raise-ail "PROVIDER_RESPONSE_TOO_LARGE"
+         (raise-yanshu "PROVIDER_RESPONSE_TOO_LARGE"
                     "LLM provider response exceeded the byte limit"
                     (hasheq 'limitBytes limit)))
        (write-bytes chunk output)

@@ -1,0 +1,10 @@
+{
+  "formatVersion": 1,
+  "name": "typed-policy-lib",
+  "version": "1.0.0",
+  "entry": "typed-policy",
+  "modules": [
+    "policy.yan"
+  ],
+  "dependencies": []
+}

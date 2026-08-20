@@ -13,6 +13,7 @@
         <p class="observatory-deck">
           源码不是一次性文本，而是可检查、可生成、可执行的 AST。
           LLM 负责提出候选；解释器、测试门禁和版本指针决定什么能进入运行时。
+          本项目由 AI 编程代理大量协助生成，可能包含大量 Bug，仅供实验研究，不用于生产。
         </p>
         <div class="observatory-actions" aria-label="快速入口">
           <a class="observatory-action observatory-action--primary" href="/guide/quickstart">
@@ -32,7 +33,7 @@
         <ol>
           <li>
             <span>01 / SOURCE</span>
-            <strong>可读的 <code>.ail</code> 源码</strong>
+            <strong>可读的 <code>.yan</code> 源码</strong>
             <small>当前已激活版本</small>
           </li>
           <li>
@@ -120,7 +121,7 @@
         <span>人类读业务意图，AI 读稳定结构，解释器只接受封闭语义。</span>
       </header>
       <div class="language-sample__layout">
-        <pre aria-label="AIL 折扣规则示例"><code><span>(program</span>
+        <pre aria-label="衍术折扣规则示例"><code><span>(program</span>
   (name price-rule)
   (version 1)
   (capabilities)
@@ -152,7 +153,7 @@
       </header>
 
       <nav class="observation-routes" aria-label="文档阅读路径">
-        <a href="/language/syntax"><span>01</span><strong>语法</strong><p>从完整 `.ail` 程序读懂 form、函数与控制流。</p><em>开始阅读 →</em></a>
+        <a href="/language/syntax"><span>01</span><strong>语法</strong><p>从完整 `.yan` 程序读懂 form、函数与控制流。</p><em>开始阅读 →</em></a>
         <a href="/language/data-model"><span>02</span><strong>数据模型</strong><p>理解 BigInt、List、Map、Result 与 JSON 边界。</p><em>查看值系统 →</em></a>
         <a href="/backend/schema-errors"><span>03</span><strong>Schema</strong><p>把输入约束、默认值和稳定错误变成语言结构。</p><em>定义契约 →</em></a>
         <a href="/language/standard-library"><span>04</span><strong>标准库</strong><p>通过版本化契约选择能力，不让 guest 任意加载依赖。</p><em>查看 Library Backend →</em></a>

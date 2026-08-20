@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $racketExe = Join-Path $projectRoot ".toolchains\racket\Racket.exe"
 $racketCli = Join-Path $projectRoot "src\cli.rkt"
-$rustExe = Join-Path $projectRoot "target\debug\ail-cli.exe"
+$rustExe = Join-Path $projectRoot "target\debug\yanshu-cli.exe"
 
 if (-not (Test-Path -LiteralPath $racketExe)) {
     & (Join-Path $PSScriptRoot "bootstrap.ps1")
@@ -11,15 +11,15 @@ if (-not (Test-Path -LiteralPath $racketExe)) {
 
 Push-Location $projectRoot
 try {
-    cargo build --locked --quiet -p ail-cli
+    cargo build --locked --quiet -p yanshu-cli
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     $cases = @(
-        "conformance\v1\programs\core.ail",
-        "conformance\v1\programs\schema.ail",
-        "conformance\v1\programs\library.ail",
-        "conformance\v1\invalid\multiple-forms.ail",
-        "conformance\v1\invalid\unknown-library.ail"
+        "conformance\v1\programs\core.yan",
+        "conformance\v1\programs\schema.yan",
+        "conformance\v1\programs\library.yan",
+        "conformance\v1\invalid\multiple-forms.yan",
+        "conformance\v1\invalid\unknown-library.yan"
     )
 
     foreach ($source in $cases) {
@@ -63,7 +63,7 @@ try {
     }
     Write-Output "ok - complete conformance report parity: 17 cases"
 
-    $serviceProgram = "examples\tasks\service.ail"
+    $serviceProgram = "examples\tasks\service.yan"
     $serviceSuite = "examples\tasks\scenarios.json"
     $racketOutput = @(& $racketExe $racketCli test-service $serviceProgram $serviceSuite)
     $racketExit = $LASTEXITCODE
@@ -83,8 +83,8 @@ try {
     }
     Write-Output "ok - task service report parity: 11 scenarios"
 
-    $initialProgram = "examples\discount\v1.ail"
-    $candidateProgram = "examples\discount\v2.ail"
+    $initialProgram = "examples\discount\v1.yan"
+    $candidateProgram = "examples\discount\v2.yan"
     $racketOutput = @(& $racketExe $racketCli version-conformance $initialProgram $candidateProgram)
     $racketExit = $LASTEXITCODE
     $rustOutput = @(& $rustExe version-conformance $initialProgram $candidateProgram)

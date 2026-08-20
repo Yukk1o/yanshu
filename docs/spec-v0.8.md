@@ -1,4 +1,4 @@
-# AIL v0.8 type, effect, and review contract
+# Yanshu v0.8 type, effect, and review contract
 
 Status: implemented Rust contract. Guest language version: `4`.
 

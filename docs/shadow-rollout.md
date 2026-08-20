@@ -9,9 +9,9 @@ Rust host 可以把已注册但尚未晋升的候选版本接到一部分真实�
 server 前同时设置：
 
 ```powershell
-$env:AI_EVOLVE_SHADOW_VERSION="<candidate-hash>"
-$env:AI_EVOLVE_SHADOW_PERCENT="10"          # 1..100
-$env:AI_EVOLVE_SHADOW_MAX_CONCURRENCY="4"   # 可选，默认 4
+$env:YANSHU_SHADOW_VERSION="<candidate-hash>"
+$env:YANSHU_SHADOW_PERCENT="10"          # 1..100
+$env:YANSHU_SHADOW_MAX_CONCURRENCY="4"   # 可选，默认 4
 
 .\scripts\serve-tasks-rust.ps1
 ```

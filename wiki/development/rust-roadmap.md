@@ -1,6 +1,6 @@
 # Rust 宿主与生态路线
 
-这一页只讨论 `.ail` 语言的当前 Rust 实现和后续生态，不定义语言本身。语法、Value、Schema、route、diagnostic 与版本格式应先由语言规格固定，宿主只能实现这些契约。
+这一页只讨论 `.yan` 语言的当前 Rust 实现和后续生态，不定义语言本身。语法、Value、Schema、route、diagnostic 与版本格式应先由语言规格固定，宿主只能实现这些契约。
 
 ::: warning 当前定位
 Rust v0.10 已形成通用语言的安全内核：能独立运行 v1-v4 语言、密封多模块 Bundle、类型/效果门禁、只读审查、内容寻址包/锁文件、Rust Library Backend、fuel 字节码 VM、可实例化 WASM ABI、业务场景、版本库、provider 和本地 JSON HTTP server，但尚未生产就绪。workspace 的 crate 仍是 `publish = false`，没有稳定 FFI，也没有 crates.io 发布物。
@@ -25,19 +25,19 @@ Rust v0.10 已形成通用语言的安全内核：能独立运行 v1-v4 语言�
 ## Crate 边界
 
 ```text
-ail-diagnostic
+yanshu-diagnostic
       ▲
-ail-library ─┬─► ail-syntax ─► ail-analysis ─► ail-compiler ─► ail-runtime ─► ail-service ─► ail-http ─► ail-server
-             │                               └─► ail-bundle ─┬─► ail-package ─► ail-cli
+yanshu-library ─┬─► yanshu-syntax ─► yanshu-analysis ─► yanshu-compiler ─► yanshu-runtime ─► yanshu-service ─► yanshu-http ─► yanshu-server
+             │                               └─► yanshu-bundle ─┬─► yanshu-package ─► yanshu-cli
              └───────────────────────────────────────────────┘
                     │              │
-                    │              └──────► ail-store
+                    │              └──────► yanshu-store
                     │                         ▲
-                    └────► ail-conformance    │
+                    └────► yanshu-conformance    │
                                               │
-ail-provider ─────────────────────────────► ail-cli
-ail-store + ail-service ─► ail-rollout ───► ail-http
-ail-store + ail-service ─► ail-ops
+yanshu-provider ─────────────────────────────► yanshu-cli
+yanshu-store + yanshu-service ─► yanshu-rollout ───► yanshu-http
+yanshu-store + yanshu-service ─► yanshu-ops
 ```
 
 实际依赖以 [Cargo.toml](/source/Cargo.toml.txt) 为准；图表达责任方向，不承诺稳定公共 API。
@@ -86,14 +86,14 @@ Rust 实现不能为了方便静默改变：
 
 建议首先评估发布：
 
-- `ail-diagnostic`：最小稳定诊断模型；
-- `ail-syntax`：Parser 与 AST，但要先决定 source span / inspect JSON 的兼容承诺；
-- `ail-runtime`：依赖语义面较大，适合在 conformance 更稳定后发布；
+- `yanshu-diagnostic`：最小稳定诊断模型；
+- `yanshu-syntax`：Parser 与 AST，但要先决定 source span / inspect JSON 的兼容承诺；
+- `yanshu-runtime`：依赖语义面较大，适合在 conformance 更稳定后发布；
 - 高层 server/provider crate 暂缓，避免过早冻结部署接口。
 
 ## Library Backend 路线
 
-v0.9 已把 `text@1` 从解释器硬编码迁到独立 `ail-library` crate，并提供安全 provider contract：
+v0.9 已把 `text@1` 从解释器硬编码迁到独立 `yanshu-library` crate，并提供安全 provider contract：
 
 ```rust
 trait LibraryBackend {
@@ -154,9 +154,9 @@ schema! TaskCreate {
 当前契约：
 
 1. 视图只读，不能反向作为执行源码；
-2. 每个显示节点能追踪到 `.ail` source span 和稳定 AST ID；
+2. 每个显示节点能追踪到 `.yan` source span 和稳定 AST ID；
 3. machine-readable node 同屏携带 definition、模块、span、type 和 capability；
-4. `.ail` AST、suite 和宿主策略仍是唯一执行真相；
+4. `.yan` AST、suite 和宿主策略仍是唯一执行真相；
 5. 反向转换与结构化编辑明确推迟到 v0.10 之后。
 
 ## 生产宿主路线

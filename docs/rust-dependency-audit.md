@@ -76,12 +76,12 @@ locked graph. The host instead creates a same-directory file with
 `rename` operation to replace the prior snapshot. This keeps atomic replacement
 inside the supported Rust API without expanding the third-party trust base.
 
-`ail-ops` adds the offline backup/verify/restore boundary without adding any
+`yanshu-ops` adds the offline backup/verify/restore boundary without adding any
 external package. It reuses the locked `sha2` implementation, standard-library
 exclusive file locks, `create_new` writes, bounded directory traversal, and the
 existing semantic validators. Restore has no overwrite flag.
 
-`ail-rollout` also adds no external package. Deterministic sampling and redacted
+`yanshu-rollout` also adds no external package. Deterministic sampling and redacted
 body/header fingerprints reuse the locked `sha2`; candidate execution reuses the
 existing bounded interpreter and an isolated in-memory KV snapshot.
 

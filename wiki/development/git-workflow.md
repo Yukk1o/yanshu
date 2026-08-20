@@ -53,7 +53,7 @@ git merge --no-ff feature/example
 
 ## LLM 候选不等于 Git commit
 
-运行时 candidate 存在 `.runtime/.../versions/<hash>.ail`，它可以是失败实验，也可能只用于本地验证。以下流程才会把候选变成仓库历史：
+运行时 candidate 存在 `.runtime/.../versions/<hash>.yan`，它可以是失败实验，也可能只用于本地验证。以下流程才会把候选变成仓库历史：
 
 1. 候选通过可信 suite；
 2. 人类按[AI 改动审查清单](/evolution/review-ai-change)核对业务意图与权限；

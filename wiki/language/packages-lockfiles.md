@@ -4,7 +4,7 @@ v0.9 让多 Bundle 工程可以复用包，但运行边界仍然是一个完整�
 
 ## 开发描述与运行制品分离
 
-开发目录使用 `ail-package.source.json`：
+开发目录使用 `yanshu-package.source.json`：
 
 ```json
 {
@@ -12,7 +12,7 @@ v0.9 让多 Bundle 工程可以复用包，但运行边界仍然是一个完整�
   "name": "typed-expense-app",
   "version": "1.0.0",
   "entry": "typed-expense",
-  "modules": ["app.ail"],
+  "modules": ["app.yan"],
   "dependencies": [
     {"name":"typed-policy-lib","path":"packages/typed-policy"}
   ]
@@ -24,14 +24,14 @@ v0.9 让多 Bundle 工程可以复用包，但运行边界仍然是一个完整�
 ```text
 开发目录 ──解析/验证──► store/sha256/<package-hash>/
                               ├── package.json
-                              └── *.ail
+                              └── *.yan
 ```
 
 artifact 不包含 path、安装脚本、Cargo build script、动态库或 registry URL。已有 hash 目录绝不覆盖，只重新校验。
 
 ## 锁文件锁住什么
 
-`ail.lock.json` 固定：
+`yanshu.lock.json` 固定：
 
 - 根 package hash；
 - 入口模块与语言版本；
@@ -57,14 +57,14 @@ artifact 不包含 path、安装脚本、Cargo build script、动态库或 regis
 $store = ".runtime\v0.9-package-store"
 $workspace = "examples\packages\typed-expense"
 
-cargo run --locked -p ail-cli -- package-lock `
-  $workspace $store "$workspace\ail.lock.json"
+cargo run --locked -p yanshu-cli -- package-lock `
+  $workspace $store "$workspace\yanshu.lock.json"
 
-cargo run --locked -p ail-cli -- package-review `
-  $store "$workspace\ail.lock.json" --text
+cargo run --locked -p yanshu-cli -- package-review `
+  $store "$workspace\yanshu.lock.json" --text
 
-cargo run --locked -p ail-cli -- package-run `
-  $store "$workspace\ail.lock.json" evaluate "$workspace\arguments.json"
+cargo run --locked -p yanshu-cli -- package-run `
+  $store "$workspace\yanshu.lock.json" evaluate "$workspace\arguments.json"
 ```
 
 示例的结果为 `status = review`。开发目录随后即使发生变化，旧 lock 仍运行旧 hash；store 制品若被篡改则立即失败。
@@ -77,4 +77,4 @@ cargo run --locked -p ail-cli -- package-run `
 
 包只组织和寻址源码，不获得 capability。依赖仍要经过 Parser、Bundle 链接规则、类型/效果分析、fuel 与宿主注入；包管理没有网络解析、安装 hook、动态加载、`eval` 或 FFI。
 
-完整契约见 [v0.9 规格](/source/docs/spec-v0.9.md.txt)，实现见 [ail-package store](/source/rust/crates/ail-package/src/store.rs.txt)和[格式解析](/source/rust/crates/ail-package/src/parse.rs.txt)。
+完整契约见 [v0.9 规格](/source/docs/spec-v0.9.md.txt)，实现见 [yanshu-package store](/source/rust/crates/yanshu-package/src/store.rs.txt)和[格式解析](/source/rust/crates/yanshu-package/src/parse.rs.txt)。

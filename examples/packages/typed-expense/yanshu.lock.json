@@ -1,0 +1,28 @@
+{
+  "capabilityClosure": [
+    "log"
+  ],
+  "entryModule": "typed-expense",
+  "formatVersion": 1,
+  "languageVersion": 4,
+  "packages": [
+    {
+      "contentHash": "d4407ea7ed831bfc6a987185263af824c4247da044252369f867d5838a79bab3",
+      "dependencies": [
+        {
+          "contentHash": "7e0322a97d4b91828a1ef03da0de6be47ce761351783629184a0251391c0893c",
+          "name": "typed-policy-lib"
+        }
+      ],
+      "name": "typed-expense-app",
+      "version": "1.0.0"
+    },
+    {
+      "contentHash": "7e0322a97d4b91828a1ef03da0de6be47ce761351783629184a0251391c0893c",
+      "dependencies": [],
+      "name": "typed-policy-lib",
+      "version": "1.0.0"
+    }
+  ],
+  "rootPackage": "d4407ea7ed831bfc6a987185263af824c4247da044252369f867d5838a79bab3"
+}

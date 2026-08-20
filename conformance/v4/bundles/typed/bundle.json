@@ -6,12 +6,12 @@
   "modules": [
     {
       "name": "conformance-app",
-      "path": "app.ail",
+      "path": "app.yan",
       "sha256": "833b3fe622f2f7ae3457159535c496f2fe53beb476aa68aec79538c089640897"
     },
     {
       "name": "conformance-policy",
-      "path": "policy.ail",
+      "path": "policy.yan",
       "sha256": "a2fe28f0352ee5ad4b40e7ab7d69d5329283bb5f7d7ceafb02b3cad7c16c95e3"
     }
   ]

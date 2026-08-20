@@ -1,6 +1,6 @@
 # AI 候选、验证、晋升与回滚
 
-AI-Evolve 的演化规则可以浓缩为一句：**模型有提案权，没有裁判权和发布权。**
+Yanshu 的演化规则可以浓缩为一句：**模型有提案权，没有裁判权和发布权。**
 
 ## 完整生命周期
 
@@ -9,7 +9,7 @@ AI-Evolve 的演化规则可以浓缩为一句：**模型有提案权，没有�
           │
           ▼
  AI / Agent provider
-          │ 完整候选 .ail + notes
+          │ 完整候选 .yan + notes
           ▼
   Reader / Parser / AST
           │ 解析成功
@@ -49,7 +49,7 @@ AI-Evolve 的演化规则可以浓缩为一句：**模型有提案权，没有�
 
 ## 1. Provider 输入与输出
 
-[ail-provider](/source/rust/crates/ail-provider/src/lib.rs.txt) 接收当前版本和结构化观察：
+[yanshu-provider](/source/rust/crates/yanshu-provider/src/lib.rs.txt) 接收当前版本和结构化观察：
 
 ```json
 {
@@ -67,20 +67,20 @@ objective、源码和 observations 都是不可信 prompt 数据，不能提升�
 
 ```json
 {
-  "source": "完整、可解析的 .ail 文档",
+  "source": "完整、可解析的 .yan 文档",
   "notes": "简短修改说明"
 }
 ```
 
 OpenAI adapter 使用 Responses API 的严格 JSON Schema；DeepSeek adapter 使用 Chat Completions JSON Output。无论远端怎样约束，宿主都要再次验证字段、大小和候选语法。
 
-也可以选择 Codex、Claude Code 或 OpenCode Agent Backend。它们在一次性候选目录中编辑 `candidate.ail`，真实 suite、code store 与 active 指针不交给 agent；宿主在进程退出后仍重新执行同一门禁。详见 [AI Agent Backend](/development/ai-agents)。
+也可以选择 Codex、Claude Code 或 OpenCode Agent Backend。它们在一次性候选目录中编辑 `candidate.yan`，真实 suite、code store 与 active 指针不交给 agent；宿主在进程退出后仍重新执行同一门禁。详见 [AI Agent Backend](/development/ai-agents)。
 
 ## 2. 密钥留在宿主侧
 
-API key 从 `AI_EVOLVE_API_KEY` 或 provider 专用环境变量读取。它不会进入：
+API key 从 `YANSHU_API_KEY` 或 provider 专用环境变量读取。它不会进入：
 
-- `.ail` 执行环境；
+- `.yan` 执行环境；
 - prompt 的 current source / observations；
 - 公共诊断和 CLI JSON；
 - 版本 metadata；
@@ -97,15 +97,15 @@ adapter 只接受 HTTPS、拒绝 redirect，并限制请求/响应大小与超�
 - 候选必须运行整个 suite，不能只重跑失败案例；
 - 场景通过只说明符合现有断言，不证明业务意图完整。
 
-service runner 见 [ail-service](/source/rust/crates/ail-service/src/lib.rs.txt)，任务 suite 见 [scenarios.json](/source/examples/tasks/scenarios.json.txt)。
+service runner 见 [yanshu-service](/source/rust/crates/yanshu-service/src/lib.rs.txt)，任务 suite 见 [scenarios.json](/source/examples/tasks/scenarios.json.txt)。
 
 ## 4. 不可变版本库
 
-[ail-store](/source/rust/crates/ail-store/src/lib.rs.txt) 以源码 SHA-256 作为 ID：
+[yanshu-store](/source/rust/crates/yanshu-store/src/lib.rs.txt) 以源码 SHA-256 作为 ID：
 
 ```text
 code-store/
-├─ versions/<hash>.ail       不可变源码
+├─ versions/<hash>.yan       不可变源码
 ├─ metadata/<hash>.json      languageVersion、parent、provider、测试报告
 ├─ active.json               当前活动 hash
 └─ events.jsonl              registered/promoted/rolled-back
@@ -127,7 +127,7 @@ code-store/
 | suite 全通过，未请求 promote | 是 | 否 |
 | suite 全通过，显式请求 promote | 是 | 是 |
 
-CLI 控制流见 [ail-cli](/source/rust/crates/ail-cli/src/main.rs.txt)。
+CLI 控制流见 [yanshu-cli](/source/rust/crates/yanshu-cli/src/main.rs.txt)。
 
 ## 6. 每个请求固定版本
 
@@ -144,7 +144,7 @@ read active hash → verify source hash → parse Program → LoadedProgram
 - 观测中的 `version` 是该请求真正执行的 hash；
 - 不会执行到一半替换函数体。
 
-实现见 [ail-http](/source/rust/crates/ail-http/src/lib.rs.txt)。
+实现见 [yanshu-http](/source/rust/crates/yanshu-http/src/lib.rs.txt)。
 
 ## 7. 晋升前影子运行
 

@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   lang: 'zh-CN',
-  title: 'AI-Evolve Wiki',
+  title: '衍术 · Yanshu Wiki',
   description: '让程序成为 AI 可理解、可验证、可继续演化的数据',
   appearance: 'force-dark',
   cleanUrls: true,
@@ -15,7 +15,7 @@ export default defineConfig({
     lineNumbers: true
   },
   themeConfig: {
-    siteTitle: 'AI-Evolve / 语言观测台',
+    siteTitle: '衍术 / 语言观测台',
     nav: [
       { text: '语言概览', link: '/guide/what-is' },
       { text: '语法', link: '/language/syntax' },
@@ -26,7 +26,7 @@ export default defineConfig({
     ],
     sidebar: [
       {
-        text: '认识 AI-Evolve',
+        text: '认识衍术',
         items: [
           { text: '语言是什么', link: '/guide/what-is' },
           { text: '5 分钟上手', link: '/guide/quickstart' },
@@ -89,7 +89,7 @@ export default defineConfig({
     darkModeSwitchTitle: '切换到深色模式',
     footer: {
       message: 'AI 负责提出候选，语言门禁负责决定什么能够运行。',
-      copyright: 'AI-Evolve language documentation'
+      copyright: 'Yanshu language documentation'
     }
   }
 })

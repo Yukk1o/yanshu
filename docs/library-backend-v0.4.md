@@ -3,7 +3,7 @@
 ## Objective
 
 Allow guest programs to use a small, versioned standard-library contract while
-the host selects the implementation. The same `.ail` source must be able to run
+the host selects the implementation. The same `.yan` source must be able to run
 against a Racket reference backend now and a Rust, isolated Python, or
 WebAssembly backend later without exposing arbitrary host functions.
 
@@ -108,7 +108,7 @@ and capability checks.
 The long-term layering follows this shape:
 
 ```text
-std/       portable modules written in AI-Evolve where practical
+std/       portable modules written in Yanshu where practical
 host/      versioned contracts and capability-aware wrappers
 backend/   Rust native adapters, Python sidecars, or WASM components
 ```

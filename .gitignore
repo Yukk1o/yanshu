@@ -5,3 +5,4 @@ compiled/
 **/compiled/
 build/
 target/
+/conformance.zip

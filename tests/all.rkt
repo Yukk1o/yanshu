@@ -27,7 +27,7 @@
 (define example-root (build-path project-root "examples" "discount"))
 (define library-example-root (build-path project-root "examples" "libraries"))
 (define task-example-path
-  (build-path project-root "examples" "tasks" "service.ail"))
+  (build-path project-root "examples" "tasks" "service.yan"))
 (define conformance-manifest-path
   (build-path project-root "conformance" "v1" "manifest.json"))
 
@@ -67,18 +67,18 @@
   (check-true (hash-has-key? public-error 'details)
               "error details are missing"))
 
-(define (check-ail-code expected thunk)
+(define (check-yanshu-code expected thunk)
   (define observed #f)
-  (with-handlers ([exn:fail:ail?
+  (with-handlers ([exn:fail:yanshu?
                    (lambda (error)
-                     (set! observed (exn:fail:ail-code error)))])
+                     (set! observed (exn:fail:yanshu-code error)))])
     (thunk))
   (check-equal observed expected "diagnostic code differs"))
 
 (define initial-source
-  (file->string (build-path example-root "v1.ail")))
+  (file->string (build-path example-root "v1.yan")))
 (define candidate-source
-  (file->string (build-path example-root "v2.ail")))
+  (file->string (build-path example-root "v2.yan")))
 (define initial-program (load-program-source initial-source))
 (define candidate-program (load-program-source candidate-source))
 (define discount-suite
@@ -109,7 +109,7 @@
 
 (test "reader rejects multiple top-level documents"
       (lambda ()
-        (check-ail-code "READ_MULTIPLE_FORMS"
+        (check-yanshu-code "READ_MULTIPLE_FORMS"
                         (lambda () (read-source "(program) (program)")))))
 
 (test "candidate program executes through the independent interpreter"
@@ -147,7 +147,7 @@
            (string-append
             "(program (name no-log) (version 1) (capabilities) "
             "(def run (fn () (log \"hidden\"))) (export run))")))
-        (check-ail-code
+        (check-yanshu-code
          "RUNTIME_UNBOUND_NAME"
          (lambda () (execute-export program 'run '())))))
 
@@ -177,15 +177,15 @@
             "(route GET \"/tasks/:id\" get-task) "
             "(def get-task (fn (request) (kv-get (get (get request \"params\") \"id\") #f))) "
             "(export get-task))")))
-        (check-equal (length (ail-program-routes program)) 1)
-        (define route (car (ail-program-routes program)))
-        (check-equal (ail-route-method route) "GET")
-        (check-equal (ail-route-path route) "/tasks/:id")
-        (check-equal (ail-route-handler route) 'get-task)))
+        (check-equal (length (yanshu-program-routes program)) 1)
+        (define route (car (yanshu-program-routes program)))
+        (check-equal (yanshu-route-method route) "GET")
+        (check-equal (yanshu-route-path route) "/tasks/:id")
+        (check-equal (yanshu-route-handler route) 'get-task)))
 
 (test "ambiguous routes are rejected at parse time"
       (lambda ()
-        (check-ail-code
+        (check-yanshu-code
          "PROGRAM_AMBIGUOUS_ROUTE"
          (lambda ()
            (load-program-source
@@ -215,7 +215,7 @@
 (test "schemas are compiler-owned program metadata"
       (lambda ()
         (define program (load-program-source schema-program-source))
-        (check-equal (length (ail-program-schemas program)) 2)
+        (check-equal (length (yanshu-program-schemas program)) 2)
         (define inspected (program->jsexpr program))
         (check-equal
          (hash-ref (car (hash-ref inspected 'schemas)) 'name)
@@ -262,7 +262,7 @@
 
 (test "invalid schema defaults and reserved names fail during parsing"
       (lambda ()
-        (check-ail-code
+        (check-yanshu-code
          "PROGRAM_SCHEMA_INVALID_DEFAULT"
          (lambda ()
            (load-program-source
@@ -270,7 +270,7 @@
              "(program (name bad-default) (version 1) (capabilities) "
              "(schema input (object (optional \"enabled\" boolean \"yes\"))) "
              "(def run (fn () #t)) (export run))"))))
-        (check-ail-code
+        (check-yanshu-code
          "PROGRAM_SCHEMA_RESERVED_NAME"
          (lambda ()
            (load-program-source
@@ -282,7 +282,7 @@
 (test "schema work consumes interpreter fuel"
       (lambda ()
         (define program (load-program-source schema-program-source))
-        (check-ail-code
+        (check-yanshu-code
          "RUNTIME_FUEL_EXHAUSTED"
          (lambda ()
            (execute-export program
@@ -311,7 +311,7 @@
             "(program (name kv-reader) (version 1) (capabilities kv) "
             "(def read-value (fn (key) (kv-get key \"missing\"))) "
             "(export read-value))")))
-        (check-ail-code
+        (check-yanshu-code
          "RUNTIME_CAPABILITY_UNAVAILABLE"
          (lambda () (execute-export program 'read-value (list "x"))))
         (define bindings
@@ -357,7 +357,7 @@
 (test "versioned libraries are compiler-owned inspectable metadata"
       (lambda ()
         (define program (load-program-source text-library-source))
-        (check-equal (length (ail-program-libraries program)) 1)
+        (check-equal (length (yanshu-program-libraries program)) 1)
         (define inspected (program->jsexpr program))
         (check-equal (hash-ref inspected 'libraries)
                      (list (hasheq 'name "text" 'version 1)))
@@ -368,7 +368,7 @@
 (test "text library example passes its portable JSON suite"
       (lambda ()
         (define program
-          (load-program-file (build-path library-example-root "text.ail")))
+          (load-program-file (build-path library-example-root "text.yan")))
         (define suite
           (load-test-suite (build-path library-example-root "tests.json")))
         (define report (run-test-suite program suite))
@@ -377,14 +377,14 @@
 
 (test "library declarations reject unknown duplicate and conflicting contracts"
       (lambda ()
-        (check-ail-code
+        (check-yanshu-code
          "PROGRAM_UNKNOWN_LIBRARY"
          (lambda ()
            (load-program-source
             (string-append
              "(program (name unknown-lib) (version 1) (capabilities) "
              "(libraries (text 2)) (def run (fn () #t)) (export run))"))))
-        (check-ail-code
+        (check-yanshu-code
          "PROGRAM_DUPLICATE_LIBRARY"
          (lambda ()
            (load-program-source
@@ -392,7 +392,7 @@
              "(program (name duplicate-lib) (version 1) (capabilities) "
              "(libraries (text 1) (text 1)) "
              "(def run (fn () #t)) (export run))"))))
-        (check-ail-code
+        (check-yanshu-code
          "PROGRAM_LIBRARY_NAMESPACE_CONFLICT"
          (lambda ()
            (load-program-source
@@ -409,11 +409,11 @@
            (string-append
             "(program (name no-library) (version 1) (capabilities) "
             "(def run (fn (value) (text/length value))) (export run))")))
-        (check-ail-code
+        (check-yanshu-code
          "RUNTIME_UNBOUND_NAME"
          (lambda () (execute-export undeclared 'run (list "hidden"))))
         (define declared (load-program-source text-library-source))
-        (check-ail-code
+        (check-yanshu-code
          "RUNTIME_LIBRARY_UNAVAILABLE"
          (lambda ()
            (execute-export declared
@@ -441,10 +441,10 @@
 (test "library contract owns types fuel and the exact function set"
       (lambda ()
         (define program (load-program-source text-library-source))
-        (check-ail-code
+        (check-yanshu-code
          "RUNTIME_TYPE"
          (lambda () (execute-export program 'measure (list 42))))
-        (check-ail-code
+        (check-yanshu-code
          "RUNTIME_FUEL_EXHAUSTED"
          (lambda ()
            (execute-export program
@@ -459,7 +459,7 @@
            (hash-remove (test-text-implementations
                          (lambda (_arguments) 1))
                         'text/contains?)))
-        (check-ail-code
+        (check-yanshu-code
          "RUNTIME_INVALID_LIBRARY_BACKEND"
          (lambda ()
            (execute-export
@@ -476,7 +476,7 @@
            (hash-set (test-text-implementations (lambda (_arguments) 1))
                      'text/secret
                      (lambda (_arguments) "ambient"))))
-        (check-ail-code
+        (check-yanshu-code
          "RUNTIME_INVALID_LIBRARY_BACKEND"
          (lambda ()
            (execute-export
@@ -491,7 +491,7 @@
            2
            "wrong-version"
            (test-text-implementations (lambda (_arguments) 1))))
-        (check-ail-code
+        (check-yanshu-code
          "RUNTIME_INVALID_LIBRARY_BACKEND"
          (lambda ()
            (execute-export
@@ -506,7 +506,7 @@
            "1"
            "malformed-version"
            (test-text-implementations (lambda (_arguments) 1))))
-        (check-ail-code
+        (check-yanshu-code
          "RUNTIME_INVALID_LIBRARY_BACKEND"
          (lambda ()
            (execute-export
@@ -527,23 +527,23 @@
            (test-text-implementations
             (lambda (_arguments) (error 'backend "secret-token-value")))))
         (define observed #f)
-        (with-handlers ([exn:fail:ail? (lambda (error) (set! observed error))])
+        (with-handlers ([exn:fail:yanshu? (lambda (error) (set! observed error))])
           (execute-export
            program
            'measure
            (list "x")
            #:library-backends (hash (cons 'text 1) failing)))
         (check-true observed)
-        (check-equal (exn:fail:ail-code observed) "RUNTIME_LIBRARY_FAILURE")
+        (check-equal (exn:fail:yanshu-code observed) "RUNTIME_LIBRARY_FAILURE")
         (check-false (regexp-match? #px"secret-token-value"
-                                    (format "~s" (ail-error->jsexpr observed))))
+                                    (format "~s" (yanshu-error->jsexpr observed))))
         (define invalid-result
           (library-backend
            'text
            1
            "invalid-result"
            (test-text-implementations (lambda (_arguments) void))))
-        (check-ail-code
+        (check-yanshu-code
          "RUNTIME_LIBRARY_INVALID_RESULT"
          (lambda ()
            (execute-export
@@ -561,7 +561,7 @@
             (test-text-implementations (lambda (_arguments) 1))
             'text/replace
             (lambda (_arguments) (make-string 1048577 #\x)))))
-        (check-ail-code
+        (check-yanshu-code
          "RUNTIME_LIBRARY_INVALID_RESULT"
          (lambda ()
            (execute-export
@@ -708,7 +708,7 @@
 
 (test "file KV adapter survives reopen with JSON business values"
       (lambda ()
-        (define directory (make-temporary-file "ai-evolve-kv-~a" 'directory))
+        (define directory (make-temporary-file "yanshu-kv-~a" 'directory))
         (define path (build-path directory "tasks.json"))
         (dynamic-wind
           void
@@ -899,7 +899,7 @@
 (test "task backend completes CRUD over HTTP and survives server restart"
       (lambda ()
         (define directory
-          (make-temporary-file "ai-evolve-http-crud-~a" 'directory))
+          (make-temporary-file "yanshu-http-crud-~a" 'directory))
         (define store-path (build-path directory "store.json"))
         (define program (load-program-file task-example-path))
         (define (start)
@@ -1001,7 +1001,7 @@
 (test "service deployment promotes only a scenario-tested active version"
       (lambda ()
         (define directory
-          (make-temporary-file "ai-evolve-service-deploy-~a" 'directory))
+          (make-temporary-file "yanshu-service-deploy-~a" 'directory))
         (dynamic-wind
           void
           (lambda ()
@@ -1014,12 +1014,12 @@
             (check-true (hash-ref deployed 'promoted))
             (check-equal (active-hash directory) (source-hash source))
             (define loader (make-active-program-loader directory))
-            (check-equal (ail-program-name (loader)) 'task-service)
+            (check-equal (yanshu-program-name (loader)) 'task-service)
             (define upgraded-source
               (string-replace source "(version 2)" "(version 3)"))
             (define upgraded (deploy-service! upgraded-source suite directory))
             (check-true (hash-ref upgraded 'promoted))
-            (check-equal (ail-program-version (loader)) 3)
+            (check-equal (yanshu-program-version (loader)) 3)
             (define broken-source
               (string-replace upgraded-source
                               "(api-response 201 task)"
@@ -1033,7 +1033,7 @@
 (test "service evolution uses stateful scenarios before promotion"
       (lambda ()
         (define directory
-          (make-temporary-file "ai-evolve-service-evolve-~a" 'directory))
+          (make-temporary-file "yanshu-service-evolve-~a" 'directory))
         (dynamic-wind
           void
           (lambda ()
@@ -1167,7 +1167,7 @@
            (string-append
             "(program (name loop) (version 1) (capabilities) "
             "(def loop (fn () (loop))) (export loop))")))
-        (check-ail-code
+        (check-yanshu-code
          "RUNTIME_FUEL_EXHAUSTED"
          (lambda ()
            (execute-export program 'loop '() #:fuel 20 #:max-depth 1000)))))
@@ -1182,7 +1182,7 @@
 
 (test "version store promotes and rolls back immutable versions"
       (lambda ()
-        (define store (make-temporary-file "ai-evolve-store-~a" 'directory))
+        (define store (make-temporary-file "yanshu-store-~a" 'directory))
         (dynamic-wind
           void
           (lambda ()
@@ -1209,7 +1209,7 @@
 
 (test "failed reports cannot be promoted"
       (lambda ()
-        (define store (make-temporary-file "ai-evolve-store-~a" 'directory))
+        (define store (make-temporary-file "yanshu-store-~a" 'directory))
         (dynamic-wind
           void
           (lambda ()
@@ -1218,14 +1218,14 @@
                                    initial-source
                                    #:provider "test-provider"
                                    #:report (hasheq 'passed #f)))
-            (check-ail-code "VERSION_TESTS_NOT_PASSED"
+            (check-yanshu-code "VERSION_TESTS_NOT_PASSED"
                             (lambda () (promote! store hash))))
           (lambda () (delete-directory/files store)))))
 
 (test "offline provider returns a complete candidate"
       (lambda ()
         (define provider
-          (make-file-provider (build-path example-root "v2.ail")))
+          (make-file-provider (build-path example-root "v2.yan")))
         (define proposal
           (request-proposal
            provider
@@ -1382,7 +1382,7 @@
               (list
                (hasheq 'finish_reason "length"
                        'message (hasheq 'content "{}")))))))
-        (check-ail-code
+        (check-yanshu-code
          "PROVIDER_INCOMPLETE_RESPONSE"
          (lambda ()
            (request-proposal
@@ -1391,7 +1391,7 @@
 
 (test "live provider requires a credential"
       (lambda ()
-        (check-ail-code
+        (check-yanshu-code
          "PROVIDER_MISSING_API_KEY"
          (lambda ()
            (make-openai-responses-provider #:api-key #f)))))
@@ -1412,7 +1412,7 @@
                        'content
                        (list (hasheq 'type "refusal"
                                      'refusal "cannot comply"))))))))
-        (check-ail-code
+        (check-yanshu-code
          "PROVIDER_REFUSAL"
          (lambda ()
            (request-proposal
@@ -1435,7 +1435,7 @@
                        'content
                        (list (hasheq 'type "output_text"
                                      'text "not-json"))))))))
-        (check-ail-code
+        (check-yanshu-code
          "PROVIDER_INVALID_CANDIDATE_JSON"
          (lambda ()
            (request-proposal
@@ -1444,7 +1444,7 @@
 
 (test "live evolution validates, records metadata, and explicitly promotes"
       (lambda ()
-        (define store (make-temporary-file "ai-evolve-live-~a" 'directory))
+        (define store (make-temporary-file "yanshu-live-~a" 'directory))
         (dynamic-wind
           void
           (lambda ()
@@ -1474,7 +1474,7 @@
 
 (test "failed live candidate remains inactive even when promotion is requested"
       (lambda ()
-        (define store (make-temporary-file "ai-evolve-live-fail-~a" 'directory))
+        (define store (make-temporary-file "yanshu-live-fail-~a" 'directory))
         (dynamic-wind
           void
           (lambda ()
@@ -1502,7 +1502,7 @@
 
 (test "passing live candidate is inactive without explicit promotion"
       (lambda ()
-        (define store (make-temporary-file "ai-evolve-live-no-promote-~a" 'directory))
+        (define store (make-temporary-file "yanshu-live-no-promote-~a" 'directory))
         (dynamic-wind
           void
           (lambda ()

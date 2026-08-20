@@ -27,7 +27,7 @@
                          'reason "trusted operator-supplied bootstrap")))
      (promote! store-root bootstrap-hash)]
     [(not (equal? stored-active-hash source-current-hash))
-     (raise-ail "EVOLVE_ACTIVE_SOURCE_MISMATCH"
+     (raise-yanshu "EVOLVE_ACTIVE_SOURCE_MISMATCH"
                 "the supplied source is not the active stored version"
                 (hasheq 'supplied source-current-hash
                         'active stored-active-hash))])

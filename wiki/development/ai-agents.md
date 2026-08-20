@@ -1,6 +1,6 @@
 # Codex、Claude Code 与 OpenCode Agent Backend
 
-AI-Evolve 可以直接调用用户已经安装的 Codex、Claude Code 或 OpenCode，让它们修改一个 `.ail` 候选。这里的 agent 是“编写后端”，不是只会读仓库说明的聊天模型，也不是有权晋升代码的裁判。
+Yanshu 可以直接调用用户已经安装的 Codex、Claude Code 或 OpenCode，让它们修改一个 `.yan` 候选。这里的 agent 是“编写后端”，不是只会读仓库说明的聊天模型，也不是有权晋升代码的裁判。
 
 ## 实际调用链
 
@@ -8,12 +8,12 @@ AI-Evolve 可以直接调用用户已经安装的 Codex、Claude Code 或 OpenCo
 active 源码 + 当前失败报告
               ↓
 一次性候选目录
-  candidate.ail
+  candidate.yan
   OBSERVATIONS.json
   TASK.md
   LANGUAGE.md
               ↓
-Codex / Claude Code / OpenCode 编辑 candidate.ail
+Codex / Claude Code / OpenCode 编辑 candidate.yan
               ↓
 Rust 宿主重新解析并运行可信 suite
               ↓
@@ -27,9 +27,9 @@ Rust 宿主重新解析并运行可信 suite
 先用对应工具自己的登录流程完成认证，然后选择后端：
 
 ```powershell
-$env:AI_EVOLVE_PROVIDER = "codex-cli"
+$env:YANSHU_PROVIDER = "codex-cli"
 
-cargo run --locked -p ail-cli -- `
+cargo run --locked -p yanshu-cli -- `
   evolve-service `
   .runtime\tasks-rust\code `
   examples\tasks\scenarios.json `
@@ -41,18 +41,18 @@ cargo run --locked -p ail-cli -- `
 另两个值是：
 
 ```powershell
-$env:AI_EVOLVE_PROVIDER = "claude-code-cli"
-$env:AI_EVOLVE_PROVIDER = "opencode-cli"
+$env:YANSHU_PROVIDER = "claude-code-cli"
+$env:YANSHU_PROVIDER = "opencode-cli"
 ```
 
 默认命令名分别是 `codex`、`claude`、`opencode`。如果可执行文件不在 PATH，可以显式设置：
 
 ```powershell
-$env:AI_EVOLVE_AGENT_COMMAND = "C:\Tools\codex.exe"
-$env:AI_EVOLVE_AGENT_TIMEOUT_SECONDS = "900"
+$env:YANSHU_AGENT_COMMAND = "C:\Tools\codex.exe"
+$env:YANSHU_AGENT_TIMEOUT_SECONDS = "900"
 ```
 
-`AI_EVOLVE_MODEL` 是可选的；不设置时使用 agent 自己的配置。不要在同一 shell 里依赖 API key 环境变量：Agent Backend 会移除名称含 key、token、secret、password 或 credential 的变量，工具应使用自己的安全凭据存储。
+`YANSHU_MODEL` 是可选的；不设置时使用 agent 自己的配置。不要在同一 shell 里依赖 API key 环境变量：Agent Backend 会移除名称含 key、token、secret、password 或 credential 的变量，工具应使用自己的安全凭据存储。
 
 ## 三种适配器
 
@@ -80,4 +80,4 @@ $env:AI_EVOLVE_AGENT_TIMEOUT_SECONDS = "900"
 
 根目录另外提供 `AGENTS.md` 与 `CLAUDE.md`，它们共同引用 [`docs/ai-agent-guide.md`](/source/docs/ai-agent-guide.md.txt)。这是让 agent 修改语言实现时读取的项目契约，与上面的“一次性候选编写后端”互补，但不是同一件事。
 
-当前还没有 `.ail` LSP、Tree-sitter grammar、编辑器插件、MCP server 或审查视图结构化回写；这些属于后续开发体验层。
+当前还没有 `.yan` LSP、Tree-sitter grammar、编辑器插件、MCP server 或审查视图结构化回写；这些属于后续开发体验层。
