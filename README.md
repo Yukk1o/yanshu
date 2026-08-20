@@ -13,10 +13,11 @@
 ![license](https://img.shields.io/badge/license-MIT_OR_Apache--2.0-2563eb?style=flat-square)
 [![CI](https://github.com/Yukk1o/yanshu/actions/workflows/ci.yml/badge.svg)](https://github.com/Yukk1o/yanshu/actions/workflows/ci.yml)
 [![Fuzz](https://github.com/Yukk1o/yanshu/actions/workflows/fuzz.yml/badge.svg)](https://github.com/Yukk1o/yanshu/actions/workflows/fuzz.yml)
+[![Release](https://github.com/Yukk1o/yanshu/actions/workflows/release.yml/badge.svg)](https://github.com/Yukk1o/yanshu/actions/workflows/release.yml)
 
 一门面向人类与 AI 协作的实验性、受限通用语言：候选代码可以持续生成，执行权与晋升权始终留在可审计的宿主边界内。
 
-[快速体验](#快速体验) · [语言能力](#现在能做什么) · [安全边界](#安全边界) · [中文 Wiki](wiki/README.md) · [路线图](#项目状态)
+[快速体验](#快速体验) · [语言能力](#现在能做什么) · [安全边界](#安全边界) · [在线 Wiki](https://yukk1o.github.io/yanshu/) · [Wiki 源码](wiki/README.md) · [路线图](#项目状态)
 
 </div>
 
@@ -205,6 +206,19 @@ wiki/                 面向使用者的中文语言 Wiki
 
 接下来的优先级是修复审计发现、完善 Agent/LSP 工具链和解释器/VM 一致性；更广的标准库与有界结构化并发只会在 capability、fuel、取消和确定性语义明确后加入。路线图是方向，不是兼容性承诺。
 
+## 可验证发布
+
+v0.11 发布链为 Windows x86-64 与 Linux x86-64 CLI 执行两次独立 target-dir 构建和逐字节比对，再生成确定性 ZIP、每平台构建记录、CycloneDX 1.5 SBOM、release manifest 与 `SHA256SUMS`。标签还必须是位于 `main`、与 workspace 版本完全一致的注解式标签。
+
+发布资产由 GitHub OIDC 生成 keyless provenance，不在仓库保存签名私钥。下载后应同时检查内容闭包与来源证明：
+
+```powershell
+node scripts/verify-release.mjs <下载目录>
+gh attestation verify <下载的资产> --repo Yukk1o/yanshu
+```
+
+当前承诺是同源码、同 runner 的双构建一致；托管 runner 与系统 linker 尚未 hermetic 固定，因此不夸大为“任意机器必然产生同一 hash”。完整边界见 [发布供应链说明](docs/release-supply-chain.md)。
+
 ## 参与开发
 
 提交改动前请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 和 [docs/ai-agent-guide.md](docs/ai-agent-guide.md)。任何语言特性都必须同步 Parser、解释器、VM、静态分析、诊断、conformance 和 Wiki；第一方 Rust 不接受任何形式的 `unsafe`。
@@ -218,6 +232,8 @@ cargo clippy --workspace --all-targets --locked -j 1 -- -D warnings
 cargo deny check
 ./scripts/check-repository-boundaries.ps1
 cargo check --locked --manifest-path fuzz/Cargo.toml --bins
+node --test scripts/release.test.mjs
+node scripts/release-metadata.mjs
 
 Push-Location wiki
 npm run build

@@ -2,22 +2,21 @@
 
 项目把“运行时版本库”和 Git 分开使用：运行时版本库保存 LLM 候选证据；Git 保存经过人类审查、成为项目源码的演进历史。
 
-## 长期分支
+## 当前分支模型
 
 ```text
-main (v0.1.0)
-  └─ develop
-       ├─ feature/web-backend-runtime      已合并为 v0.2 检查点
-       ├─ feature/business-backend-v0.3   已合并
-       ├─ feature/library-backend-v0.4    已合并
-       ├─ feature/rust-host-v0.5          Rust 主实现检查点
-       └─ feature/general-language-v0.6   通用语言安全内核
+main
+  ├─ feature/v0.11-ci-security          PR 验证后合并
+  ├─ feature/v0.11-release-supply-chain 独立审查发布链
+  └─ release/yanshu-v0.10               历史检查点
 ```
 
-- `main`：始终是经过测试、可发布的检查点，并用 `v*` annotated tag 标记；
-- `develop`：下一版本集成分支；
-- `feature/<name>`：从 develop 分出的一项可独立审查能力；
-- `hotfix/<name>`：从 main 分出，修复后同时合回 main 和 develop。
+- `main`：唯一发布来源，始终是经过测试的检查点；
+- `feature/<name>`：从最新 main 分出的一项可独立审查能力，通过 PR 合回 main；
+- `release/<name>`：需要时保留历史检查点，不是第二发布来源；
+- `hotfix/<name>`：从 main 分出，仍通过正常 PR 与门禁合回 main。
+
+旧 `develop` 只保留为历史，不再是当前集成分支。这样 PR、branch policy 与 release provenance 只有一个可信根。
 
 真实规则：[docs/git-workflow.md](/source/docs/git-workflow.md.txt)。
 
@@ -33,10 +32,11 @@ v0.1 受限 Lisp + 版本化 LLM 候选闭环
 
 这些能力拆成 specification、runtime、example、tests、docs 等内聚提交，便于判断语义从哪一次开始改变。
 
-## 一项新能力怎样进入 develop
+## 一项新能力怎样进入 main
 
 ```powershell
-git switch develop
+git switch main
+git pull --ff-only
 git switch -c feature/example
 
 # 修改 + 测试
@@ -45,11 +45,10 @@ cargo test --workspace --locked
 git add <明确文件>
 git commit -m "feat(...): ..."
 
-git switch develop
-git merge --no-ff feature/example
+# 推送 feature 分支，创建 PR；所有门禁通过后再合并到 main
 ```
 
-使用 `--no-ff` 保留功能边界。已经共享的历史不做 rebase/force-push；需要撤销时优先 revert commit。
+已经共享的历史不做 rebase/force-push；需要撤销时优先 revert commit。发布标签必须是与 workspace 版本完全一致的 annotated tag，且指向 main 已包含的 commit；资产只能由[可验证发布](/development/releases)工作流生成，不能手工替换。
 
 ## LLM 候选不等于 Git commit
 

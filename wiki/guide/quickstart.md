@@ -152,7 +152,3 @@ $env:YANSHU_RUST_HTTP_BIND = "127.0.0.1:9001"
 ### 服务启动前退出
 
 查看 CLI 的结构化 JSON。最常见原因是 `.yan` 解析失败、11 个业务场景未全部通过、活动版本损坏或 bind 地址不是 loopback。
-
-### 如何运行这份 Wiki
-
-见[维护 Wiki](/development/wiki)。Wiki 的 Node 依赖隔离在 `wiki/`，不会混入 Rust workspace。

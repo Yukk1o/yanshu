@@ -2,6 +2,8 @@
 
 这是项目的独立 VitePress 文档站，面向更熟悉 Go / Rust、尚不熟悉 Lisp 的维护者。
 
+线上地址：<https://yukk1o.github.io/yanshu/>
+
 ```powershell
 Set-Location wiki
 npm install
@@ -14,5 +16,3 @@ npm run dev
 npm run build
 npm run preview
 ```
-
-详细说明见站内“维护 Wiki”。

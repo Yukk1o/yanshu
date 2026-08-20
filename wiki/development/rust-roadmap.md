@@ -3,7 +3,7 @@
 这一页只讨论 `.yan` 语言的当前 Rust 实现和后续生态，不定义语言本身。语法、Value、Schema、route、diagnostic 与版本格式应先由语言规格固定，宿主只能实现这些契约。
 
 ::: warning 当前定位
-Rust v0.10 已形成通用语言的安全内核；v0.11 正在把跨平台 CI、依赖审计、conformance、WASM smoke 和不可信输入 fuzz 固化为持续门禁。项目仍未生产就绪，workspace 的 crate 仍是 `publish = false`，没有稳定 FFI，也没有 crates.io 发布物。
+Rust v0.10 已形成通用语言的安全内核；v0.11 正在把跨平台 CI、依赖审计、conformance、WASM smoke、不可信输入 fuzz，以及双构建/SBOM/checksum/keyless provenance 固化为持续门禁。项目仍未生产就绪，workspace 的 crate 仍是 `publish = false`，没有稳定 FFI，也没有 crates.io 发布物。
 :::
 
 ## 当前实现快照
@@ -20,7 +20,7 @@ Rust v0.10 已形成通用语言的安全内核；v0.11 正在把跨平台 CI、
 | 运维快照 | 离线 service lock、逐文件 SHA-256 manifest、版本/KV 语义校验、拒绝覆盖恢复 | 加密、签名、异地复制、定期恢复演练 |
 | Provider | OpenAI Responses、DeepSeek Chat、HTTPS-only、拒绝 redirect、大小/超时、密钥零化 | 真实凭据 smoke gate、速率/费用治理 |
 | HTTP / rollout | Axum/Tokio、loopback-only、可选 Bearer、宿主 request ID、每请求固定 hash、脱敏 JSONL、隔离影子采样 | TLS、细粒度授权、进程沙箱、指标/trace/告警、canary、静态网页 |
-| 工具 | check/inspect/review、Bundle、package pack/lock/verify/review/run/compile、bytecode/WASM compile/inspect/run、conformance、test/deploy/evolve service、version lifecycle、跨平台 CI、Reader/Value/artifact fuzz | LSP、formatter、MCP、结构化 AST diff、操作型 rollback CLI |
+| 工具 | check/inspect/review、Bundle、package pack/lock/verify/review/run/compile、bytecode/WASM compile/inspect/run、conformance、test/deploy/evolve service、version lifecycle、跨平台 CI、Reader/Value/artifact fuzz、Windows/Linux CLI 双构建与 keyless provenance | LSP、formatter、MCP、结构化 AST diff、操作型 rollback CLI |
 
 ## Crate 边界
 
@@ -85,6 +85,8 @@ Rust 实现不能为了方便静默改变：
 5. 为公开 API 增加文档测试和跨版本 fixture；
 6. 使用 `cargo package` 检查发布内容，确保不含凭据、runtime store 和未授权 source；
 7. 建立 release signing、RustSec、license 和 dependency provenance gate。
+
+CLI 的发布供应链 gate 已建立，但 crates.io 仍保持关闭。它提供确定性归档、CycloneDX SBOM、SHA-256 闭包和 GitHub OIDC provenance；具体承诺与非承诺见[可验证发布](/development/releases)。这不等于 crate 公共 API 已达到 semver 稳定要求。
 
 建议首先评估发布：
 

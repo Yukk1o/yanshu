@@ -107,5 +107,6 @@ manifest 逐文件记录 SHA-256 和大小，验证还会检查版本事件与 K
 | 请求执行中切换版本 | 每请求固定 active hash + 隔离 shadow | canary 与自动停止门禁 |
 | 敏感请求进入观测 | 字段白名单 + 敏感 header 过滤 | 轮转、保留和访问控制 |
 | 代码回滚但数据不兼容 | 不可变版本与 parent | 数据 migration 策略 |
+| Release 资产被替换 | SHA-256 闭包 + GitHub keyless provenance | 独立 rebuilder 与 hermetic runner |
 
-上线前还应按[审查 AI 改动](/evolution/review-ai-change)逐项确认业务、Schema、路由、能力、错误和版本差异。
+源码发布还受到注解式 tag、`main` 包含关系、workspace 版本绑定、每平台双构建、CycloneDX SBOM 和 provenance 门禁约束；checksum 只证明内容完整，不能单独证明来源。详见[可验证发布](/development/releases)。上线前还应按[审查 AI 改动](/evolution/review-ai-change)逐项确认业务、Schema、路由、能力、错误和版本差异。

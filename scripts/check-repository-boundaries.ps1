@@ -39,6 +39,26 @@ if ($unsafeHits.Count -gt 0) {
     throw "first-party unsafe construct detected"
 }
 
+$workflowRoot = Join-Path $projectRoot ".github/workflows"
+$unpinnedActions = @()
+if (Test-Path -LiteralPath $workflowRoot) {
+    $actionUses = @(
+        Get-ChildItem -LiteralPath $workflowRoot -Filter *.yml -File |
+            Select-String -Pattern '^\s*uses:\s*([^\s#]+)'
+    )
+    foreach ($use in $actionUses) {
+        $reference = $use.Matches[0].Groups[1].Value
+        if ($reference.StartsWith("./")) { continue }
+        if ($reference -notmatch '@[0-9a-f]{40}$') {
+            $unpinnedActions += $use
+        }
+    }
+}
+if ($unpinnedActions.Count -gt 0) {
+    $unpinnedActions | ForEach-Object { Write-Error $_ }
+    throw "third-party GitHub Actions must be pinned to a full commit SHA"
+}
+
 Push-Location $projectRoot
 try {
     $credentialPatterns = @(
@@ -67,6 +87,6 @@ finally {
     Pop-Location
 }
 
-Write-Output ("ok - {0} crate roots, {1} fuzz targets, no unsafe or credential patterns" -f `
-    $crateEntries.Count, $fuzzEntries.Count)
+Write-Output ("ok - {0} crate roots, {1} fuzz targets, {2} pinned Actions, no unsafe or credential patterns" -f `
+    $crateEntries.Count, $fuzzEntries.Count, $actionUses.Count)
 exit 0

@@ -24,3 +24,18 @@ Before editing, read [docs/ai-agent-guide.md](docs/ai-agent-guide.md) in full. I
 Run `./scripts/check-repository-boundaries.ps1` for every Rust or workflow change. Changes to Reader, Parser, portable values, bytecode, or WASM loaders must also compile the independent fuzz workspace with `cargo check --locked --manifest-path fuzz/Cargo.toml --bins`; new crash artifacts must become minimized regression tests before the fix is considered complete.
 
 Machine-readable diagnostic codes are compatibility surfaces. Improve messages when useful, but do not replace stable structure with prose that only a language model can interpret.
+
+## Release changes
+
+Changes to release workflows or packaging must also run:
+
+```powershell
+node --test scripts/release.test.mjs
+node scripts/release-metadata.mjs
+```
+
+The tag-only release job is the sole publisher. Do not upload replacement
+binaries by hand, weaken the annotated-tag/main/version checks, add a persistent
+signing secret, or describe checksums alone as proof of authenticity. The full
+artifact and provenance contract is in
+[docs/release-supply-chain.md](docs/release-supply-chain.md).
