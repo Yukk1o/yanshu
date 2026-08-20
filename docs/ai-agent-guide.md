@@ -37,7 +37,7 @@ Parser → 完整 suite → 内容哈希 → 注册 → 可选人工授权晋升
 
 Yanshu 是“程序即数据”的受限通用语言内核。AI 可以生成候选程序，但候选必须经过 Parser、类型/效果分析、capability 闭包、fuel、Schema、内容哈希和测试门禁，才允许执行或晋升。
 
-当前语言版本是 v4，项目发布里程碑是 v0.10。Rust 是唯一主实现；第一方 crate 均要求 `#![forbid(unsafe_code)]`。
+当前语言版本是 v4，已发布里程碑是 v0.10，v0.11 持续验证与安全加固正在开发。Rust 是唯一主实现；第一方 crate 与 fuzz target 均要求 `#![forbid(unsafe_code)]`。
 
 核心信任边界：
 
@@ -139,6 +139,8 @@ cargo fmt --all -- --check
 cargo test --workspace --locked -j 1
 cargo clippy --workspace --all-targets --locked -j 1 -- -D warnings
 cargo deny check
+./scripts/check-repository-boundaries.ps1
+cargo check --locked --manifest-path fuzz/Cargo.toml --bins
 ```
 
 再确认第一方源码没有 `unsafe`，并在 `wiki/` 运行：

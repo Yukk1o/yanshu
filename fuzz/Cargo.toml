@@ -1,0 +1,40 @@
+[package]
+name = "yanshu-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "=0.4.13"
+serde_json = { version = "1.0", features = ["arbitrary_precision"] }
+yanshu-compiler = { version = "=0.10.0", path = "../rust/crates/yanshu-compiler" }
+yanshu-runtime = { version = "=0.10.0", path = "../rust/crates/yanshu-runtime" }
+yanshu-syntax = { version = "=0.10.0", path = "../rust/crates/yanshu-syntax" }
+
+[[bin]]
+name = "reader_parser"
+path = "fuzz_targets/reader_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "portable_value"
+path = "fuzz_targets/portable_value.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "artifact_loaders"
+path = "fuzz_targets/artifact_loaders.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
+members = ["."]

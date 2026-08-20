@@ -3,7 +3,7 @@
 这一页只讨论 `.yan` 语言的当前 Rust 实现和后续生态，不定义语言本身。语法、Value、Schema、route、diagnostic 与版本格式应先由语言规格固定，宿主只能实现这些契约。
 
 ::: warning 当前定位
-Rust v0.10 已形成通用语言的安全内核：能独立运行 v1-v4 语言、密封多模块 Bundle、类型/效果门禁、只读审查、内容寻址包/锁文件、Rust Library Backend、fuel 字节码 VM、可实例化 WASM ABI、业务场景、版本库、provider 和本地 JSON HTTP server，但尚未生产就绪。workspace 的 crate 仍是 `publish = false`，没有稳定 FFI，也没有 crates.io 发布物。
+Rust v0.10 已形成通用语言的安全内核；v0.11 正在把跨平台 CI、依赖审计、conformance、WASM smoke 和不可信输入 fuzz 固化为持续门禁。项目仍未生产就绪，workspace 的 crate 仍是 `publish = false`，没有稳定 FFI，也没有 crates.io 发布物。
 :::
 
 ## 当前实现快照
@@ -20,7 +20,7 @@ Rust v0.10 已形成通用语言的安全内核：能独立运行 v1-v4 语言�
 | 运维快照 | 离线 service lock、逐文件 SHA-256 manifest、版本/KV 语义校验、拒绝覆盖恢复 | 加密、签名、异地复制、定期恢复演练 |
 | Provider | OpenAI Responses、DeepSeek Chat、HTTPS-only、拒绝 redirect、大小/超时、密钥零化 | 真实凭据 smoke gate、速率/费用治理 |
 | HTTP / rollout | Axum/Tokio、loopback-only、可选 Bearer、宿主 request ID、每请求固定 hash、脱敏 JSONL、隔离影子采样 | TLS、细粒度授权、进程沙箱、指标/trace/告警、canary、静态网页 |
-| 工具 | check/inspect/review、Bundle、package pack/lock/verify/review/run/compile、bytecode/WASM compile/inspect/run、conformance、test/deploy/evolve service、version lifecycle | LSP、formatter、结构化 AST diff、操作型 rollback CLI |
+| 工具 | check/inspect/review、Bundle、package pack/lock/verify/review/run/compile、bytecode/WASM compile/inspect/run、conformance、test/deploy/evolve service、version lifecycle、跨平台 CI、Reader/Value/artifact fuzz | LSP、formatter、MCP、结构化 AST diff、操作型 rollback CLI |
 
 ## Crate 边界
 
@@ -68,7 +68,9 @@ Rust 实现不能为了方便静默改变：
 3. **v0.8**：类型与效果系统，静态计算 capability 闭包；
 4. **v0.9**：内容寻址包管理、锁文件、Rust Library Backend；
 5. **v0.10**：有 fuel 计量的字节码 / WASM 编译器；
-6. 之后再考虑结构化并发和人类友好的表层语法。
+6. **v0.11**：跨平台持续验证、fuzz、可复现发布与供应链证据；
+7. **v0.12**：Agent 工具协议、formatter、Tree-sitter、LSP 与 MCP；
+8. **v0.13+**：标准库扩展，以及受 capability、effect、fuel、取消和确定性约束的结构化并发。
 
 模块必须与 Bundle 根 hash、模块 hash、依赖闭包和 capability 清单一起交付；不能先引入按路径动态加载。包管理不能运行安装脚本。类型系统不能把 fuel、效果或 capability 从 AST 中藏起来。编译器输出仍须通过独立验证器，不能因为“已经编译”就跳过语言门禁。
 
