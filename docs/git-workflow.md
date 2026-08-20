@@ -1,37 +1,32 @@
 # Git Workflow
 
-## Long-lived branches
+## Active branches
 
-- `main` is always a tested, releasable checkpoint. Prototype release points are
-  annotated with `v*` tags.
-- `develop` is the integration branch for the next release.
-- `feature/<name>` branches from `develop` and contains one independently
-  reviewable capability.
+- `main` is the only release source and must remain a tested checkpoint.
+- `feature/<name>` branches from an up-to-date `main` and contains one
+  independently reviewable capability.
+- `release/<name>` preserves an important historical checkpoint when useful;
+  it is not a second publishing source.
+- `hotfix/<name>` branches from `main` and returns through a reviewed pull
+  request.
 
-Current line of development:
-
-```text
-main (v0.1.0)
-  └─ develop
-       ├─ feature/web-backend-runtime (merged as v0.2 checkpoint)
-       ├─ feature/business-backend-v0.3 (merged)
-       ├─ feature/library-backend-v0.4 (merged)
-       └─ feature/rust-host-v0.5
-```
+The old `develop` branch is retained as history but is no longer the active
+integration branch. Current work uses short-lived feature branches and pull
+requests against `main` so branch policy and release provenance have one root.
 
 ## Merge policy
 
-1. Start a feature from an up-to-date `develop`.
+1. Start a feature from an up-to-date `main`.
 2. Keep commits cohesive: specification, runtime, adapter, example, and tests
    should be separable when that does not leave misleading behavior.
 3. Run `scripts/test.ps1` before merging.
-4. Merge features into `develop` with `--no-ff` so the capability boundary
-   remains visible.
-5. Merge a verified release from `develop` into `main`, then add an annotated
-   version tag.
+4. Merge the reviewed pull request into `main` without rewriting shared history.
+5. After every release gate passes, create an annotated tag whose name exactly
+   matches the workspace version. The tag-only workflow verifies it is contained
+   in `main` before publishing.
 
-Emergency fixes branch from `main` as `hotfix/<name>`, merge back to both
-`main` and `develop`, and receive a patch tag.
+Emergency fixes branch from `main` as `hotfix/<name>`, merge back to `main`, and
+receive a matching patch tag only after the normal gates pass.
 
 ## Repository rules
 
@@ -43,4 +38,5 @@ Emergency fixes branch from `main` as `hotfix/<name>`, merge back to both
   human-written changes.
 - Do not rewrite shared branch history. Prefer a revert commit for an already
   published change.
-
+- Do not publish or replace release assets by hand. The release workflow,
+  checksums, SBOM, and keyless provenance form one reviewed evidence chain.

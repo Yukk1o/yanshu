@@ -1,11 +1,13 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
+  base: process.env.YANSHU_DOCS_BASE || '/',
   lang: 'zh-CN',
   title: '衍术 · Yanshu Wiki',
   description: '让程序成为 AI 可理解、可验证、可继续演化的数据',
   appearance: 'force-dark',
   cleanUrls: true,
+  srcExclude: ['README.md'],
   lastUpdated: true,
   head: [
     ['meta', { name: 'theme-color', content: '#071017' }],
@@ -63,8 +65,8 @@ export default defineConfig({
           { text: '源码地图', link: '/reference/source-map' },
           { text: 'AI Agent Backend', link: '/development/ai-agents' },
           { text: 'Rust 宿主与生态路线', link: '/development/rust-roadmap' },
-          { text: 'Git 分支工作流', link: '/development/git-workflow' },
-          { text: '维护 Wiki', link: '/development/wiki' }
+          { text: '可验证发布', link: '/development/releases' },
+          { text: 'Git 分支工作流', link: '/development/git-workflow' }
         ]
       }
     ],

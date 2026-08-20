@@ -16,10 +16,10 @@
           本项目由 AI 编程代理大量协助生成，可能包含大量 Bug，仅供实验研究，不用于生产。
         </p>
         <div class="observatory-actions" aria-label="快速入口">
-          <a class="observatory-action observatory-action--primary" href="/guide/quickstart">
+          <a class="observatory-action observatory-action--primary" :href="withBase('/guide/quickstart')">
             5 分钟运行语言 <span aria-hidden="true">→</span>
           </a>
-          <a class="observatory-action" href="/evolution/review-ai-change">
+          <a class="observatory-action" :href="withBase('/evolution/review-ai-change')">
             审查 AI 改动 <span aria-hidden="true">↗</span>
           </a>
         </div>
@@ -109,7 +109,7 @@
           <span class="observatory-badge observatory-badge--done">已实现</span>
         </article>
       </div>
-      <a class="observatory-inline-link" href="/language/paradigms">
+      <a class="observatory-inline-link" :href="withBase('/language/paradigms')">
         深入语言范式与取舍 <span aria-hidden="true">→</span>
       </a>
     </section>
@@ -140,7 +140,7 @@
           <div><dt>REVIEW</dt><dd>先审契约与场景，再审括号里的实现。</dd></div>
         </dl>
       </div>
-      <a class="observatory-inline-link" href="/language/syntax">
+      <a class="observatory-inline-link" :href="withBase('/language/syntax')">
         逐段读懂这段语言 <span aria-hidden="true">→</span>
       </a>
     </section>
@@ -153,13 +153,13 @@
       </header>
 
       <nav class="observation-routes" aria-label="文档阅读路径">
-        <a href="/language/syntax"><span>01</span><strong>语法</strong><p>从完整 `.yan` 程序读懂 form、函数与控制流。</p><em>开始阅读 →</em></a>
-        <a href="/language/data-model"><span>02</span><strong>数据模型</strong><p>理解 BigInt、List、Map、Result 与 JSON 边界。</p><em>查看值系统 →</em></a>
-        <a href="/backend/schema-errors"><span>03</span><strong>Schema</strong><p>把输入约束、默认值和稳定错误变成语言结构。</p><em>定义契约 →</em></a>
-        <a href="/language/standard-library"><span>04</span><strong>标准库</strong><p>通过版本化契约选择能力，不让 guest 任意加载依赖。</p><em>查看 Library Backend →</em></a>
-        <a href="/backend/web"><span>05</span><strong>Web DSL</strong><p>声明路由、事务 handler 与统一 JSON 响应。</p><em>构建服务 →</em></a>
-        <a href="/evolution/lifecycle"><span>06</span><strong>AI 演化</strong><p>让模型提交候选，经完整验证后再显式晋升。</p><em>理解生命周期 →</em></a>
-        <a href="/evolution/security"><span>07</span><strong>安全</strong><p>检查能力、预算、密钥、版本固定与生产缺口。</p><em>查看信任边界 →</em></a>
+        <a :href="withBase('/language/syntax')"><span>01</span><strong>语法</strong><p>从完整 `.yan` 程序读懂 form、函数与控制流。</p><em>开始阅读 →</em></a>
+        <a :href="withBase('/language/data-model')"><span>02</span><strong>数据模型</strong><p>理解 BigInt、List、Map、Result 与 JSON 边界。</p><em>查看值系统 →</em></a>
+        <a :href="withBase('/backend/schema-errors')"><span>03</span><strong>Schema</strong><p>把输入约束、默认值和稳定错误变成语言结构。</p><em>定义契约 →</em></a>
+        <a :href="withBase('/language/standard-library')"><span>04</span><strong>标准库</strong><p>通过版本化契约选择能力，不让 guest 任意加载依赖。</p><em>查看 Library Backend →</em></a>
+        <a :href="withBase('/backend/web')"><span>05</span><strong>Web DSL</strong><p>声明路由、事务 handler 与统一 JSON 响应。</p><em>构建服务 →</em></a>
+        <a :href="withBase('/evolution/lifecycle')"><span>06</span><strong>AI 演化</strong><p>让模型提交候选，经完整验证后再显式晋升。</p><em>理解生命周期 →</em></a>
+        <a :href="withBase('/evolution/security')"><span>07</span><strong>安全</strong><p>检查能力、预算、密钥、版本固定与生产缺口。</p><em>查看信任边界 →</em></a>
       </nav>
     </section>
 
@@ -171,10 +171,14 @@
       <div class="evolution-boundary__body">
         <p>Provider 不能修改测试、触碰活动指针或读取 API key。测试通过是必要条件，不是业务意图的替代品。</p>
         <p class="evolution-boundary__warning"><span>PRODUCTION GATE / LOCKED</span> 当前仍缺生产隔离、运营与灰度切换能力。</p>
-        <a class="observatory-action" href="/evolution/lifecycle">
+        <a class="observatory-action" :href="withBase('/evolution/lifecycle')">
           查看完整演化边界 <span aria-hidden="true">→</span>
         </a>
       </div>
     </section>
   </main>
 </template>
+
+<script setup lang="ts">
+import { withBase } from 'vitepress'
+</script>

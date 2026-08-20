@@ -4,11 +4,12 @@
 
 ## 1. 目标
 
-v0.11 的第一阶段建立三条独立证据链：
+v0.11 建立四条独立证据链：
 
 1. 每次 push / pull request 在 Windows 与 Linux 上执行 Rust 格式、测试和 Clippy；
 2. 在 Linux 上执行第一方 safe Rust、凭据模式、cargo-deny、v1-v4 conformance、编译产物与标准 WebAssembly 引擎 smoke test；
 3. 定时和按需使用 libFuzzer 攻击 Reader/Parser、portable JSON Value、bytecode/WASM artifact loader。
+4. 对发布标签执行版本绑定、Windows/Linux 双构建字节比对、确定性归档、CycloneDX SBOM、SHA-256 清单与 keyless provenance。
 
 CI 不是新的可信解释器，也不赋予 AI 或 pull request 晋升权。它只能拒绝缺少证据的变更，不能证明程序没有缺陷。
 
@@ -61,6 +62,10 @@ cargo fuzz run artifact_loaders -- -max_total_time=30 -max_len=1048576 -rss_limi
 ./scripts/check-repository-boundaries.ps1
 ```
 
-## 5. 未完成范围
+## 5. 发布证据
 
-v0.11 后续仍需补齐可复现的 Windows/Linux release archive、SHA-256、SBOM、签名策略、长期 fuzz corpus 治理，以及针对 Bundle/package 文件系统加载器和 HTTP parser 的隔离 fuzz harness。LSP、formatter 和 MCP 属于 v0.12；标准库扩展与有界结构化并发属于 v0.13 以后。
+发布工作流只接受位于 `main` 的注解式稳定标签，且标签必须精确等于 workspace 版本。Windows/Linux CLI 在同一 runner 的两个全新 target 目录分别构建，字节不一致立即拒绝；确定性 ZIP、构建记录、规范化 CycloneDX 1.5 SBOM、release manifest 和 `SHA256SUMS` 共同形成闭包，最终由 GitHub OIDC 生成 keyless provenance。详细威胁模型、验证命令和可复现性声明见 [release-supply-chain.md](release-supply-chain.md)。
+
+## 6. 未完成范围
+
+v0.11 后续仍需长期 fuzz corpus 治理、Bundle/package 文件系统加载器与 HTTP parser 的隔离 fuzz harness、独立重构建者和 hermetic runner。当前双构建证明限定为同源码、同 runner 环境，不宣称任意机器已能得到相同 hash。LSP、formatter 和 MCP 属于 v0.12；标准库扩展与有界结构化并发属于 v0.13 以后。

@@ -144,10 +144,14 @@ v0.9 的 `text@1` contract、类型和 fuel 模型在 [library/contract.rs](/sou
 | [rust-dependency-audit.md](/source/docs/rust-dependency-audit.md.txt) | 第三方依赖 unsafe 清单与复核记录 |
 | [CI workflow](/source/.github/workflows/ci.yml.txt) | Windows/Linux Rust、依赖、conformance、WASM 与 Wiki 门禁 |
 | [Fuzz workflow](/source/.github/workflows/fuzz.yml.txt) | 定时/按需的不可信输入 libFuzzer 预算 |
-| [仓库边界检查](/source/scripts/check-repository-boundaries.ps1.txt) | 第一方 safe Rust 与已跟踪凭据模式 |
-| [本地 Rust 总门禁](/source/scripts/check-rust.ps1.txt) | 组合源码边界、fmt、workspace test、Clippy 与 fuzz 编译检查 |
+| [Release workflow](/source/.github/workflows/release.yml.txt) | 标签身份、双构建、SBOM、checksum、keyless provenance 与发布权限 |
+| [发布构建器](/source/scripts/build-release.mjs.txt) | clean source 绑定、双 target-dir 字节比对、MSVC `/Brepro` 与确定性 ZIP |
+| [发布组装器](/source/scripts/assemble-release.mjs.txt) | 两个平台、SBOM、构建记录、manifest 与 SHA-256 闭包 |
+| [发布验证器](/source/scripts/verify-release.mjs.txt) | 下载目录的 checksum、大小和 manifest 覆盖校验 |
+| [仓库边界检查](/source/scripts/check-repository-boundaries.ps1.txt) | 第一方 safe Rust、Action SHA 与已跟踪凭据模式 |
+| [本地 Rust 总门禁](/source/scripts/check-rust.ps1.txt) | 组合源码边界、fmt、workspace test、Clippy、fuzz 与发布工具检查 |
 | [Reader/Parser fuzz](/source/fuzz/fuzz_targets/reader_parser.rs.txt) | UTF-8 source 到 Reader/Parser 的崩溃入口 |
 | [portable value fuzz](/source/fuzz/fuzz_targets/portable_value.rs.txt) | 任意 JSON 到有界 guest value 的转换入口 |
 | [artifact fuzz](/source/fuzz/fuzz_targets/artifact_loaders.rs.txt) | bytecode/WASM artifact loader 的任意字节入口 |
 
-v0.11 的 CI 与 fuzz 威胁模型、时间/内存预算和本地命令见 [持续验证规格](/source/docs/spec-v0.11.md.txt)。
+v0.11 的 CI/fuzz 威胁模型、时间/内存预算和本地命令见[持续验证规格](/source/docs/spec-v0.11.md.txt)；发布身份与真实性边界见[可验证发布](/development/releases)。

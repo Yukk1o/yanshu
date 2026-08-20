@@ -18,6 +18,12 @@ try {
     cargo check --locked --manifest-path fuzz/Cargo.toml --bins
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+    node --test scripts/release.test.mjs
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    node scripts/release-metadata.mjs
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
     if ($env:YANSHU_CHECK_V1_REFERENCE -eq "1") {
         & (Join-Path $PSScriptRoot "diff-frontends.ps1")
         exit $LASTEXITCODE
