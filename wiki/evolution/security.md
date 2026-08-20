@@ -2,6 +2,8 @@
 
 Yanshu 假设 `.yan` 源码、LLM 候选、HTTP 输入和模型说明都不可信。可信部分是语言前端、解释器预算、能力 dispatcher、测试 runner、版本库和晋升策略。
 
+v0.11 开始，仓库还会在每次 pull request 上重复执行 Windows/Linux Rust 门禁、依赖策略、v1-v4 conformance、WASM ABI 和 Wiki 构建，并定时 fuzz Reader/Parser、portable value 与 artifact loader。CI 只能提供回归证据，不能替代独立审计或证明没有未知缺陷；具体契约见 [v0.11 规格](/source/docs/spec-v0.11.md.txt)。
+
 ## 信任边界
 
 | 可信控制面 | 不可信输入 |

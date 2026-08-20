@@ -1,0 +1,7 @@
+(program
+  (name fuzz-seed)
+  (version 4)
+  (capabilities)
+  (signature main (fn (integer) integer))
+  (def main (fn (value) (+ value 1)))
+  (export main))

@@ -1,0 +1,74 @@
+name: Fuzz
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 3 * * 1"
+  pull_request:
+    paths:
+      - ".github/workflows/fuzz.yml"
+      - "fuzz/**"
+      - "rust/crates/yanshu-syntax/**"
+      - "rust/crates/yanshu-runtime/**"
+      - "rust/crates/yanshu-compiler/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  FUZZ_SECONDS: ${{ github.event_name == 'schedule' && '120' || '30' }}
+
+jobs:
+  fuzz:
+    name: Bounded fuzz smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install nightly Rust
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: nightly
+
+      - name: Cache Cargo build data
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: fuzz -> target
+          shared-key: fuzz-linux
+          cache-on-failure: true
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked --version 0.13.2
+
+      - name: Build fuzz targets
+        run: |
+          cargo fuzz build reader_parser
+          cargo fuzz build portable_value
+          cargo fuzz build artifact_loaders
+
+      - name: Fuzz Reader and Parser
+        run: cargo fuzz run reader_parser -- -max_total_time="$FUZZ_SECONDS" -max_len=1048576 -rss_limit_mb=2048
+
+      - name: Fuzz portable values
+        run: cargo fuzz run portable_value -- -max_total_time="$FUZZ_SECONDS" -max_len=1048576 -rss_limit_mb=2048
+
+      - name: Fuzz artifact loaders
+        run: cargo fuzz run artifact_loaders -- -max_total_time="$FUZZ_SECONDS" -max_len=1048576 -rss_limit_mb=2048
+
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-artifacts-${{ github.run_id }}
+          path: fuzz/artifacts
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1,0 +1,150 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "release/**"
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
+jobs:
+  rust:
+    name: Rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust 1.97
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: 1.97.0
+          components: rustfmt, clippy
+
+      - name: Cache Cargo build data
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: ci-${{ runner.os }}
+          cache-on-failure: true
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run workspace tests
+        run: cargo test --workspace --locked -j 1
+
+      - name: Run Clippy
+        run: cargo clippy --workspace --all-targets --locked -j 1 -- -D warnings
+
+  security:
+    name: Source and dependency boundaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check first-party source and tracked secrets
+        shell: pwsh
+        run: ./scripts/check-repository-boundaries.ps1
+
+      - name: Audit advisories, licenses, bans, and sources
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check
+          arguments: --all-features --locked
+
+      - name: Audit fuzz workspace dependencies
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check
+          arguments: --all-features --locked
+          manifest-path: fuzz/Cargo.toml
+
+  conformance:
+    name: Language and WASM conformance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust 1.97
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: 1.97.0
+
+      - name: Cache Cargo build data
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: conformance-linux
+
+      - name: Run language v1-v4 conformance
+        shell: pwsh
+        run: |
+          1..4 | ForEach-Object {
+            cargo run --quiet --locked -p yanshu-cli -- conformance "conformance/v$_/manifest.json"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Compile the typed Bundle to WASM
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .runtime/ci | Out-Null
+          cargo run --quiet --locked -p yanshu-cli -- compile-bundle `
+            examples/bundles/typed-expense `
+            .runtime/ci/typed-expense.ybc.json `
+            .runtime/ci/typed-expense.wasm
+
+      - name: Validate and instantiate the WASM ABI
+        run: node scripts/wasm-smoke.mjs .runtime/ci/typed-expense.wasm
+
+  wiki:
+    name: Wiki
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: wiki/package-lock.json
+
+      - name: Install Wiki dependencies
+        working-directory: wiki
+        run: npm ci
+
+      - name: Audit Wiki dependencies
+        working-directory: wiki
+        run: npm audit --audit-level=high
+
+      - name: Build Wiki
+        working-directory: wiki
+        run: npm run build

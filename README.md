@@ -11,6 +11,8 @@
 ![language](https://img.shields.io/badge/language-v4-22c55e?style=flat-square)
 ![implementation](https://img.shields.io/badge/implementation-safe_Rust-b7410e?style=flat-square&logo=rust)
 ![license](https://img.shields.io/badge/license-MIT_OR_Apache--2.0-2563eb?style=flat-square)
+[![CI](https://github.com/Yukk1o/yanshu/actions/workflows/ci.yml/badge.svg)](https://github.com/Yukk1o/yanshu/actions/workflows/ci.yml)
+[![Fuzz](https://github.com/Yukk1o/yanshu/actions/workflows/fuzz.yml/badge.svg)](https://github.com/Yukk1o/yanshu/actions/workflows/fuzz.yml)
 
 一门面向人类与 AI 协作的实验性、受限通用语言：候选代码可以持续生成，执行权与晋升权始终留在可审计的宿主边界内。
 
@@ -199,7 +201,7 @@ wiki/                 面向使用者的中文语言 Wiki
 
 ## 项目状态
 
-当前发布里程碑是 **v0.10**，语言版本是 **v4**。它已经是一个可执行、可分析、可编译的语言内核，但还不是 Rust/C++ 式系统语言，也不是可承诺生产稳定性的通用平台。
+当前发布里程碑是 **v0.10**，语言版本是 **v4**；**v0.11 持续验证与安全加固正在开发中**。它已经是一个可执行、可分析、可编译的语言内核，但还不是 Rust/C++ 式系统语言，也不是可承诺生产稳定性的通用平台。
 
 接下来的优先级是修复审计发现、完善 Agent/LSP 工具链和解释器/VM 一致性；更广的标准库与有界结构化并发只会在 capability、fuel、取消和确定性语义明确后加入。路线图是方向，不是兼容性承诺。
 
@@ -214,6 +216,8 @@ cargo fmt --all -- --check
 cargo test --workspace --locked -j 1
 cargo clippy --workspace --all-targets --locked -j 1 -- -D warnings
 cargo deny check
+./scripts/check-repository-boundaries.ps1
+cargo check --locked --manifest-path fuzz/Cargo.toml --bins
 
 Push-Location wiki
 npm run build

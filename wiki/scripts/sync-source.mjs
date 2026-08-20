@@ -10,6 +10,8 @@ const outputRoot = join(wikiRoot, 'public', 'source')
 // explicit so the build cannot publish credentials, runtime data, or unrelated
 // implementation history.
 const publishedFiles = [
+  '.github/workflows/ci.yml',
+  '.github/workflows/fuzz.yml',
   'Cargo.lock',
   'Cargo.toml',
   'deny.toml',
@@ -30,6 +32,7 @@ const publishedFiles = [
   'docs/spec-v0.8.md',
   'docs/spec-v0.9.md',
   'docs/spec-v0.10.md',
+  'docs/spec-v0.11.md',
   'docs/ai-agent-guide.md',
   'examples/discount/tests.json',
   'examples/discount/v1.yan',
@@ -52,7 +55,14 @@ const publishedFiles = [
   'examples/packages/typed-expense/packages/typed-policy/yanshu-package.source.json',
   'examples/packages/typed-expense/packages/typed-policy/policy.yan',
   'scripts/audit-rust.ps1',
+  'scripts/check-repository-boundaries.ps1',
+  'scripts/check-rust.ps1',
   'scripts/serve-tasks-rust.ps1',
+  'scripts/wasm-smoke.mjs',
+  'fuzz/Cargo.toml',
+  'fuzz/fuzz_targets/artifact_loaders.rs',
+  'fuzz/fuzz_targets/portable_value.rs',
+  'fuzz/fuzz_targets/reader_parser.rs',
   'rust/crates/yanshu-cli/src/main.rs',
   'rust/crates/yanshu-bundle/src/graph.rs',
   'rust/crates/yanshu-bundle/src/lib.rs',
