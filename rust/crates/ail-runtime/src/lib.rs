@@ -1,13 +1,15 @@
 #![forbid(unsafe_code)]
 
 mod budget;
+mod compiled;
 mod matcher;
 mod schema;
 mod value;
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use ail_analysis::analyze_program;
+use ail_compiler::{BytecodeArtifact, verify_bytecode};
 use ail_diagnostic::{AilResult, Diagnostic};
 use ail_library::{LibraryKey, LibraryRegistry, LibraryValue};
 use ail_syntax::{Expression, ExpressionKind, Program, TypeExpression};
@@ -20,6 +22,10 @@ pub use value::{MapKey, Primitive, PrimitiveOperation, Value, bigint_json, json_
 
 use matcher::bindings_for_pattern;
 use schema::validate_schema;
+use value::{
+    MAXIMUM_INTEGER_BITS, MAXIMUM_VALUE_BYTES, measure_datum, measure_portable_value,
+    measure_runtime_value,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ExecutionOptions {
@@ -38,6 +44,25 @@ impl Default for ExecutionOptions {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExecutionReport {
+    pub value: Value,
+    pub fuel_limit: u64,
+    pub fuel_consumed: u64,
+    pub fuel_remaining: u64,
+}
+
+impl ExecutionReport {
+    #[must_use]
+    pub fn cost_json(&self) -> JsonValue {
+        json!({
+            "fuelLimit": self.fuel_limit,
+            "fuelConsumed": self.fuel_consumed,
+            "fuelRemaining": self.fuel_remaining,
+        })
+    }
+}
+
 pub fn execute_export(
     program: &Program,
     export_name: &str,
@@ -53,6 +78,100 @@ pub fn execute_export(
         None,
         &mut libraries,
     )
+}
+
+pub fn execute_compiled_export(
+    artifact: &BytecodeArtifact,
+    export_name: &str,
+    arguments: Vec<Value>,
+    options: ExecutionOptions,
+) -> AilResult<Value> {
+    execute_compiled_export_report(artifact, export_name, arguments, options)
+        .map(|report| report.value)
+}
+
+pub fn execute_compiled_export_report(
+    artifact: &BytecodeArtifact,
+    export_name: &str,
+    arguments: Vec<Value>,
+    options: ExecutionOptions,
+) -> AilResult<ExecutionReport> {
+    let mut libraries = default_library_registry(options);
+    execute_compiled_export_internal(
+        artifact,
+        export_name,
+        arguments,
+        options,
+        None,
+        &mut libraries,
+    )
+}
+
+pub fn execute_compiled_export_with_host(
+    artifact: &BytecodeArtifact,
+    export_name: &str,
+    arguments: Vec<Value>,
+    options: ExecutionOptions,
+    host: &mut dyn CapabilityHost,
+) -> AilResult<Value> {
+    let mut libraries = default_library_registry(options);
+    execute_compiled_export_internal(
+        artifact,
+        export_name,
+        arguments,
+        options,
+        Some(host),
+        &mut libraries,
+    )
+    .map(|report| report.value)
+}
+
+pub fn execute_compiled_export_with_host_report(
+    artifact: &BytecodeArtifact,
+    export_name: &str,
+    arguments: Vec<Value>,
+    options: ExecutionOptions,
+    host: &mut dyn CapabilityHost,
+) -> AilResult<ExecutionReport> {
+    let mut libraries = default_library_registry(options);
+    execute_compiled_export_internal(
+        artifact,
+        export_name,
+        arguments,
+        options,
+        Some(host),
+        &mut libraries,
+    )
+}
+
+pub fn execute_compiled_export_with_libraries(
+    artifact: &BytecodeArtifact,
+    export_name: &str,
+    arguments: Vec<Value>,
+    options: ExecutionOptions,
+    libraries: &mut LibraryRegistry,
+) -> AilResult<Value> {
+    execute_compiled_export_internal(artifact, export_name, arguments, options, None, libraries)
+        .map(|report| report.value)
+}
+
+pub fn execute_compiled_export_with_host_and_libraries(
+    artifact: &BytecodeArtifact,
+    export_name: &str,
+    arguments: Vec<Value>,
+    options: ExecutionOptions,
+    host: &mut dyn CapabilityHost,
+    libraries: &mut LibraryRegistry,
+) -> AilResult<Value> {
+    execute_compiled_export_internal(
+        artifact,
+        export_name,
+        arguments,
+        options,
+        Some(host),
+        libraries,
+    )
+    .map(|report| report.value)
 }
 
 pub trait CapabilityHost {
@@ -114,6 +233,7 @@ fn execute_export_internal(
     host: Option<&mut dyn CapabilityHost>,
     libraries: &mut LibraryRegistry,
 ) -> AilResult<Value> {
+    validate_boundary_arguments(&arguments)?;
     if !program.imports.is_empty() {
         return Err(Diagnostic::new(
             "RUNTIME_UNLINKED_IMPORTS",
@@ -132,35 +252,8 @@ fn execute_export_internal(
         analyze_program(program)?;
         validate_export_arguments(program, export_name, &arguments)?;
     }
-    let mut runtime = Runtime::new(options, host, libraries);
-    let base_environment = runtime.new_environment(None);
-    runtime.install_base_environment(program, base_environment);
-    let module_environment = runtime.new_environment(Some(base_environment));
-    runtime.install_libraries(program, module_environment)?;
-    runtime.install_capabilities(program, module_environment)?;
-    for schema in &program.schemas {
-        runtime.define(
-            module_environment,
-            schema.name.clone(),
-            Value::Schema {
-                name: schema.name.clone(),
-                specification: schema.kind.clone(),
-            },
-        );
-    }
-    for data_type in &program.data_types {
-        for variant in &data_type.variants {
-            runtime.define(
-                module_environment,
-                variant.name.clone(),
-                Value::Constructor {
-                    type_name: data_type.name.clone(),
-                    variant: variant.name.clone(),
-                    arity: variant.fields.len(),
-                },
-            );
-        }
-    }
+    let mut runtime = Runtime::new(options, host, libraries, None);
+    let module_environment = runtime.install_program_environment(program)?;
     for definition in &program.definitions {
         let value = runtime.evaluate(&definition.expression, module_environment, 0)?;
         runtime.define(module_environment, definition.name.clone(), value);
@@ -173,12 +266,76 @@ fn execute_export_internal(
     Ok(result)
 }
 
+fn execute_compiled_export_internal(
+    artifact: &BytecodeArtifact,
+    export_name: &str,
+    arguments: Vec<Value>,
+    options: ExecutionOptions,
+    host: Option<&mut dyn CapabilityHost>,
+    libraries: &mut LibraryRegistry,
+) -> AilResult<ExecutionReport> {
+    validate_boundary_arguments(&arguments)?;
+    verify_bytecode(artifact)?;
+    let program = artifact.program();
+    if !program.exports.iter().any(|name| name == export_name) {
+        return Err(Diagnostic::new(
+            "RUNTIME_NOT_EXPORTED",
+            "requested entry point is not exported",
+            json!({ "name": export_name }),
+        ));
+    }
+    validate_export_arguments(program, export_name, &arguments)?;
+    let mut runtime = Runtime::new(options, host, libraries, Some(artifact));
+    let module_environment = runtime.install_program_environment(program)?;
+    for definition in artifact.definitions() {
+        let block = runtime.compiled_block(definition.block)?;
+        let value = runtime.execute_block(&block, module_environment, 0)?;
+        runtime.define(module_environment, definition.name.clone(), value);
+    }
+    let callable = runtime.lookup(module_environment, export_name)?;
+    let result = runtime.apply(callable, arguments, 0)?;
+    validate_export_result(program, export_name, &result)?;
+    let fuel_remaining = runtime.budget.remaining_fuel();
+    Ok(ExecutionReport {
+        value: result,
+        fuel_limit: options.fuel,
+        fuel_consumed: options.fuel.saturating_sub(fuel_remaining),
+        fuel_remaining,
+    })
+}
+
 fn default_library_registry(options: ExecutionOptions) -> LibraryRegistry {
     if options.reference_libraries {
         LibraryRegistry::rust_standard()
     } else {
         LibraryRegistry::default()
     }
+}
+
+fn validate_boundary_arguments(arguments: &[Value]) -> AilResult<()> {
+    for argument in arguments {
+        measure_portable_value(argument)?;
+    }
+    Ok(())
+}
+
+fn validate_capability_result(operation: &str, value: &Value) -> AilResult<()> {
+    let valid = match operation {
+        "log" | "kv-put" => matches!(value, Value::Nil),
+        "now-ms" => matches!(value, Value::Int(_)),
+        "kv-delete" => matches!(value, Value::Bool(_)),
+        "kv-list" => matches!(value, Value::Nil | Value::List(_)),
+        "kv-get" => true,
+        _ => false,
+    };
+    if valid {
+        return Ok(());
+    }
+    Err(Diagnostic::new(
+        "RUNTIME_CAPABILITY_CONTRACT_FAILURE",
+        "host capability returned a value outside its language contract",
+        json!({ "operation": operation, "actual": value.kind() }),
+    ))
 }
 
 fn validate_export_arguments(
@@ -292,23 +449,33 @@ struct Environment {
 #[derive(Debug, Clone)]
 struct Closure {
     parameters: Vec<String>,
-    body: Expression,
+    body: ClosureBody,
     environment: usize,
 }
 
-struct Runtime<'host, 'libraries> {
+#[derive(Debug, Clone)]
+enum ClosureBody {
+    Interpreted(Arc<Expression>),
+    Bytecode(usize),
+}
+
+struct Runtime<'host, 'libraries, 'bytecode> {
     budget: Budget,
     environments: Vec<Environment>,
     closures: Vec<Closure>,
     host: Option<&'host mut dyn CapabilityHost>,
     libraries: &'libraries mut LibraryRegistry,
+    bytecode: Option<&'bytecode BytecodeArtifact>,
+    interpreted_bodies: BTreeMap<usize, Arc<Expression>>,
+    compiled_blocks: BTreeMap<usize, Arc<ail_compiler::CodeBlock>>,
 }
 
-impl<'host, 'libraries> Runtime<'host, 'libraries> {
+impl<'host, 'libraries, 'bytecode> Runtime<'host, 'libraries, 'bytecode> {
     fn new(
         options: ExecutionOptions,
         host: Option<&'host mut dyn CapabilityHost>,
         libraries: &'libraries mut LibraryRegistry,
+        bytecode: Option<&'bytecode BytecodeArtifact>,
     ) -> Self {
         Self {
             budget: Budget::new(options.fuel, options.maximum_depth),
@@ -316,7 +483,70 @@ impl<'host, 'libraries> Runtime<'host, 'libraries> {
             closures: Vec::new(),
             host,
             libraries,
+            bytecode,
+            interpreted_bodies: BTreeMap::new(),
+            compiled_blocks: BTreeMap::new(),
         }
+    }
+
+    fn interpreted_body(&mut self, body: &Expression) -> Arc<Expression> {
+        let key = std::ptr::from_ref(body).addr();
+        self.interpreted_bodies
+            .entry(key)
+            .or_insert_with(|| Arc::new(body.clone()))
+            .clone()
+    }
+
+    fn compiled_block(&mut self, identifier: usize) -> AilResult<Arc<ail_compiler::CodeBlock>> {
+        if let Some(block) = self.compiled_blocks.get(&identifier) {
+            return Ok(Arc::clone(block));
+        }
+        let block = self
+            .bytecode
+            .and_then(|artifact| artifact.blocks().get(identifier))
+            .cloned()
+            .ok_or_else(|| {
+                Diagnostic::new(
+                    "BYTECODE_UNKNOWN_BLOCK",
+                    "compiled closure references an unknown code block",
+                    json!({ "block": identifier }),
+                )
+            })?;
+        let block = Arc::new(block);
+        self.compiled_blocks.insert(identifier, Arc::clone(&block));
+        Ok(block)
+    }
+
+    fn install_program_environment(&mut self, program: &Program) -> AilResult<usize> {
+        let base_environment = self.new_environment(None);
+        self.install_base_environment(program, base_environment);
+        let module_environment = self.new_environment(Some(base_environment));
+        self.install_libraries(program, module_environment)?;
+        self.install_capabilities(program, module_environment)?;
+        for schema in &program.schemas {
+            self.define(
+                module_environment,
+                schema.name.clone(),
+                Value::Schema {
+                    name: schema.name.clone(),
+                    specification: schema.kind.clone(),
+                },
+            );
+        }
+        for data_type in &program.data_types {
+            for variant in &data_type.variants {
+                self.define(
+                    module_environment,
+                    variant.name.clone(),
+                    Value::Constructor {
+                        type_name: data_type.name.clone(),
+                        variant: variant.name.clone(),
+                        arity: variant.fields.len(),
+                    },
+                );
+            }
+        }
+        Ok(module_environment)
     }
 
     fn new_environment(&mut self, parent: Option<usize>) -> usize {
@@ -334,14 +564,38 @@ impl<'host, 'libraries> Runtime<'host, 'libraries> {
         }
     }
 
-    fn lookup(&self, environment: usize, name: &str) -> AilResult<Value> {
+    fn lookup(&mut self, environment: usize, name: &str) -> AilResult<Value> {
         let mut current = Some(environment);
         while let Some(identifier) = current {
             let Some(target) = self.environments.get(identifier) else {
                 break;
             };
-            if let Some(value) = target.bindings.get(name) {
-                return Ok(value.clone());
+            if target.bindings.contains_key(name) {
+                let metrics = {
+                    let value = self
+                        .environments
+                        .get(identifier)
+                        .and_then(|environment| environment.bindings.get(name))
+                        .ok_or_else(|| {
+                            Diagnostic::simple(
+                                "RUNTIME_ENVIRONMENT_CORRUPT",
+                                "runtime environment changed during lookup",
+                            )
+                        })?;
+                    measure_runtime_value(value)?
+                };
+                self.budget.consume(metrics.fuel_cost())?;
+                return self
+                    .environments
+                    .get(identifier)
+                    .and_then(|environment| environment.bindings.get(name))
+                    .cloned()
+                    .ok_or_else(|| {
+                        Diagnostic::simple(
+                            "RUNTIME_ENVIRONMENT_CORRUPT",
+                            "runtime environment changed during lookup",
+                        )
+                    });
             }
             current = target.parent;
         }
@@ -361,7 +615,10 @@ impl<'host, 'libraries> Runtime<'host, 'libraries> {
         self.budget.consume(1)?;
         self.budget.check_depth(depth)?;
         match &expression.kind {
-            ExpressionKind::Literal(datum) | ExpressionKind::Quote(datum) => Ok(Value::from(datum)),
+            ExpressionKind::Literal(datum) | ExpressionKind::Quote(datum) => {
+                self.charge_datum(datum)?;
+                Ok(Value::from(datum))
+            }
             ExpressionKind::Variable(name) => self.lookup(environment, name),
             ExpressionKind::If {
                 condition,
@@ -435,9 +692,10 @@ impl<'host, 'libraries> Runtime<'host, 'libraries> {
             }
             ExpressionKind::Function { parameters, body } => {
                 let identifier = self.closures.len();
+                let body = self.interpreted_body(body);
                 self.closures.push(Closure {
                     parameters: parameters.clone(),
-                    body: body.as_ref().clone(),
+                    body: ClosureBody::Interpreted(body),
                     environment,
                 });
                 Ok(Value::Closure(identifier))
@@ -463,7 +721,11 @@ impl<'host, 'libraries> Runtime<'host, 'libraries> {
     fn apply(&mut self, callable: Value, arguments: Vec<Value>, depth: usize) -> AilResult<Value> {
         self.budget.consume(1)?;
         self.budget.check_depth(depth)?;
-        match callable {
+        self.charge_runtime_value(&callable)?;
+        for argument in &arguments {
+            self.charge_runtime_value(argument)?;
+        }
+        let result = match callable {
             Value::Closure(identifier) => {
                 let closure = self.closures.get(identifier).cloned().ok_or_else(|| {
                     Diagnostic::simple(
@@ -483,7 +745,13 @@ impl<'host, 'libraries> Runtime<'host, 'libraries> {
                 for (parameter, argument) in closure.parameters.into_iter().zip(arguments) {
                     self.define(call_environment, parameter, argument);
                 }
-                self.evaluate(&closure.body, call_environment, depth)
+                match closure.body {
+                    ClosureBody::Interpreted(body) => self.evaluate(&body, call_environment, depth),
+                    ClosureBody::Bytecode(block) => {
+                        let code = self.compiled_block(block)?;
+                        self.execute_block(&code, call_environment, depth)
+                    }
+                }
             }
             Value::Primitive(primitive) => {
                 check_arity(primitive, arguments.len())?;
@@ -520,7 +788,44 @@ impl<'host, 'libraries> Runtime<'host, 'libraries> {
                 "attempted to call a non-callable value",
                 json!({ "kind": value.kind() }),
             )),
+        }?;
+        self.charge_runtime_value(&result)?;
+        Ok(result)
+    }
+
+    fn charge_runtime_value(&mut self, value: &Value) -> AilResult<()> {
+        self.budget
+            .consume(measure_runtime_value(value)?.fuel_cost())
+    }
+
+    fn charge_datum(&mut self, datum: &ail_syntax::Datum) -> AilResult<()> {
+        self.budget.consume(measure_datum(datum)?.fuel_cost())
+    }
+
+    fn preflight_integer_product(&mut self, left: &BigInt, right: &BigInt) -> AilResult<()> {
+        if left.is_zero() || right.is_zero() {
+            return Ok(());
         }
+        let minimum_result_bits = left.bits().saturating_add(right.bits()).saturating_sub(1);
+        if minimum_result_bits > MAXIMUM_INTEGER_BITS {
+            return Err(runtime_value_limit(
+                "integerBits",
+                usize::try_from(MAXIMUM_INTEGER_BITS).unwrap_or(usize::MAX),
+                usize::try_from(minimum_result_bits).unwrap_or(usize::MAX),
+            ));
+        }
+        self.charge_integer_quadratic(left, right)
+    }
+
+    fn charge_integer_quadratic(&mut self, left: &BigInt, right: &BigInt) -> AilResult<()> {
+        let left_limbs = left.bits().div_ceil(64).max(1);
+        let right_limbs = right.bits().div_ceil(64).max(1);
+        self.budget.consume(left_limbs.saturating_mul(right_limbs))
+    }
+
+    fn charge_integer_conversion(&mut self, value: &BigInt) -> AilResult<()> {
+        let limbs = value.bits().div_ceil(64).max(1);
+        self.budget.consume(limbs.saturating_mul(limbs))
     }
 
     fn install_base_environment(&mut self, program: &Program, environment: usize) {
@@ -611,6 +916,7 @@ impl<'host, 'libraries> Runtime<'host, 'libraries> {
         for capability in &program.capabilities {
             match capability.as_str() {
                 "log" => {
+                    self.require_capability("log")?;
                     let item = primitive("log", 1, Some(1), Operation::Log);
                     self.define(environment, item.name.to_owned(), Value::Primitive(item));
                 }
@@ -678,7 +984,9 @@ impl<'host, 'libraries> Runtime<'host, 'libraries> {
             Operation::Multiply => {
                 let mut result = BigInt::one();
                 for argument in &arguments {
-                    result *= expect_integer(primitive.name, argument)?;
+                    let factor = expect_integer(primitive.name, argument)?;
+                    self.preflight_integer_product(&result, factor)?;
+                    result *= factor;
                 }
                 Ok(Value::Int(result))
             }
@@ -722,6 +1030,7 @@ impl<'host, 'libraries> Runtime<'host, 'libraries> {
                         },
                     ));
                 }
+                self.charge_integer_quadratic(numerator, denominator)?;
                 let value = Value::Int(
                     if matches!(
                         primitive.operation,
@@ -766,15 +1075,32 @@ impl<'host, 'libraries> Runtime<'host, 'libraries> {
             ))),
             Operation::IsMap => Ok(Value::Bool(matches!(arguments[0], Value::Map(_)))),
             Operation::StringAppend => {
-                let mut result = String::new();
+                let total_bytes = arguments.iter().try_fold(0_usize, |total, argument| {
+                    total
+                        .checked_add(expect_string(primitive.name, argument)?.len())
+                        .ok_or_else(|| {
+                            runtime_value_limit("scalarBytes", MAXIMUM_VALUE_BYTES, usize::MAX)
+                        })
+                })?;
+                if total_bytes > MAXIMUM_VALUE_BYTES {
+                    return Err(runtime_value_limit(
+                        "scalarBytes",
+                        MAXIMUM_VALUE_BYTES,
+                        total_bytes,
+                    ));
+                }
+                self.budget.consume(bytes_fuel(total_bytes))?;
+                let mut result = String::with_capacity(total_bytes);
                 for argument in &arguments {
                     result.push_str(expect_string(primitive.name, argument)?);
                 }
                 Ok(Value::String(result))
             }
-            Operation::NumberToString => Ok(Value::String(
-                expect_integer(primitive.name, &arguments[0])?.to_string(),
-            )),
+            Operation::NumberToString => {
+                let integer = expect_integer(primitive.name, &arguments[0])?;
+                self.charge_integer_conversion(integer)?;
+                Ok(Value::String(integer.to_string()))
+            }
             Operation::List => Ok(list_value(arguments)),
             Operation::ListMap => {
                 let callable = arguments[0].clone();
@@ -928,17 +1254,7 @@ impl<'host, 'libraries> Runtime<'host, 'libraries> {
                 ]))
             }
             Operation::ApiError => build_api_error(&arguments),
-            Operation::Log => {
-                if self
-                    .host
-                    .as_deref()
-                    .is_some_and(|host| host.supports("log"))
-                {
-                    self.invoke_capability("log", &arguments)
-                } else {
-                    Ok(Value::Nil)
-                }
-            }
+            Operation::Log => self.invoke_capability("log", &arguments),
             Operation::NowMilliseconds
             | Operation::KvGet
             | Operation::KvPut
@@ -956,7 +1272,7 @@ impl<'host, 'libraries> Runtime<'host, 'libraries> {
     }
 
     fn invoke_capability(&mut self, operation: &str, arguments: &[Value]) -> AilResult<Value> {
-        self.host.as_deref_mut().map_or_else(
+        let result = self.host.as_deref_mut().map_or_else(
             || {
                 Err(Diagnostic::new(
                     "RUNTIME_CAPABILITY_UNAVAILABLE",
@@ -965,7 +1281,11 @@ impl<'host, 'libraries> Runtime<'host, 'libraries> {
                 ))
             },
             |host| host.invoke(operation, arguments),
-        )
+        )?;
+        validate_capability_result(operation, &result)?;
+        self.budget
+            .consume(measure_portable_value(&result)?.fuel_cost())?;
+        Ok(result)
     }
 
     fn apply_library(
@@ -1176,6 +1496,22 @@ fn check_arity(primitive: Primitive, actual: usize) -> AilResult<()> {
     Ok(())
 }
 
+fn bytes_fuel(bytes: usize) -> u64 {
+    u64::try_from(bytes.div_ceil(64)).unwrap_or(u64::MAX)
+}
+
+fn runtime_value_limit(kind: &str, maximum: usize, actual: usize) -> Diagnostic {
+    Diagnostic::new(
+        "RUNTIME_VALUE_LIMIT",
+        "guest value exceeds a structural resource limit",
+        json!({
+            "kind": kind,
+            "maximum": maximum,
+            "actual": actual,
+        }),
+    )
+}
+
 fn arity_error(name: &str, minimum: usize, maximum: Option<usize>, actual: usize) -> Diagnostic {
     Diagnostic::new(
         "RUNTIME_ARITY",
@@ -1363,13 +1699,18 @@ mod tests {
         },
     };
 
+    use ail_compiler::compile_bytecode;
     use ail_diagnostic::{AilResult, Diagnostic};
     use ail_library::{BackendDescriptor, LibraryBackend, LibraryRegistry, LibraryValue};
     use ail_syntax::load_program_source;
     use num_bigint::BigInt;
     use serde_json::json;
 
-    use super::{ExecutionOptions, MapKey, Value, execute_export, execute_export_with_libraries};
+    use super::{
+        CapabilityHost, ExecutionOptions, MapKey, Value, execute_compiled_export,
+        execute_compiled_export_report, execute_export, execute_export_with_host,
+        execute_export_with_libraries, json_to_value,
+    };
 
     const CORE: &str = include_str!("../../../../conformance/v1/programs/core.ail");
     const SCHEMA: &str = include_str!("../../../../conformance/v1/programs/schema.ail");
@@ -1386,6 +1727,335 @@ mod tests {
         match result {
             Err(diagnostic) => diagnostic,
             Ok(_) => panic!("expected a diagnostic"),
+        }
+    }
+
+    struct OversizedCapabilityHost;
+
+    impl CapabilityHost for OversizedCapabilityHost {
+        fn supports(&self, capability: &str) -> bool {
+            capability == "kv" || capability == "kv-get"
+        }
+
+        fn invoke(&mut self, operation: &str, _arguments: &[Value]) -> AilResult<Value> {
+            assert_eq!(operation, "kv-get");
+            Ok(Value::String("x".repeat(1024 * 1024 + 1)))
+        }
+    }
+
+    #[test]
+    fn guest_values_are_bounded_before_expensive_runtime_work() {
+        let oversized_json = json!("x".repeat(1024 * 1024 + 1));
+        assert_eq!(
+            require_error(json_to_value(&oversized_json)).code,
+            "RUNTIME_VALUE_LIMIT"
+        );
+
+        let mut nested_json = json!(null);
+        for _ in 0..=65 {
+            nested_json = json!([nested_json]);
+        }
+        assert_eq!(
+            require_error(json_to_value(&nested_json)).code,
+            "RUNTIME_VALUE_LIMIT"
+        );
+
+        let string_program = require(load_program_source(
+            r#"(program
+                (name bounded-strings)
+                (version 4)
+                (signature run (fn (string string) string))
+                (def run (fn (left right) (string-append left right)))
+                (export run))"#,
+        ));
+        let string_limit = require_error(execute_export(
+            &string_program,
+            "run",
+            vec![
+                Value::String("a".repeat(600 * 1024)),
+                Value::String("b".repeat(600 * 1024)),
+            ],
+            ExecutionOptions {
+                fuel: 100_000,
+                ..ExecutionOptions::default()
+            },
+        ));
+        assert_eq!(string_limit.code, "RUNTIME_VALUE_LIMIT");
+
+        let integer_program = require(load_program_source(
+            r#"(program
+                (name bounded-integers)
+                (version 4)
+                (signature run (fn (integer) integer))
+                (def run (fn (value) (* value value)))
+                (export run))"#,
+        ));
+        let large_integer = BigInt::from(1_u8) << 32_768_usize;
+        let integer_limit = require_error(execute_export(
+            &integer_program,
+            "run",
+            vec![Value::Int(large_integer)],
+            ExecutionOptions {
+                fuel: 10_000,
+                ..ExecutionOptions::default()
+            },
+        ));
+        assert_eq!(integer_limit.code, "RUNTIME_VALUE_LIMIT");
+    }
+
+    #[test]
+    fn capability_results_must_obey_the_guest_value_envelope() {
+        let program = require(load_program_source(
+            r#"(program
+                (name bounded-capability)
+                (version 4)
+                (capabilities kv)
+                (signature run (fn () any))
+                (def run (fn () (kv-get "space" "key")))
+                (export run))"#,
+        ));
+        let mut host = OversizedCapabilityHost;
+        let diagnostic = require_error(execute_export_with_host(
+            &program,
+            "run",
+            Vec::new(),
+            ExecutionOptions {
+                fuel: 100_000,
+                ..ExecutionOptions::default()
+            },
+            &mut host,
+        ));
+        assert_eq!(diagnostic.code, "RUNTIME_VALUE_LIMIT");
+    }
+
+    #[test]
+    fn every_declared_capability_requires_an_explicit_host() {
+        let program = require(load_program_source(
+            r#"(program
+                (name explicit-log-host)
+                (version 1)
+                (capabilities log)
+                (def run (fn (value) (log value)))
+                (export run))"#,
+        ));
+        assert_eq!(
+            require_error(execute_export(
+                &program,
+                "run",
+                vec![Value::String("event".to_owned())],
+                ExecutionOptions::default(),
+            ))
+            .code,
+            "RUNTIME_CAPABILITY_UNAVAILABLE"
+        );
+    }
+
+    #[test]
+    fn schema_union_cannot_clone_large_values_for_nearly_free() {
+        let variants = std::iter::repeat_n("boolean", 8)
+            .collect::<Vec<_>>()
+            .join(" ");
+        let source = format!(
+            "(program (name bounded-schema) (version 2) \
+             (schema candidate (union {variants})) \
+             (def run (fn (value) (validate candidate value))) (export run))"
+        );
+        let program = require(load_program_source(&source));
+        let diagnostic = require_error(execute_export(
+            &program,
+            "run",
+            vec![Value::String("x".repeat(64 * 1024))],
+            ExecutionOptions {
+                fuel: 5_000,
+                ..ExecutionOptions::default()
+            },
+        ));
+        assert_eq!(diagnostic.code, "RUNTIME_FUEL_EXHAUSTED");
+    }
+
+    #[test]
+    fn compiled_vm_matches_interpreter_for_typed_control_flow_and_recursion() {
+        let program = require(load_program_source(
+            r#"(program
+                (name compiled-semantics)
+                (version 4)
+                (data decision
+                  (approved (amount integer))
+                  (rejected (reason string)))
+                (def choose (fn (amount)
+                  (if (< amount 0)
+                      (rejected "negative")
+                      (approved amount))))
+                (signature run (fn (integer) map))
+                (def run (fn (amount)
+                  (match (choose amount)
+                    ((approved value) (map "status" "approved" "amount" value))
+                    ((rejected reason) (map "status" "rejected" "reason" reason))
+                    (_ (map "status" "invalid")))))
+                (signature factorial (fn (integer) integer))
+                (def factorial (fn (value)
+                  (if (= value 0)
+                      1
+                      (* value (factorial (- value 1))))))
+                (export run factorial))"#,
+        ));
+        let artifact = require(compile_bytecode(&program));
+        for amount in [-4, 0, 1_200] {
+            let arguments = vec![Value::Int(amount.into())];
+            let interpreted = require(execute_export(
+                &program,
+                "run",
+                arguments.clone(),
+                ExecutionOptions::default(),
+            ));
+            let compiled = require(execute_compiled_export(
+                &artifact,
+                "run",
+                arguments,
+                ExecutionOptions::default(),
+            ));
+            assert_eq!(compiled, interpreted);
+        }
+        assert_eq!(
+            require(execute_compiled_export(
+                &artifact,
+                "factorial",
+                vec![Value::Int(8.into())],
+                ExecutionOptions::default(),
+            )),
+            Value::Int(40_320.into())
+        );
+        let exhausted = require_error(execute_compiled_export(
+            &artifact,
+            "factorial",
+            vec![Value::Int(8.into())],
+            ExecutionOptions {
+                fuel: 5,
+                ..ExecutionOptions::default()
+            },
+        ));
+        assert_eq!(exhausted.code, "RUNTIME_FUEL_EXHAUSTED");
+    }
+
+    #[test]
+    fn compiled_vm_reports_deterministic_path_and_collection_fuel() {
+        let program = require(load_program_source(
+            r#"(program
+                (name compiled-cost)
+                (version 4)
+                (signature total (fn ((list integer)) integer))
+                (def total (fn (values) (sum values)))
+                (export total))"#,
+        ));
+        let artifact = require(compile_bytecode(&program));
+        let short = require(execute_compiled_export_report(
+            &artifact,
+            "total",
+            vec![Value::List(vec![Value::Int(1.into())])],
+            ExecutionOptions::default(),
+        ));
+        let long_arguments = vec![Value::List(
+            (1..=100).map(|value| Value::Int(value.into())).collect(),
+        )];
+        let long = require(execute_compiled_export_report(
+            &artifact,
+            "total",
+            long_arguments.clone(),
+            ExecutionOptions::default(),
+        ));
+        let repeated = require(execute_compiled_export_report(
+            &artifact,
+            "total",
+            long_arguments.clone(),
+            ExecutionOptions::default(),
+        ));
+        assert_eq!(short.value, Value::Int(1.into()));
+        assert_eq!(long.value, Value::Int(5_050.into()));
+        assert!(long.fuel_consumed > short.fuel_consumed);
+        assert_eq!(long, repeated);
+        assert_eq!(long.fuel_limit, long.fuel_consumed + long.fuel_remaining);
+
+        let exact = ExecutionOptions {
+            fuel: long.fuel_consumed,
+            ..ExecutionOptions::default()
+        };
+        assert_eq!(
+            require(execute_export(
+                &program,
+                "total",
+                long_arguments.clone(),
+                exact,
+            )),
+            long.value
+        );
+        assert_eq!(
+            require(execute_compiled_export(
+                &artifact,
+                "total",
+                long_arguments.clone(),
+                exact
+            )),
+            long.value
+        );
+        let below = ExecutionOptions {
+            fuel: long.fuel_consumed.saturating_sub(1),
+            ..ExecutionOptions::default()
+        };
+        assert_eq!(
+            require_error(execute_export(
+                &program,
+                "total",
+                long_arguments.clone(),
+                below
+            ))
+            .code,
+            "RUNTIME_FUEL_EXHAUSTED"
+        );
+        assert_eq!(
+            require_error(execute_compiled_export(
+                &artifact,
+                "total",
+                long_arguments,
+                below
+            ))
+            .code,
+            "RUNTIME_FUEL_EXHAUSTED"
+        );
+    }
+
+    #[test]
+    fn compiled_vm_preserves_short_circuit_cond_and_sequential_let() {
+        let program = require(load_program_source(
+            r#"(program
+                (name compiled-forms)
+                (version 4)
+                (signature run (fn (integer integer) integer))
+                (def run (fn (left right)
+                  (let ((selected (and left right))
+                        (guard (or (> selected 0) (= selected 0)))
+                        (bump (fn (value) (+ value 1))))
+                    (cond
+                      ((and (= left 0) (= right 99)) (bump 9))
+                      (guard (bump selected))
+                      (else (- selected))))))
+                (export run))"#,
+        ));
+        let artifact = require(compile_bytecode(&program));
+        for (left, right) in [(-1, -3), (0, 99), (2, 7)] {
+            let arguments = vec![Value::Int(left.into()), Value::Int(right.into())];
+            let interpreted = require(execute_export(
+                &program,
+                "run",
+                arguments.clone(),
+                ExecutionOptions::default(),
+            ));
+            let compiled = require(execute_compiled_export(
+                &artifact,
+                "run",
+                arguments,
+                ExecutionOptions::default(),
+            ));
+            assert_eq!(compiled, interpreted);
         }
     }
 
@@ -1782,7 +2452,7 @@ mod tests {
                     Value::Map(cost) => cost.get(&MapKey::String("fuel".to_owned())),
                     _ => None,
                 }),
-            Some(&Value::Int(3.into()))
+            Some(&Value::Int(5.into()))
         );
         let issue_code = report
             .get(&MapKey::String("issues".to_owned()))
@@ -1816,7 +2486,7 @@ mod tests {
                     Value::Map(cost) => cost.get(&MapKey::String("fuel".to_owned())),
                     _ => None,
                 }),
-            Some(&Value::Int(3.into()))
+            Some(&Value::Int(7.into()))
         );
     }
 

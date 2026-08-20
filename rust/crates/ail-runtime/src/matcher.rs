@@ -5,7 +5,10 @@ use std::collections::BTreeMap;
 use ail_diagnostic::AilResult;
 use ail_syntax::{Pattern, PatternKind};
 
-use crate::{Budget, Value};
+use crate::{
+    Budget, Value,
+    value::{measure_datum, measure_runtime_value},
+};
 
 pub(crate) fn bindings_for_pattern(
     pattern: &Pattern,
@@ -30,10 +33,14 @@ fn matches_pattern(
     match &pattern.kind {
         PatternKind::Wildcard => Ok(true),
         PatternKind::Binding(name) => {
+            budget.consume(measure_runtime_value(value)?.fuel_cost())?;
             bindings.insert(name.clone(), value.clone());
             Ok(true)
         }
-        PatternKind::Literal(datum) => Ok(&Value::from(datum) == value),
+        PatternKind::Literal(datum) => {
+            budget.consume(measure_datum(datum)?.fuel_cost())?;
+            Ok(&Value::from(datum) == value)
+        }
         PatternKind::Variant { name, fields } => {
             let Value::Variant {
                 variant,

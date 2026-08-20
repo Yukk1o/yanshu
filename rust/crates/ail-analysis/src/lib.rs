@@ -117,8 +117,12 @@ mod tests {
 
         let review = render_rust_review(&program, &report);
         assert!(!review.editable);
-        assert_eq!(review.renderer, "rust-readonly-v1");
+        assert_eq!(review.renderer, "rust-readonly-v3");
         assert!(review.text.contains("READ ONLY"));
+        assert!(review.text.contains("Int = arbitrary-precision integer"));
+        assert!(review.text.contains("log!(value)"));
+        assert!(review.text.contains("audit!"));
+        assert!(review.text.contains("if truthy((amount < 0))"));
         assert!(review.text.contains("enum Decision"));
         assert!(review.text.contains("fn decide(amount: Int) -> Decision"));
         assert!(
@@ -180,5 +184,120 @@ mod tests {
         ));
         let diagnostic = require_error(analyze_program(&unknown));
         assert_eq!(diagnostic.code, "EFFECT_UNRESOLVED_PARAMETER");
+    }
+
+    #[test]
+    fn lexical_bindings_take_precedence_over_primitive_names() {
+        let valid = require(load_program_source(
+            r#"(program
+                (name lexical-callback)
+                (version 4)
+                (def stringify (fn (value) (number->string value)))
+                (def call (fn (length value) (length value)))
+                (signature run (fn (integer) string))
+                (def run (fn (value) (call stringify value)))
+                (export run))"#,
+        ));
+        let report = require(analyze_program(&valid));
+        assert!(report.capability_closure.is_empty());
+
+        let invalid = require(load_program_source(
+            r#"(program
+                (name lexical-not-callable)
+                (version 4)
+                (signature run (fn (integer) map))
+                (def run (fn (map) (map)))
+                (export run))"#,
+        ));
+        let diagnostic = require_error(analyze_program(&invalid));
+        assert_eq!(diagnostic.code, "TYPE_MISMATCH");
+    }
+
+    #[test]
+    fn effect_analysis_never_resolves_a_pattern_binding_as_a_global_definition() {
+        let program = require(load_program_source(
+            r#"(program
+                (name pattern-callback)
+                (version 4)
+                (capabilities log)
+                (data holder (boxed (callback (fn (integer) integer))))
+                (def callback (fn (value) value))
+                (def emit (fn (value) (do (log value) value)))
+                (signature run (fn (integer) integer))
+                (def run (fn (value)
+                  (match (boxed emit)
+                    ((boxed callback) (callback value))
+                    (_ value))))
+                (export run))"#,
+        ));
+        let diagnostic = require_error(analyze_program(&program));
+        assert_eq!(diagnostic.code, "EFFECT_UNRESOLVED_PARAMETER");
+    }
+
+    #[test]
+    fn review_effect_markers_respect_lexical_shadowing() {
+        let program = require(load_program_source(
+            r#"(program
+                (name review-shadowing)
+                (version 4)
+                (signature run (fn (integer) integer))
+                (def run (fn (value)
+                  (do
+                    (let ((log (fn (item) item))) (log value))
+                    (let ((map (fn (item) item))) (map value)))))
+                (export run))"#,
+        ));
+        let report = require(analyze_program(&program));
+        let review = render_rust_review(&program, &report);
+        assert_eq!(review.renderer, "rust-readonly-v3");
+        assert!(review.text.contains("log(value)"));
+        assert!(review.text.contains("map(value)"));
+        assert!(!review.text.contains("log!(value)"));
+        assert!(!review.text.contains("map {"));
+    }
+
+    #[test]
+    fn effect_analysis_preserves_callable_closure_captures() {
+        let program = require(load_program_source(
+            r#"(program
+                (name captured-effects)
+                (version 4)
+                (capabilities log)
+                (def callback (fn (value) value))
+                (signature run (fn (integer) integer))
+                (def run (fn (value)
+                  (let ((callback (fn (item) (do (log item) item)))
+                        (wrapped (fn (item) (callback item))))
+                    (wrapped value))))
+                (export run))"#,
+        ));
+        let report = require(analyze_program(&program));
+        assert_eq!(report.capability_closure, ["log"]);
+        assert_eq!(report.exports["run"], ["log"]);
+    }
+
+    #[test]
+    fn kv_contracts_check_arity_and_match_runtime_return_types() {
+        let valid = require(load_program_source(
+            r#"(program
+                (name kv-types)
+                (version 4)
+                (capabilities kv)
+                (signature run (fn (string) boolean))
+                (def run (fn (key) (kv-delete key)))
+                (export run))"#,
+        ));
+        let report = require(analyze_program(&valid));
+        assert_eq!(report.capability_closure, ["kv"]);
+
+        for call in ["(kv-put)", "(kv-delete)", "(kv-list)"] {
+            let source = format!(
+                "(program (name bad-kv) (version 4) (capabilities kv) \
+                 (signature run (fn () any)) (def run (fn () {call})) (export run))"
+            );
+            let program = require(load_program_source(&source));
+            let diagnostic = require_error(analyze_program(&program));
+            assert_eq!(diagnostic.code, "TYPE_ARITY", "call: {call}");
+        }
     }
 }

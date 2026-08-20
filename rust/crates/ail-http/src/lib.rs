@@ -234,7 +234,7 @@ impl ObservationSink for JsonlObservationSink {
         bytes.push(b'\n');
         let mut file = self.file.lock().map_err(|_| observation_write_failure())?;
         file.write_all(&bytes)
-            .and_then(|()| file.flush())
+            .and_then(|()| file.sync_all())
             .map_err(|_| observation_write_failure())
     }
 }
@@ -683,10 +683,22 @@ fn parse_headers(
 }
 
 fn is_sensitive_request_header(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
     matches!(
-        name,
-        "authorization" | "cookie" | "proxy-authorization" | "x-api-key" | "x-request-id"
-    )
+        name.as_str(),
+        "authorization"
+            | "cookie"
+            | "proxy-authorization"
+            | "proxy-authenticate"
+            | "x-api-key"
+            | "x-auth-token"
+            | "x-access-token"
+            | "x-session-token"
+            | "x-amz-security-token"
+            | "x-goog-api-key"
+            | "x-request-id"
+    ) || name.contains("credential")
+        || name.contains("secret")
 }
 
 fn has_json_content_type(headers: &HeaderMap) -> bool {
@@ -826,12 +838,37 @@ fn service_response_to_http(
         let name = HeaderName::try_from(name).map_err(|_| {
             Diagnostic::simple("HTTP_RESPONSE_HEADER", "response header name is invalid")
         })?;
+        if is_forbidden_response_header(name.as_str()) {
+            return Err(Diagnostic::new(
+                "HTTP_RESPONSE_HEADER_FORBIDDEN",
+                "guest response cannot control framing, connection, or authentication headers",
+                json!({ "header": name.as_str() }),
+            ));
+        }
         let value = HeaderValue::try_from(value).map_err(|_| {
             Diagnostic::simple("HTTP_RESPONSE_HEADER", "response header value is invalid")
         })?;
         output.headers_mut().insert(name, value);
     }
     Ok(output)
+}
+
+fn is_forbidden_response_header(name: &str) -> bool {
+    matches!(
+        name,
+        "connection"
+            | "content-length"
+            | "keep-alive"
+            | "proxy-authenticate"
+            | "proxy-authorization"
+            | "set-cookie"
+            | "te"
+            | "trailer"
+            | "transfer-encoding"
+            | "upgrade"
+            | "www-authenticate"
+            | "x-request-id"
+    )
 }
 
 fn protocol_error_response(
@@ -984,6 +1021,7 @@ fn validate_config(config: &HttpConfig) -> AilResult<()> {
 #[cfg(test)]
 mod tests {
     use std::{
+        collections::BTreeMap,
         fs,
         path::PathBuf,
         sync::Arc,
@@ -1210,12 +1248,28 @@ mod tests {
         headers.insert(AUTHORIZATION, HeaderValue::from_static("Bearer secret"));
         headers.insert(COOKIE, HeaderValue::from_static("session=secret"));
         headers.insert("x-request-id", HeaderValue::from_static("client-spoof"));
+        headers.insert("x-auth-token", HeaderValue::from_static("alternate-secret"));
         headers.insert("x-visible", HeaderValue::from_static("yes"));
         let parsed = require(super::parse_headers(&headers, &HttpConfig::default()));
         assert!(!parsed.contains_key("authorization"));
         assert!(!parsed.contains_key("cookie"));
         assert!(!parsed.contains_key("x-request-id"));
+        assert!(!parsed.contains_key("x-auth-token"));
         assert!(parsed.contains_key("x-visible"));
+
+        let framing = match super::service_response_to_http(
+            ail_service::ServiceResponse {
+                status: 200,
+                headers: BTreeMap::from([("transfer-encoding".to_owned(), "chunked".to_owned())]),
+                body: json!({ "ok": true }),
+            },
+            false,
+            1024,
+        ) {
+            Err(diagnostic) => diagnostic,
+            Ok(_) => panic!("guest framing header must be rejected"),
+        };
+        assert_eq!(framing.code, "HTTP_RESPONSE_HEADER_FORBIDDEN");
     }
 
     #[test]

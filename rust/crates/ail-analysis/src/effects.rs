@@ -16,6 +16,8 @@ enum Callable {
     Inline {
         parameters: Vec<String>,
         body: Expression,
+        lexical: BTreeSet<String>,
+        callables: BTreeMap<String, Callable>,
     },
     Primitive(String),
     Constructor,
@@ -119,9 +121,14 @@ impl<'program> EffectAnalyzer<'program> {
         })?;
         stack.push(name.to_owned());
         let result = match &expression.kind {
-            ExpressionKind::Function { parameters, body } => {
-                self.analyze_function_body(parameters, body, actual_callables, stack)
-            }
+            ExpressionKind::Function { parameters, body } => self.analyze_function_body(
+                parameters,
+                body,
+                actual_callables,
+                BTreeSet::new(),
+                BTreeMap::new(),
+                stack,
+            ),
             _ => {
                 let mut lexical = BTreeSet::new();
                 let mut callables = BTreeMap::new();
@@ -147,13 +154,16 @@ impl<'program> EffectAnalyzer<'program> {
         parameters: &[String],
         body: &Expression,
         actual_callables: Vec<Option<Callable>>,
+        mut lexical: BTreeSet<String>,
+        mut callables: BTreeMap<String, Callable>,
         stack: &mut Vec<String>,
     ) -> AilResult<Capabilities> {
-        let mut lexical = parameters.iter().cloned().collect::<BTreeSet<_>>();
-        let mut callables = BTreeMap::new();
         for (index, parameter) in parameters.iter().enumerate() {
+            lexical.insert(parameter.clone());
             if let Some(callable) = actual_callables.get(index).cloned().flatten() {
                 callables.insert(parameter.clone(), callable);
+            } else {
+                callables.remove(parameter);
             }
         }
         self.analyze_expression(body, &mut lexical, &mut callables, stack)
@@ -303,12 +313,24 @@ impl<'program> EffectAnalyzer<'program> {
                     .collect();
                 self.analyze_definition(&name, actual, stack)
             }
-            Callable::Inline { parameters, body } => {
+            Callable::Inline {
+                parameters,
+                body,
+                lexical: captured_lexical,
+                callables: captured_callables,
+            } => {
                 let actual = arguments
                     .iter()
                     .map(|argument| self.resolve_callable(argument, lexical, callables))
                     .collect();
-                self.analyze_function_body(&parameters, &body, actual, stack)
+                self.analyze_function_body(
+                    &parameters,
+                    &body,
+                    actual,
+                    captured_lexical,
+                    captured_callables,
+                    stack,
+                )
             }
             Callable::Primitive(name) => {
                 let mut effects = capability_for_primitive(&name)
@@ -359,6 +381,9 @@ impl<'program> EffectAnalyzer<'program> {
                 if let Some(callable) = callables.get(name) {
                     return Some(callable.clone());
                 }
+                if lexical.contains(name) {
+                    return Some(Callable::UnknownParameter(name.clone()));
+                }
                 if self.definitions.contains_key(name) {
                     return Some(Callable::Definition(name.clone()));
                 }
@@ -368,13 +393,13 @@ impl<'program> EffectAnalyzer<'program> {
                 if is_primitive(name) {
                     return Some(Callable::Primitive(name.clone()));
                 }
-                lexical
-                    .contains(name)
-                    .then(|| Callable::UnknownParameter(name.clone()))
+                None
             }
             ExpressionKind::Function { parameters, body } => Some(Callable::Inline {
                 parameters: parameters.clone(),
                 body: body.as_ref().clone(),
+                lexical: lexical.clone(),
+                callables: callables.clone(),
             }),
             _ => None,
         }

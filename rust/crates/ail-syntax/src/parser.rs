@@ -70,6 +70,11 @@ const RESERVED_SCHEMA_NAMES: &[&str] = &[
     "kv-put",
     "kv-delete",
     "kv-list",
+    "text/length",
+    "text/starts-with?",
+    "text/ends-with?",
+    "text/contains?",
+    "text/replace",
 ];
 const MAXIMUM_SCHEMAS: usize = 64;
 const MAXIMUM_SCHEMA_DEPTH: usize = 16;
@@ -84,6 +89,7 @@ const MAXIMUM_DATA_TYPES: usize = 64;
 const MAXIMUM_DATA_VARIANTS: usize = 64;
 const MAXIMUM_VARIANT_FIELDS: usize = 64;
 const MAXIMUM_SIGNATURES: usize = 256;
+const MAXIMUM_ROUTES: usize = 256;
 const MAXIMUM_TYPE_DEPTH: usize = 16;
 
 pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
@@ -426,6 +432,14 @@ pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
                 });
             }
             "route" => {
+                if routes.len() >= MAXIMUM_ROUTES {
+                    return Err(Diagnostic::new(
+                        "PROGRAM_ROUTE_LIMIT",
+                        "program exceeds the route limit",
+                        json!({ "maximum": MAXIMUM_ROUTES }),
+                    )
+                    .at(form_datum.span));
+                }
                 if form.len() != 4
                     || form[1].symbol().is_none()
                     || !matches!(form[2].kind, DatumKind::String(_))
@@ -480,6 +494,16 @@ pub fn parse_program(datum: &Datum, source: &str) -> AilResult<Program> {
                     ));
                 }
                 let definition_name = form[1].symbol().unwrap_or_default().to_owned();
+                if RESERVED_SCHEMA_NAMES.contains(&definition_name.as_str())
+                    || EXPRESSION_KEYWORDS.contains(&definition_name.as_str())
+                {
+                    return Err(Diagnostic::new(
+                        "PROGRAM_DEFINITION_RESERVED_NAME",
+                        "definition cannot shadow a language form or built-in operation",
+                        json!({ "name": definition_name }),
+                    )
+                    .at(form_datum.span));
+                }
                 if !definition_names.insert(definition_name.clone()) {
                     return Err(Diagnostic::new(
                         "PROGRAM_DUPLICATE_DEFINITION",
@@ -2110,5 +2134,33 @@ mod tests {
             imported_type.signatures[0].parameters[0].to_json(),
             json!({ "type": "named", "name": "external" })
         );
+    }
+
+    #[test]
+    fn rejects_route_sets_before_quadratic_overlap_work_can_grow_unbounded() {
+        let mut source = String::from("(program (name routes) (version 1)");
+        for index in 0..=super::MAXIMUM_ROUTES {
+            source.push_str(&format!(" (route GET \"/route-{index}\" handler)"));
+        }
+        source.push_str(" (def handler (fn (request) request)) (export handler))");
+        let diagnostic = require_error(load_program_source(&source));
+        assert_eq!(diagnostic.code, "PROGRAM_ROUTE_LIMIT");
+        assert_eq!(
+            diagnostic.details.as_ref(),
+            &json!({ "maximum": super::MAXIMUM_ROUTES })
+        );
+    }
+
+    #[test]
+    fn definitions_cannot_shadow_language_forms_or_builtins() {
+        for name in ["map", "log", "if"] {
+            let source = format!(
+                "(program (name reserved) (version 1) (def {name} (fn () 1)) (export {name}))"
+            );
+            assert_eq!(
+                require_error(load_program_source(&source)).code,
+                "PROGRAM_DEFINITION_RESERVED_NAME"
+            );
+        }
     }
 }

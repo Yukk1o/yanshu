@@ -59,6 +59,8 @@ package-run <store> <ail.lock.json> <export> <arguments.json>
 
 `package-review --text` is still a one-way `rust-readonly-v1` projection. Locking and packages add no structured editor or reverse parser.
 
+The name above records the v0.9 milestone. The current v0.10 renderer is `rust-readonly-v3`; it remains one-way and read-only.
+
 ## Security invariants
 
 - no package installation or build scripts;

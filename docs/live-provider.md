@@ -1,4 +1,4 @@
-# Live LLM Provider
+# LLM 与 Coding Agent Provider
 
 ## Goal
 
@@ -26,6 +26,25 @@ The host reads configuration only from its environment:
 
 Credentials never enter guest environments, prompts, diagnostics, version
 metadata, or CLI output.
+
+The same evolution loop can select a locally installed coding agent instead of
+an HTTP API:
+
+| `AI_EVOLVE_PROVIDER` | Executable | Mode |
+| --- | --- | --- |
+| `codex-cli` | `codex` | non-interactive workspace-write sandbox |
+| `claude-code-cli` | `claude` | print mode with Read/Edit/Write only |
+| `opencode-cli` | `opencode` | run mode with deny-by-default permissions |
+
+`AI_EVOLVE_AGENT_COMMAND` overrides the executable and
+`AI_EVOLVE_AGENT_TIMEOUT_SECONDS` sets a 1–3600 second timeout (default 600).
+The optional `--task <task.md>` CLI argument supplies a bounded user objective.
+The agent edits `candidate.ail` in a disposable workspace containing only the
+current source, structured observations, objective, and bounded instructions. The host
+then independently parses, tests, hashes, registers, and optionally promotes
+the candidate. Sensitive environment variable names are removed before spawn;
+agents should use their own secure login stores. This is a host-side development
+adapter, not a replacement for OS process isolation.
 
 When `AI_EVOLVE_PROVIDER` is absent, a base URL containing `deepseek` or a model
 starting with `deepseek-` selects `deepseek-chat`; otherwise the host selects

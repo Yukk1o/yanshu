@@ -7,8 +7,12 @@ use std::{
     str::FromStr,
 };
 
+use ail_bundle::load_bundle;
+use ail_compiler::compile_bytecode;
 use ail_diagnostic::{AilResult, Diagnostic};
-use ail_runtime::{ExecutionOptions, MapKey, Value as GuestValue, execute_export};
+use ail_runtime::{
+    ExecutionOptions, MapKey, Value as GuestValue, execute_compiled_export, execute_export,
+};
 use ail_syntax::{Program, load_program_source};
 use num_bigint::BigInt;
 use serde_json::{Map, Value, json};
@@ -92,33 +96,48 @@ fn run_case(root: &Path, case: &Value, index: usize) -> AilResult<Value> {
             )
         })?;
     let source_path = root.join(PathBuf::from(source_relative));
-    let source = fs::read_to_string(&source_path).map_err(|_| {
-        Diagnostic::new(
-            "CONFORMANCE_SOURCE_MISSING",
-            "conformance source file does not exist",
-            json!({ "name": name, "source": source_relative }),
-        )
-    })?;
-
-    let actual = match load_program_source(&source) {
-        Ok(program) => match phase {
-            "load" | "inspect" => json!({
-                "kind": "program",
-                "program": program.summary_json(),
-            }),
-            "run" => match run_program_case(&program, document, name) {
+    let actual = match phase {
+        "run-bundle" | "run-bundle-compiled" => match load_bundle(&source_path) {
+            Ok(bundle) => match run_program_case(
+                &bundle.program,
+                document,
+                name,
+                phase == "run-bundle-compiled",
+            ) {
                 Ok(value) => value,
                 Err(diagnostic) => diagnostic_outcome(&diagnostic),
             },
-            _ => {
-                return Err(Diagnostic::new(
-                    "CONFORMANCE_INVALID_PHASE",
-                    "conformance case has an unknown phase",
-                    json!({ "name": name, "phase": phase }),
-                ));
-            }
+            Err(diagnostic) => diagnostic_outcome(&diagnostic),
         },
-        Err(diagnostic) => diagnostic_outcome(&diagnostic),
+        "load" | "inspect" | "run" | "run-compiled" => {
+            let source = fs::read_to_string(&source_path).map_err(|_| {
+                Diagnostic::new(
+                    "CONFORMANCE_SOURCE_MISSING",
+                    "conformance source file does not exist",
+                    json!({ "name": name, "source": source_relative }),
+                )
+            })?;
+            match load_program_source(&source) {
+                Ok(program) if matches!(phase, "load" | "inspect") => json!({
+                    "kind": "program",
+                    "program": program.summary_json(),
+                }),
+                Ok(program) => {
+                    match run_program_case(&program, document, name, phase == "run-compiled") {
+                        Ok(value) => value,
+                        Err(diagnostic) => diagnostic_outcome(&diagnostic),
+                    }
+                }
+                Err(diagnostic) => diagnostic_outcome(&diagnostic),
+            }
+        }
+        _ => {
+            return Err(Diagnostic::new(
+                "CONFORMANCE_INVALID_PHASE",
+                "conformance case has an unknown phase",
+                json!({ "name": name, "phase": phase }),
+            ));
+        }
     };
     Ok(json!({
         "name": name,
@@ -132,6 +151,7 @@ fn run_program_case(
     program: &Program,
     document: &Map<String, Value>,
     name: &str,
+    compiled: bool,
 ) -> AilResult<Value> {
     let entry = required_string(document, "entry", name)?;
     let raw_arguments = document
@@ -164,17 +184,17 @@ fn run_program_case(
         .iter()
         .map(fixture_to_value)
         .collect::<AilResult<Vec<_>>>()?;
-    let result = execute_export(
-        program,
-        entry,
-        arguments,
-        ExecutionOptions {
-            fuel,
-            maximum_depth: usize::try_from(maximum_depth).unwrap_or(usize::MAX),
-            reference_libraries: document.get("libraryBackends").and_then(Value::as_str)
-                != Some("none"),
-        },
-    )?;
+    let options = ExecutionOptions {
+        fuel,
+        maximum_depth: usize::try_from(maximum_depth).unwrap_or(usize::MAX),
+        reference_libraries: document.get("libraryBackends").and_then(Value::as_str)
+            != Some("none"),
+    };
+    let result = if compiled {
+        execute_compiled_export(&compile_bytecode(program)?, entry, arguments, options)?
+    } else {
+        execute_export(program, entry, arguments, options)?
+    };
     Ok(json!({ "kind": "value", "value": value_to_fixture(&result)? }))
 }
 
@@ -300,18 +320,24 @@ mod tests {
     }
 
     #[test]
-    fn rust_host_matches_every_v1_conformance_case() {
-        let manifest =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../conformance/v1/manifest.json");
-        let report = require(run_manifest(manifest));
-        let failed = report
-            .get("cases")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter(|case| case.get("passed").and_then(Value::as_bool) != Some(true))
-            .collect::<Vec<_>>();
-        assert!(failed.is_empty(), "conformance failures: {failed:#?}");
-        assert_eq!(report.get("total").and_then(Value::as_u64), Some(17));
+    fn rust_host_matches_v1_through_v4_and_compiled_conformance() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../conformance");
+        let mut total = 0_u64;
+        for version in ["v1", "v2", "v3", "v4"] {
+            let report = require(run_manifest(root.join(version).join("manifest.json")));
+            let failed = report
+                .get("cases")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter(|case| case.get("passed").and_then(Value::as_bool) != Some(true))
+                .collect::<Vec<_>>();
+            assert!(
+                failed.is_empty(),
+                "{version} conformance failures: {failed:#?}"
+            );
+            total = total.saturating_add(report.get("total").and_then(Value::as_u64).unwrap_or(0));
+        }
+        assert_eq!(total, 25);
     }
 }

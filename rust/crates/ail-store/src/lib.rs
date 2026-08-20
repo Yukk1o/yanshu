@@ -145,30 +145,39 @@ impl VersionStore {
                 .map_err(|_| write_failure(&source_path))?;
         }
 
+        let language_version: JsonValue = serde_json::from_str(&program.version.to_string())
+            .map_err(|_| {
+                Diagnostic::simple(
+                    "VERSION_INVALID_PROGRAM",
+                    "program language version cannot be represented as JSON",
+                )
+            })?;
+        let parent = registration
+            .parent
+            .map_or(JsonValue::Null, |value| JsonValue::String(value.to_owned()));
+        let mut metadata = json!({
+            "hash": hash,
+            "parent": parent,
+            "program": program.name,
+            "languageVersion": language_version,
+            "provider": registration.provider,
+            "providerMetadata": registration.provider_metadata,
+            "registeredAt": registration.registered_at,
+            "report": registration.report,
+        });
         let metadata_path = self.version_metadata_path(&hash);
         if metadata_path.exists() {
-            self.version_metadata_unlocked(&hash)?;
+            let existing = self.version_metadata_unlocked(&hash)?;
+            metadata["registeredAt"] = existing["registeredAt"].clone();
+            if existing != metadata {
+                return Err(Diagnostic::new(
+                    "VERSION_REGISTRATION_CONFLICT",
+                    "content-addressed source already has different immutable metadata",
+                    json!({ "hash": hash }),
+                ));
+            }
+            return Ok(hash);
         } else {
-            let language_version: JsonValue = serde_json::from_str(&program.version.to_string())
-                .map_err(|_| {
-                    Diagnostic::simple(
-                        "VERSION_INVALID_PROGRAM",
-                        "program language version cannot be represented as JSON",
-                    )
-                })?;
-            let parent = registration
-                .parent
-                .map_or(JsonValue::Null, |value| JsonValue::String(value.to_owned()));
-            let metadata = json!({
-                "hash": hash,
-                "parent": parent,
-                "program": program.name,
-                "languageVersion": language_version,
-                "provider": registration.provider,
-                "providerMetadata": registration.provider_metadata,
-                "registeredAt": registration.registered_at,
-                "report": registration.report,
-            });
             write_json_atomically(&metadata_path, &metadata)?;
         }
 
@@ -560,6 +569,44 @@ mod tests {
         );
         assert_eq!(first, source_hash(BUSINESS_V2_SOURCE));
         assert_eq!(second, source_hash(&changed_source));
+    }
+
+    #[test]
+    fn repeated_content_cannot_claim_conflicting_immutable_metadata() {
+        let temporary = TestDirectory::new();
+        let store = VersionStore::new(&temporary.path);
+        let passing = json!({ "passed": true });
+        let hash =
+            require(store.register_candidate(registration(CANDIDATE_SOURCE, None, &passing, 1)));
+        assert_eq!(
+            error_code(store.register_candidate(registration(
+                CANDIDATE_SOURCE,
+                Some(INITIAL_HASH),
+                &passing,
+                1,
+            ))),
+            "VERSION_REGISTRATION_CONFLICT"
+        );
+        assert_eq!(
+            require(store.version_metadata(&hash))["parent"],
+            JsonValue::Null
+        );
+    }
+
+    #[test]
+    fn repeated_identical_registration_preserves_the_first_timestamp_and_event() {
+        let temporary = TestDirectory::new();
+        let store = VersionStore::new(&temporary.path);
+        let passing = json!({ "passed": true });
+        let first =
+            require(store.register_candidate(registration(CANDIDATE_SOURCE, None, &passing, 10)));
+        let repeated =
+            require(store.register_candidate(registration(CANDIDATE_SOURCE, None, &passing, 20)));
+        assert_eq!(repeated, first);
+        assert_eq!(require(store.version_metadata(&first))["registeredAt"], 10);
+        let events = fs::read_to_string(temporary.path.join("events.jsonl"))
+            .unwrap_or_else(|error| panic!("events read failed: {error}"));
+        assert_eq!(events.lines().count(), 1);
     }
 
     #[test]

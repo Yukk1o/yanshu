@@ -66,6 +66,8 @@ The export boundary additionally enforces:
 
 `review` and `review-bundle` generate `rust-readonly-v1`. The document contains:
 
+`rust-readonly-v1` is the historical renderer identifier introduced by v0.8. The current v0.10 implementation emits `rust-readonly-v3`, which adds explicit effect-call and truthiness/BigInt annotations without making the projection editable.
+
 - a permanent READ ONLY / non-executable header;
 - typed enum-like user data;
 - typed function signatures and inferred effects;

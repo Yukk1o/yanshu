@@ -67,7 +67,7 @@ impl ShadowObservationSink for JsonlShadowObservationSink {
         bytes.push(b'\n');
         let mut file = self.file.lock().map_err(|_| write_failure())?;
         file.write_all(&bytes)
-            .and_then(|()| file.flush())
+            .and_then(|()| file.sync_all())
             .map_err(|_| write_failure())
     }
 }

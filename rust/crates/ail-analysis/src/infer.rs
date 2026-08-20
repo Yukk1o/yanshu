@@ -222,6 +222,7 @@ impl Inferencer {
             }
             ExpressionKind::Call { callee, arguments } => {
                 if let ExpressionKind::Variable(name) = &callee.kind
+                    && !environment.contains_key(name)
                     && !self.guest_bindings.contains(name)
                     && self.is_known_primitive(name)
                 {
@@ -585,8 +586,18 @@ impl Inferencer {
                 require_arity(name, arguments.len(), 2, Some(2), span)?;
                 Ok(Type::Any)
             }
-            "kv-put" | "kv-delete" => Ok(Type::Nil),
-            "kv-list" => Ok(Type::List(Box::new(Type::Any))),
+            "kv-put" => {
+                require_arity(name, arguments.len(), 2, Some(2), span)?;
+                Ok(Type::Nil)
+            }
+            "kv-delete" => {
+                require_arity(name, arguments.len(), 1, Some(1), span)?;
+                Ok(Type::Boolean)
+            }
+            "kv-list" => {
+                require_arity(name, arguments.len(), 1, Some(1), span)?;
+                Ok(Type::List(Box::new(Type::Any)))
+            }
             "text/length" => {
                 require_arity(name, arguments.len(), 1, Some(1), span)?;
                 self.unify(Type::String, argument_types[0].clone(), span)?;

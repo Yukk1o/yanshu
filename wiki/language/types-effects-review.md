@@ -74,6 +74,9 @@ cargo run --locked -p ail-cli -- `
 
 ```rust
 // Generated semantic review — READ ONLY.
+// semantic Int = arbitrary-precision integer (never i32/i64).
+// semantic truthy(value) = false only for Bool(false).
+// calls spelled name!(...) directly or transitively perform capability effects.
 // capability closure: [log]
 
 enum TypedPolicyDecision {
@@ -84,13 +87,21 @@ enum TypedPolicyDecision {
 
 // source: typed-policy:20:5 | effects: [log]
 fn typed_policy__decide(amount: Int) -> TypedPolicyDecision {
-    // generated semantic projection
+    typed_policy__audit!(
+        if truthy((amount < 0)) {
+            TypedPolicyDecision::Rejected { reason: "negative amount" }
+        } else {
+            TypedPolicyDecision::Approved { amount: amount }
+        }
+    )
 }
 ```
 
+`!` 是审查标记，不是第二套可执行语法。`log!(...)` 表示该行直接调用 capability；`typed_policy__audit!(...)` 表示调用会传递性到达 capability。机器节点仍保留精确 `.ail` span 和 capability 列表。
+
 机器可读 node 还带 definition ID、逻辑模块、起止行列、推断类型与 capability。它适合审查，不是第二份源码：
 
-- `renderer` 固定为 `rust-readonly-v1`；
+- `renderer` 固定为 `rust-readonly-v3`；
 - `editable` 永远是 `false`；
 - 文本不能交给 CLI 执行，也没有反向 Parser；
 - `.ail` AST、签名、Bundle 和测试仍是唯一真相。

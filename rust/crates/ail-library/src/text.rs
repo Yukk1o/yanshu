@@ -4,6 +4,53 @@ use ail_diagnostic::{AilResult, Diagnostic};
 
 use crate::{BackendDescriptor, LibraryBackend, LibraryValue};
 
+pub(crate) const MAXIMUM_TEXT_RESULT_BYTES: usize = 1024 * 1024;
+
+pub(crate) fn checked_replace_output_bytes(
+    input: &str,
+    pattern: &str,
+    replacement: &str,
+) -> AilResult<usize> {
+    let matches = if pattern.is_empty() {
+        input.chars().count().saturating_add(1)
+    } else {
+        input.match_indices(pattern).count()
+    };
+    let removed = matches.checked_mul(pattern.len()).ok_or_else(|| {
+        Diagnostic::simple(
+            "RUNTIME_LIBRARY_RESULT_LIMIT",
+            "text replacement result exceeds the byte limit",
+        )
+    })?;
+    let inserted = matches.checked_mul(replacement.len()).ok_or_else(|| {
+        Diagnostic::simple(
+            "RUNTIME_LIBRARY_RESULT_LIMIT",
+            "text replacement result exceeds the byte limit",
+        )
+    })?;
+    let output_bytes = input
+        .len()
+        .checked_sub(removed)
+        .and_then(|remaining| remaining.checked_add(inserted))
+        .ok_or_else(|| {
+            Diagnostic::simple(
+                "RUNTIME_LIBRARY_RESULT_LIMIT",
+                "text replacement result exceeds the byte limit",
+            )
+        })?;
+    if output_bytes > MAXIMUM_TEXT_RESULT_BYTES {
+        return Err(Diagnostic::new(
+            "RUNTIME_LIBRARY_RESULT_LIMIT",
+            "text replacement result exceeds the byte limit",
+            serde_json::json!({
+                "maximumBytes": MAXIMUM_TEXT_RESULT_BYTES,
+                "actualBytes": output_bytes,
+            }),
+        ));
+    }
+    Ok(output_bytes)
+}
+
 #[derive(Debug, Default)]
 pub struct RustTextBackend;
 
@@ -37,12 +84,13 @@ impl LibraryBackend for RustTextBackend {
             "contains?" => Ok(LibraryValue::Bool(
                 string_argument(arguments, 0)?.contains(string_argument(arguments, 1)?),
             )),
-            "replace" => Ok(LibraryValue::String(
-                string_argument(arguments, 0)?.replace(
-                    string_argument(arguments, 1)?,
-                    string_argument(arguments, 2)?,
-                ),
-            )),
+            "replace" => {
+                let input = string_argument(arguments, 0)?;
+                let pattern = string_argument(arguments, 1)?;
+                let replacement = string_argument(arguments, 2)?;
+                checked_replace_output_bytes(input, pattern, replacement)?;
+                Ok(LibraryValue::String(input.replace(pattern, replacement)))
+            }
             _ => Err(Diagnostic::simple(
                 "RUST_TEXT_BACKEND_OPERATION",
                 "Rust text backend received an unknown operation",

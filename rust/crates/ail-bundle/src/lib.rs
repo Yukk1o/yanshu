@@ -62,13 +62,13 @@ mod tests {
       (name app)
       (version 4)
       (imports policy)
-      (signature unwrap (fn (decision) integer))
-      (def unwrap (fn (decision)
+      (signature extract (fn (decision) integer))
+      (def extract (fn (decision)
         (match decision
           ((approved value) value)
           (_ 0))))
       (signature run (fn (integer) integer))
-      (def run (fn (amount) (unwrap (decide amount))))
+      (def run (fn (amount) (extract (decide amount))))
       (export run))"#;
 
     fn require<T>(result: AilResult<T>) -> T {
@@ -178,7 +178,7 @@ mod tests {
             .program
             .signatures
             .iter()
-            .find(|signature| signature.name == "app/unwrap")
+            .find(|signature| signature.name == "app/extract")
             .unwrap_or_else(|| panic!("linked imported-type signature is missing"));
         assert_eq!(
             imported_signature.parameters[0].to_json(),

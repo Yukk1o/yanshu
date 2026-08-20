@@ -6,6 +6,7 @@ use ail_diagnostic::AilResult;
 use ail_syntax::{SchemaField, SchemaKind};
 use num_bigint::BigInt;
 
+use crate::value::measure_runtime_value;
 use crate::{Budget, MapKey, Value};
 
 const MAXIMUM_ISSUES: usize = 32;
@@ -68,12 +69,12 @@ impl Validator<'_> {
     ) -> AilResult<Value> {
         self.budget.consume(1)?;
         match specification {
-            SchemaKind::Any => Ok(value.clone()),
+            SchemaKind::Any => self.clone_value(value),
             SchemaKind::Enum { values } => {
                 for allowed in values {
                     self.budget.consume(1)?;
                     if Value::from(allowed) == *value {
-                        return Ok(value.clone());
+                        return self.clone_value(value);
                     }
                 }
                 self.add_issue(issue(
@@ -85,7 +86,7 @@ impl Validator<'_> {
                         Value::List(values.iter().map(Value::from).collect()),
                     )],
                 ));
-                Ok(value.clone())
+                self.clone_value(value)
             }
             SchemaKind::Union { variants } => {
                 for variant in variants {
@@ -106,7 +107,7 @@ impl Validator<'_> {
                     "value does not satisfy any union variant",
                     [("variants", Value::Int(variants.len().into()))],
                 ));
-                Ok(value.clone())
+                self.clone_value(value)
             }
             SchemaKind::String {
                 minimum_length,
@@ -114,7 +115,7 @@ impl Validator<'_> {
             } => {
                 let Value::String(text) = value else {
                     self.add_type_issue(path, "string", value);
-                    return Ok(value.clone());
+                    return self.clone_value(value);
                 };
                 let length = BigInt::from(text.chars().count());
                 if &length < minimum_length {
@@ -145,12 +146,12 @@ impl Validator<'_> {
                         ],
                     ));
                 }
-                Ok(value.clone())
+                self.clone_value(value)
             }
             SchemaKind::Integer { minimum, maximum } => {
                 let Value::Int(integer) = value else {
                     self.add_type_issue(path, "integer", value);
-                    return Ok(value.clone());
+                    return self.clone_value(value);
                 };
                 if minimum.as_ref().is_some_and(|bound| integer < bound) {
                     self.add_issue(issue(
@@ -174,13 +175,13 @@ impl Validator<'_> {
                         ],
                     ));
                 }
-                Ok(value.clone())
+                self.clone_value(value)
             }
             SchemaKind::Boolean => {
                 if !matches!(value, Value::Bool(_)) {
                     self.add_type_issue(path, "boolean", value);
                 }
-                Ok(value.clone())
+                self.clone_value(value)
             }
             SchemaKind::List {
                 item,
@@ -189,7 +190,7 @@ impl Validator<'_> {
             } => {
                 let Value::List(values) = value else {
                     self.add_type_issue(path, "list", value);
-                    return Ok(value.clone());
+                    return self.clone_value(value);
                 };
                 let length = u64::try_from(values.len()).unwrap_or(u64::MAX);
                 if length < *minimum_length {
@@ -226,6 +227,12 @@ impl Validator<'_> {
         }
     }
 
+    fn clone_value(&mut self, value: &Value) -> AilResult<Value> {
+        self.budget
+            .consume(measure_runtime_value(value)?.fuel_cost())?;
+        Ok(value.clone())
+    }
+
     fn visit_object(
         &mut self,
         fields: &[SchemaField],
@@ -234,7 +241,7 @@ impl Validator<'_> {
     ) -> AilResult<Value> {
         let Value::Map(mapping) = value else {
             self.add_type_issue(path, "object", value);
-            return Ok(value.clone());
+            return self.clone_value(value);
         };
         let mut normalized = BTreeMap::new();
         for field in fields {

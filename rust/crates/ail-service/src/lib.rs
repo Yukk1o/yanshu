@@ -399,8 +399,8 @@ impl CapabilityHost for ServiceHost {
             "kv-put" => {
                 let key = expect_kv_key(operation, &arguments[0])?.to_owned();
                 let value = arguments[1].clone();
-                self.working.insert(key, value.clone());
-                Ok(value)
+                self.working.insert(key, value);
+                Ok(Value::Nil)
             }
             "kv-delete" => {
                 let key = expect_kv_key(operation, &arguments[0])?;

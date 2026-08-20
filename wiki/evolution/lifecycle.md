@@ -8,7 +8,7 @@ AI-Evolve 的演化规则可以浓缩为一句：**模型有提案权，没有�
 活动源码 + 结构化观察
           │
           ▼
-     LLM provider
+ AI / Agent provider
           │ 完整候选 .ail + notes
           ▼
   Reader / Parser / AST
@@ -43,7 +43,7 @@ AI-Evolve 的演化规则可以浓缩为一句：**模型有提案权，没有�
 | 语言版本 | `(version 2)` / metadata `languageVersion: 2` | 这份程序按哪套 AST、Schema 和 primitive 语义解释？ |
 | 内容身份 | 64 位 SHA-256 / metadata `hash` | 运行、测试或回滚的究竟是哪一份不可变源码？ |
 
-语言版本相同不代表代码相同；内容 hash 相同则必须逐字节对应同一份 UTF-8 源码。当前 Parser 只接受已实现的 v1/v2，避免 LLM 写出一个未来版本号后让运行时自行猜测语义。
+语言版本相同不代表代码相同；内容 hash 相同则必须逐字节对应同一份 UTF-8 源码。当前 Parser 只接受已实现并有门禁的 v1–v4，未来版本仍会被拒绝，不能让运行时自行猜测语义。
 
 这正是给自动修复循环准备的协议：固定父 hash 与语言版本 → 消费结构化失败和成本 → 生成完整候选 → 得到新 hash → 重新跑同一门禁 → 注册、拒绝或晋升。循环不需要解析人类终端文本，也不能就地覆盖活动源码。
 
@@ -55,6 +55,7 @@ AI-Evolve 的演化规则可以浓缩为一句：**模型有提案权，没有�
 {
   "currentHash": "...",
   "currentSource": "(program ...)",
+  "objective": "本次要新增或修复的目标",
   "observations": {
     "passed": false,
     "failures": []
@@ -62,7 +63,7 @@ AI-Evolve 的演化规则可以浓缩为一句：**模型有提案权，没有�
 }
 ```
 
-源码和 observations 都是不可信 prompt 数据，不能提升成系统指令。Provider 只能返回完整候选与说明：
+objective、源码和 observations 都是不可信 prompt 数据，不能提升成系统指令。Provider 只能返回完整候选与说明：
 
 ```json
 {
@@ -72,6 +73,8 @@ AI-Evolve 的演化规则可以浓缩为一句：**模型有提案权，没有�
 ```
 
 OpenAI adapter 使用 Responses API 的严格 JSON Schema；DeepSeek adapter 使用 Chat Completions JSON Output。无论远端怎样约束，宿主都要再次验证字段、大小和候选语法。
+
+也可以选择 Codex、Claude Code 或 OpenCode Agent Backend。它们在一次性候选目录中编辑 `candidate.ail`，真实 suite、code store 与 active 指针不交给 agent；宿主在进程退出后仍重新执行同一门禁。详见 [AI Agent Backend](/development/ai-agents)。
 
 ## 2. 密钥留在宿主侧
 

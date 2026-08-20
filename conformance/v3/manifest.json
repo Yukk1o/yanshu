@@ -1,0 +1,27 @@
+{
+  "formatVersion": 1,
+  "cases": [
+    {
+      "name": "v3-user-data-and-pattern-match",
+      "phase": "run",
+      "source": "programs/data.ail",
+      "entry": "render",
+      "args": [{"$int": "1200"}],
+      "expect": {
+        "kind": "value",
+        "value": {"status": "review", "amount": {"$int": "1200"}, "reason": "manual"}
+      }
+    },
+    {
+      "name": "v3-total-match-negative-branch",
+      "phase": "run",
+      "source": "programs/data.ail",
+      "entry": "render",
+      "args": [{"$int": "-1"}],
+      "expect": {
+        "kind": "value",
+        "value": {"status": "rejected", "reason": "negative"}
+      }
+    }
+  ]
+}

@@ -83,6 +83,26 @@ mod tests {
     }
 
     #[test]
+    fn text_replace_rejects_output_amplification_before_allocation() {
+        let mut registry = LibraryRegistry::rust_standard();
+        let replacement = "x".repeat(1024 * 1024);
+        let diagnostic = match registry.invoke(
+            "text",
+            1,
+            "replace",
+            &[
+                LibraryValue::String("a".to_owned()),
+                LibraryValue::String(String::new()),
+                LibraryValue::String(replacement),
+            ],
+        ) {
+            Err(diagnostic) => diagnostic,
+            Ok(_) => panic!("replacement expansion must be rejected"),
+        };
+        assert_eq!(diagnostic.code, "RUNTIME_LIBRARY_RESULT_LIMIT");
+    }
+
+    #[test]
     fn registry_rejects_shape_changes_and_redacts_backend_failures() {
         let mut invalid = LibraryRegistry::default();
         let diagnostic = match invalid.register(Box::new(InvalidBackend)) {

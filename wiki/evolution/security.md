@@ -31,7 +31,9 @@ schema issue / collection limits
 HTTP target / header / body / response limits
 ```
 
-fuel 是确定性步骤预算，适合阻止无限递归；它不是完整的内存或墙钟隔离。当前同步解释任务运行在 blocking worker，尚不能安全强制取消已经产生副作用的工作。生产版需要可终止的独立进程或更强沙箱。
+fuel 不只计算语法步骤，也计算值节点、标量字节、整数位数、集合/Schema 遍历和高成本 BigInt 操作。Reader 在解析 BigInt 前限制源码与 token；运行时对输入、常量、变量复制、返回值以及 capability/Library Backend 结果使用统一的深度、节点和字节包络。字符串拼接与 `text/replace` 输出放大在分配前拒绝，解释器与字节码 VM 具有相同耗尽边界。
+
+这些结构性上限使受限执行不再只靠“循环计步”，但它仍不是操作系统级墙钟或地址空间隔离。当前同步任务运行在 blocking worker；生产版仍应使用可终止的独立进程或更强沙箱处理宿主缺陷和可信 Backend 故障。
 
 ## 能力默认拒绝
 
@@ -50,6 +52,8 @@ fuel 是确定性步骤预算，适合阻止无限递归；它不是完整的内
 
 provider key 只从宿主环境读取，不进入 guest environment、prompt 中的源码/观察、诊断、版本 metadata 或仓库文件。HTTP provider adapter 只允许 HTTPS、拒绝 redirect、限制请求/响应大小与时间，并对密钥使用零化容器。
 
+Codex、Claude Code 与 OpenCode Agent Backend 不继承名称包含 key/token/secret/password/credential 的环境变量。它们只在一次性候选目录中工作，进程有超时，输出限为普通有界 UTF-8 文件；宿主随后独立解析和测试。候选目录不是完整 OS 沙箱，高风险环境仍需容器或独立低权限账户，详见 [AI Agent Backend](/development/ai-agents)。
+
 ## HTTP 边界
 
 当前 Rust server：
@@ -57,7 +61,8 @@ provider key 只从宿主环境读取，不进入 guest environment、prompt 中
 - 只允许 IPv4 / IPv6 loopback 监听；
 - 可用 `AI_EVOLVE_HTTP_BEARER_TOKEN` 启用单 token Bearer 认证；
 - 由宿主生成 request ID，不信任客户端 `x-request-id`；
-- 不把 `authorization`、`cookie`、`proxy-authorization`、`x-api-key` 传给 guest；
+- 不把认证、cookie、credential/secret token 与宿主 request ID 传给 guest；
+- 拒绝 guest 设置 `content-length`、`transfer-encoding`、`connection`、`upgrade`、认证和 cookie 等宿主专属响应头；
 - 每个请求读取并固定一次 active hash；
 - 写入不含 path、query、headers、body 和诊断详情的有界 JSONL 观测。
 - 可把候选放入有并发上限的影子执行；候选只读取请求前 KV 快照，全部写入与响应都会丢弃。
@@ -79,7 +84,7 @@ provider key 只从宿主环境读取，不进入 guest environment、prompt 中
 
 ## 备份与恢复边界
 
-单机文件后端提供离线 `backup-service`、只读 `verify-backup` 和拒绝覆盖的 `restore-service`。server 在整个生命周期持有 service lock，备份同时持有版本库锁，避免活动指针、版本事件或 KV 在快照中间变化。
+单机文件后端提供离线 `backup-service`、只读 `verify-backup` 和拒绝覆盖的 `restore-service`。server 在整个生命周期持有 service lock，备份同时持有版本库锁，避免活动指针、版本事件或 KV 在快照中间变化。恢复先写入不可见的同级暂存目标并完成语义校验，最后才提交；失败清理不会删除并发进程刚获得的版本锁。
 
 manifest 逐文件记录 SHA-256 和大小，验证还会检查版本事件与 KV 语义；恢复目标必须不存在。快照不包含 provider 密钥、TLS/反向代理配置、操作系统权限或观测日志，也不替代加密、签名、异地复制和恢复演练。命令见 [CLI 参考](/reference/cli#离线备份校验与恢复)。
 

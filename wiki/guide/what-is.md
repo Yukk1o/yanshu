@@ -90,7 +90,7 @@ Program {
 
 ## 通用语言目标与当前边界
 
-AI-Evolve v0.9 已有用户模块、typed 封闭数据、模式匹配、密封 Bundle、导出签名、静态 capability 闭包、Rust 风格只读审查、内容寻址包/锁文件和可替换 Rust Library Backend，但仍处于通用语言的安全内核阶段，还不是通用系统语言或公网生产框架。它尚无编译目标、并发、浮点数及通用文件/网络 API；宿主侧也仍缺少独立进程沙箱、正式数据库/PITR、异地备份、指标告警和 canary 自动化。
+AI-Evolve v0.10 已有用户模块、typed 封闭数据、模式匹配、密封 Bundle、导出签名、静态 capability 闭包、Rust 风格只读审查、内容寻址包/锁文件、可替换 Rust Library Backend，以及 fuel 字节码 VM 与可实例化 WASM ABI，但仍处于通用语言的安全内核阶段，还不是通用系统语言或公网生产框架。它尚无原生 WASM lowering、并发、浮点数及通用文件/网络 API；宿主侧也仍缺少独立进程沙箱、正式数据库/PITR、异地备份、指标告警和 canary 自动化。
 
 这些既是阶段性功能缺口，也是不可绕过的设计约束。新能力必须通过版本化语义、密封 Bundle 和明确 capability/effect 引入，不能让模型靠调用未知宿主函数越过边界。目标是安全的通用应用语言，而不是拥有环境权限和任意 `unsafe` 的系统语言。
 

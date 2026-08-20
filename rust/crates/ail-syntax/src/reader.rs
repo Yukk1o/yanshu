@@ -10,6 +10,9 @@ use crate::{Datum, DatumKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReaderLimits {
+    pub max_source_bytes: usize,
+    pub max_token_bytes: usize,
+    pub max_string_bytes: usize,
     pub max_nodes: usize,
     pub max_depth: usize,
 }
@@ -17,6 +20,9 @@ pub struct ReaderLimits {
 impl Default for ReaderLimits {
     fn default() -> Self {
         Self {
+            max_source_bytes: 4 * 1024 * 1024,
+            max_token_bytes: 64 * 1024,
+            max_string_bytes: 1024 * 1024,
             max_nodes: 10_000,
             max_depth: 128,
         }
@@ -24,6 +30,13 @@ impl Default for ReaderLimits {
 }
 
 pub fn read_source(source: &str, limits: ReaderLimits) -> AilResult<Datum> {
+    if source.len() > limits.max_source_bytes {
+        return Err(Diagnostic::new(
+            "READ_SOURCE_LIMIT",
+            "source exceeds the configured byte limit",
+            json!({ "maximum": limits.max_source_bytes, "actual": source.len() }),
+        ));
+    }
     let mut reader = Reader::new(source, limits);
     reader.skip_ignored();
     if reader.peek().is_none() {
@@ -235,8 +248,12 @@ impl<'source> Reader<'source> {
                         None => return Err(self.syntax("unterminated string escape", start)),
                     };
                     value.push(escaped);
+                    self.check_string_limit(value.len(), start)?;
                 }
-                Some(character) => value.push(character),
+                Some(character) => {
+                    value.push(character);
+                    self.check_string_limit(value.len(), start)?;
+                }
                 None => return Err(self.syntax("unterminated string", start)),
             }
         }
@@ -253,6 +270,17 @@ impl<'source> Reader<'source> {
                 )
         }) {
             let _character = self.bump();
+            if self.offset.saturating_sub(token_start) > self.limits.max_token_bytes {
+                return Err(Diagnostic::new(
+                    "READ_TOKEN_LIMIT",
+                    "source token exceeds the configured byte limit",
+                    json!({ "maximum": self.limits.max_token_bytes }),
+                )
+                .at(Span {
+                    start,
+                    end: self.position(),
+                }));
+            }
         }
         let token = self
             .source
@@ -294,6 +322,21 @@ impl<'source> Reader<'source> {
             start,
             end: self.position(),
         })
+    }
+
+    fn check_string_limit(&self, actual: usize, start: Position) -> AilResult<()> {
+        if actual <= self.limits.max_string_bytes {
+            return Ok(());
+        }
+        Err(Diagnostic::new(
+            "READ_STRING_LIMIT",
+            "string literal exceeds the configured byte limit",
+            json!({ "maximum": self.limits.max_string_bytes }),
+        )
+        .at(Span {
+            start,
+            end: self.position(),
+        }))
     }
 }
 
@@ -351,6 +394,7 @@ mod tests {
             ReaderLimits {
                 max_nodes: 2,
                 max_depth: 10,
+                ..ReaderLimits::default()
             },
         ));
         assert_eq!(nodes.code, "READ_NODE_LIMIT");
@@ -360,8 +404,39 @@ mod tests {
             ReaderLimits {
                 max_nodes: 10,
                 max_depth: 1,
+                ..ReaderLimits::default()
             },
         ));
         assert_eq!(depth.code, "READ_DEPTH_LIMIT");
+    }
+
+    #[test]
+    fn rejects_oversized_sources_tokens_and_strings_before_parsing_them() {
+        let source = require_error(read_source(
+            "(abcd)",
+            ReaderLimits {
+                max_source_bytes: 5,
+                ..ReaderLimits::default()
+            },
+        ));
+        assert_eq!(source.code, "READ_SOURCE_LIMIT");
+
+        let token = require_error(read_source(
+            "abcd",
+            ReaderLimits {
+                max_token_bytes: 3,
+                ..ReaderLimits::default()
+            },
+        ));
+        assert_eq!(token.code, "READ_TOKEN_LIMIT");
+
+        let string = require_error(read_source(
+            "\"four\"",
+            ReaderLimits {
+                max_string_bytes: 3,
+                ..ReaderLimits::default()
+            },
+        ));
+        assert_eq!(string.code, "READ_STRING_LIMIT");
     }
 }

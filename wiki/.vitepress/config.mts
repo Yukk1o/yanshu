@@ -41,6 +41,7 @@ export default defineConfig({
           { text: '模块、数据类型与 Bundle', link: '/language/modules-bundles' },
           { text: '类型、效果与只读审查', link: '/language/types-effects-review' },
           { text: '内容寻址包与锁文件', link: '/language/packages-lockfiles' },
+          { text: 'fuel 字节码与 WASM', link: '/language/bytecode-wasm' },
           { text: 'Schema 与统一错误', link: '/backend/schema-errors' },
           { text: '标准库与 Library Backend', link: '/language/standard-library' },
           { text: 'Web DSL 与路由', link: '/backend/web' }
@@ -60,6 +61,7 @@ export default defineConfig({
           { text: '实现架构', link: '/guide/architecture' },
           { text: 'CLI 参考', link: '/reference/cli' },
           { text: '源码地图', link: '/reference/source-map' },
+          { text: 'AI Agent Backend', link: '/development/ai-agents' },
           { text: 'Rust 宿主与生态路线', link: '/development/rust-roadmap' },
           { text: 'Git 分支工作流', link: '/development/git-workflow' },
           { text: '维护 Wiki', link: '/development/wiki' }

@@ -1,0 +1,18 @@
+(program
+  (name conformance-app)
+  (version 4)
+  (imports conformance-policy)
+
+  (signature describe (fn (decision) map))
+  (def describe
+    (fn (decision)
+      (match decision
+        ((approved value) (map "status" "approved" "amount" value))
+        ((review value reason) (map "status" "review" "amount" value "reason" reason))
+        ((rejected reason) (map "status" "rejected" "reason" reason))
+        (_ (map "status" "invalid")))))
+
+  (signature evaluate (fn (integer) map))
+  (def evaluate (fn (amount) (describe (decide amount))))
+
+  (export evaluate))

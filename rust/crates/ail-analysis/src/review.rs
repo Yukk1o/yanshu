@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use ail_syntax::{Expression, ExpressionKind, Pattern, PatternKind, Program};
 use serde_json::{Value, json};
@@ -56,9 +56,14 @@ impl ReviewNode {
 
 #[must_use]
 pub fn render_rust_review(program: &Program, report: &AnalysisReport) -> ReviewDocument {
-    let context = RenderContext::new(program);
+    let context = RenderContext::new(program, report);
     let mut text = String::from(
-        "// Generated semantic review — READ ONLY.\n// This is not Rust source and cannot be executed.\n",
+        "// Generated semantic review — READ ONLY.\n\
+// This is not Rust source and cannot be executed.\n\
+// semantic Int = arbitrary-precision integer (never i32/i64).\n\
+// semantic truthy(value) = false only for Bool(false).\n\
+// calls spelled name!(...) directly or transitively perform capability effects.\n\
+// semantic a and_then b / a or_else b = short-circuit and return an operand.\n",
     );
     text.push_str(&format!(
         "// capability closure: [{}]\n\n",
@@ -122,7 +127,7 @@ pub fn render_rust_review(program: &Program, report: &AnalysisReport) -> ReviewD
         });
     }
     ReviewDocument {
-        renderer: "rust-readonly-v1",
+        renderer: "rust-readonly-v3",
         editable: false,
         text,
         nodes,
@@ -136,6 +141,7 @@ fn render_definition(
     context: &RenderContext,
 ) -> String {
     if let ExpressionKind::Function { parameters, body } = &expression.kind {
+        let scope = parameters.iter().cloned().collect::<BTreeSet<_>>();
         let (parameter_types, result_type) = match inferred_type {
             Type::Function { parameters, result } => (parameters.as_slice(), result.as_ref()),
             _ => (&[][..], inferred_type),
@@ -155,37 +161,43 @@ fn render_definition(
             "fn {}({parameters}) -> {} {{\n    {}\n}}",
             rust_value_name(name),
             render_type(result_type),
-            render_expression(body, context, 1)
+            render_expression(body, context, &scope, 1)
         )
     } else {
+        let scope = BTreeSet::new();
         format!(
             "let {}: {} = {};",
             rust_value_name(name),
             render_type(inferred_type),
-            render_expression(expression, context, 0)
+            render_expression(expression, context, &scope, 0)
         )
     }
 }
 
-fn render_expression(expression: &Expression, context: &RenderContext, level: usize) -> String {
+fn render_expression(
+    expression: &Expression,
+    context: &RenderContext,
+    scope: &BTreeSet<String>,
+    level: usize,
+) -> String {
     match &expression.kind {
         ExpressionKind::Literal(datum) | ExpressionKind::Quote(datum) => datum.display(),
-        ExpressionKind::Variable(name) => context.render_variable(name),
+        ExpressionKind::Variable(name) => context.render_variable(name, scope),
         ExpressionKind::If {
             condition,
             consequent,
             alternative,
-        } => render_if(condition, consequent, alternative, context, level),
+        } => render_if(condition, consequent, alternative, context, scope, level),
         ExpressionKind::And(items) => items
             .iter()
-            .map(|item| render_expression(item, context, level))
+            .map(|item| render_expression(item, context, scope, level))
             .collect::<Vec<_>>()
-            .join(" && "),
+            .join(" and_then "),
         ExpressionKind::Or(items) => items
             .iter()
-            .map(|item| render_expression(item, context, level))
+            .map(|item| render_expression(item, context, scope, level))
             .collect::<Vec<_>>()
-            .join(" || "),
+            .join(" or_else "),
         ExpressionKind::Cond {
             clauses,
             alternative,
@@ -193,29 +205,46 @@ fn render_expression(expression: &Expression, context: &RenderContext, level: us
             let mut rendered = String::new();
             for (index, clause) in clauses.iter().enumerate() {
                 rendered.push_str(if index == 0 { "if " } else { " else if " });
-                rendered.push_str(&render_expression(&clause.condition, context, level));
+                rendered.push_str("truthy(");
+                rendered.push_str(&render_expression(&clause.condition, context, scope, level));
+                rendered.push(')');
                 rendered.push_str(" {\n");
                 rendered.push_str(&indent(level + 1));
-                rendered.push_str(&render_expression(&clause.expression, context, level + 1));
+                rendered.push_str(&render_expression(
+                    &clause.expression,
+                    context,
+                    scope,
+                    level + 1,
+                ));
                 rendered.push('\n');
                 rendered.push_str(&indent(level));
                 rendered.push('}');
             }
             rendered.push_str(" else {\n");
             rendered.push_str(&indent(level + 1));
-            rendered.push_str(&render_expression(alternative, context, level + 1));
+            rendered.push_str(&render_expression(alternative, context, scope, level + 1));
             rendered.push('\n');
             rendered.push_str(&indent(level));
             rendered.push('}');
             rendered
         }
         ExpressionKind::Match { value, arms } => {
-            let mut rendered = format!("match {} {{\n", render_expression(value, context, level));
+            let mut rendered = format!(
+                "match {} {{\n",
+                render_expression(value, context, scope, level)
+            );
             for arm in arms {
+                let mut arm_scope = scope.clone();
+                collect_pattern_bindings(&arm.pattern, &mut arm_scope);
                 rendered.push_str(&indent(level + 1));
                 rendered.push_str(&render_pattern(&arm.pattern, context));
                 rendered.push_str(" => ");
-                rendered.push_str(&render_expression(&arm.expression, context, level + 1));
+                rendered.push_str(&render_expression(
+                    &arm.expression,
+                    context,
+                    &arm_scope,
+                    level + 1,
+                ));
                 rendered.push_str(",\n");
             }
             rendered.push_str(&indent(level));
@@ -224,35 +253,41 @@ fn render_expression(expression: &Expression, context: &RenderContext, level: us
         }
         ExpressionKind::Let { bindings, body } => {
             let mut rendered = String::from("{\n");
+            let mut local_scope = scope.clone();
             for binding in bindings {
                 rendered.push_str(&indent(level + 1));
                 rendered.push_str(&format!(
                     "let {} = {};\n",
                     rust_value_name(&binding.name),
-                    render_expression(&binding.expression, context, level + 1)
+                    render_expression(&binding.expression, context, &local_scope, level + 1)
                 ));
+                local_scope.insert(binding.name.clone());
             }
             rendered.push_str(&indent(level + 1));
-            rendered.push_str(&render_expression(body, context, level + 1));
+            rendered.push_str(&render_expression(body, context, &local_scope, level + 1));
             rendered.push('\n');
             rendered.push_str(&indent(level));
             rendered.push('}');
             rendered
         }
-        ExpressionKind::Function { parameters, body } => format!(
-            "|{}| {}",
-            parameters
-                .iter()
-                .map(|name| rust_value_name(name))
-                .collect::<Vec<_>>()
-                .join(", "),
-            render_expression(body, context, level)
-        ),
+        ExpressionKind::Function { parameters, body } => {
+            let mut function_scope = scope.clone();
+            function_scope.extend(parameters.iter().cloned());
+            format!(
+                "|{}| {}",
+                parameters
+                    .iter()
+                    .map(|name| rust_value_name(name))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                render_expression(body, context, &function_scope, level)
+            )
+        }
         ExpressionKind::Do(items) => {
             let mut rendered = String::from("{\n");
             for (index, item) in items.iter().enumerate() {
                 rendered.push_str(&indent(level + 1));
-                rendered.push_str(&render_expression(item, context, level + 1));
+                rendered.push_str(&render_expression(item, context, scope, level + 1));
                 if index + 1 < items.len() {
                     rendered.push(';');
                 }
@@ -264,6 +299,7 @@ fn render_expression(expression: &Expression, context: &RenderContext, level: us
         }
         ExpressionKind::Call { callee, arguments } => {
             if let ExpressionKind::Variable(name) = &callee.kind
+                && !scope.contains(name)
                 && let Some((data_type, variant, fields)) = context.constructors.get(name)
             {
                 return format!(
@@ -276,13 +312,14 @@ fn render_expression(expression: &Expression, context: &RenderContext, level: us
                         .map(|(field, argument)| format!(
                             "{}: {}",
                             rust_value_name(field),
-                            render_expression(argument, context, level)
+                            render_expression(argument, context, scope, level)
                         ))
                         .collect::<Vec<_>>()
                         .join(", ")
                 );
             }
             if let ExpressionKind::Variable(operator) = &callee.kind
+                && context.is_primitive_reference(operator, scope)
                 && matches!(
                     operator.as_str(),
                     "+" | "-" | "*" | "=" | "<" | "<=" | ">" | ">="
@@ -292,41 +329,39 @@ fn render_expression(expression: &Expression, context: &RenderContext, level: us
                 let operator = if operator == "=" { "==" } else { operator };
                 return format!(
                     "({} {operator} {})",
-                    render_expression(&arguments[0], context, level),
-                    render_expression(&arguments[1], context, level)
+                    render_expression(&arguments[0], context, scope, level),
+                    render_expression(&arguments[1], context, scope, level)
                 );
             }
             if callee.kind == ExpressionKind::Variable("map".to_owned())
+                && context.is_primitive_reference("map", scope)
                 && arguments.len().is_multiple_of(2)
             {
-                let mut rendered = String::from("map! {\n");
+                let mut rendered = String::from("map {\n");
                 for pair in arguments.chunks_exact(2) {
                     rendered.push_str(&indent(level + 1));
-                    rendered.push_str(&render_expression(&pair[0], context, level + 1));
+                    rendered.push_str(&render_expression(&pair[0], context, scope, level + 1));
                     rendered.push_str(" => ");
-                    rendered.push_str(&render_expression(&pair[1], context, level + 1));
+                    rendered.push_str(&render_expression(&pair[1], context, scope, level + 1));
                     rendered.push_str(",\n");
                 }
                 rendered.push_str(&indent(level));
                 rendered.push('}');
                 return rendered;
             }
-            let rendered_callee = render_expression(callee, context, level);
-            let rendered_arguments = arguments
-                .iter()
-                .map(|argument| render_expression(argument, context, level + 1))
-                .collect::<Vec<_>>();
-            let inline = format!("{rendered_callee}({})", rendered_arguments.join(", "));
-            if inline.len() <= 88 && !inline.contains('\n') {
-                inline
-            } else {
-                format!(
-                    "{rendered_callee}(\n{}{}\n{})",
-                    indent(level + 1),
-                    rendered_arguments.join(&format!(",\n{}", indent(level + 1))),
-                    indent(level)
-                )
+            if let ExpressionKind::Variable(name) = &callee.kind
+                && let Some(effect_name) = context.effect_call_name(name, scope)
+            {
+                return render_invocation(
+                    &format!("{effect_name}!"),
+                    arguments,
+                    context,
+                    scope,
+                    level,
+                );
             }
+            let rendered_callee = render_expression(callee, context, scope, level);
+            render_invocation(&rendered_callee, arguments, context, scope, level)
         }
     }
 }
@@ -336,18 +371,55 @@ fn render_if(
     consequent: &Expression,
     alternative: &Expression,
     context: &RenderContext,
+    scope: &BTreeSet<String>,
     level: usize,
 ) -> String {
     format!(
-        "if {} {{\n{}{}\n{}}} else {{\n{}{}\n{}}}",
-        render_expression(condition, context, level),
+        "if truthy({}) {{\n{}{}\n{}}} else {{\n{}{}\n{}}}",
+        render_expression(condition, context, scope, level),
         indent(level + 1),
-        render_expression(consequent, context, level + 1),
+        render_expression(consequent, context, scope, level + 1),
         indent(level),
         indent(level + 1),
-        render_expression(alternative, context, level + 1),
+        render_expression(alternative, context, scope, level + 1),
         indent(level),
     )
+}
+
+fn render_invocation(
+    callee: &str,
+    arguments: &[Expression],
+    context: &RenderContext,
+    scope: &BTreeSet<String>,
+    level: usize,
+) -> String {
+    let rendered_arguments = arguments
+        .iter()
+        .map(|argument| render_expression(argument, context, scope, level + 1))
+        .collect::<Vec<_>>();
+    let inline = format!("{callee}({})", rendered_arguments.join(", "));
+    if inline.len() <= 88 && !inline.contains('\n') {
+        inline
+    } else {
+        format!(
+            "{callee}(\n{}{}\n{})",
+            indent(level + 1),
+            rendered_arguments.join(&format!(",\n{}", indent(level + 1))),
+            indent(level)
+        )
+    }
+}
+
+fn capability_effect_name(name: &str) -> Option<&'static str> {
+    match name {
+        "log" => Some("log"),
+        "now-ms" => Some("now_ms"),
+        "kv-get" => Some("kv_get"),
+        "kv-put" => Some("kv_put"),
+        "kv-delete" => Some("kv_delete"),
+        "kv-list" => Some("kv_list"),
+        _ => None,
+    }
 }
 
 fn indent(level: usize) -> String {
@@ -363,7 +435,7 @@ fn render_pattern(pattern: &Pattern, context: &RenderContext) -> String {
             || {
                 format!(
                     "{}({})",
-                    context.render_variable(name),
+                    rust_value_name(name),
                     fields
                         .iter()
                         .map(|field| render_pattern(field, context))
@@ -392,12 +464,28 @@ fn render_pattern(pattern: &Pattern, context: &RenderContext) -> String {
     }
 }
 
+fn collect_pattern_bindings(pattern: &Pattern, bindings: &mut BTreeSet<String>) {
+    match &pattern.kind {
+        PatternKind::Binding(name) => {
+            bindings.insert(name.clone());
+        }
+        PatternKind::Variant { fields, .. } => {
+            for field in fields {
+                collect_pattern_bindings(field, bindings);
+            }
+        }
+        PatternKind::Wildcard | PatternKind::Literal(_) => {}
+    }
+}
+
 struct RenderContext {
     constructors: BTreeMap<String, (String, String, Vec<String>)>,
+    definitions: BTreeSet<String>,
+    effectful_definitions: BTreeMap<String, Vec<String>>,
 }
 
 impl RenderContext {
-    fn new(program: &Program) -> Self {
+    fn new(program: &Program, report: &AnalysisReport) -> Self {
         let constructors = program
             .data_types
             .iter()
@@ -418,10 +506,28 @@ impl RenderContext {
                 })
             })
             .collect();
-        Self { constructors }
+        let effectful_definitions = report
+            .definitions
+            .iter()
+            .filter(|definition| !definition.capabilities.is_empty())
+            .map(|definition| (definition.name.clone(), definition.capabilities.clone()))
+            .collect();
+        let definitions = program
+            .definitions
+            .iter()
+            .map(|definition| definition.name.clone())
+            .collect();
+        Self {
+            constructors,
+            definitions,
+            effectful_definitions,
+        }
     }
 
-    fn render_variable(&self, name: &str) -> String {
+    fn render_variable(&self, name: &str, scope: &BTreeSet<String>) -> String {
+        if scope.contains(name) {
+            return rust_value_name(name);
+        }
         self.constructors.get(name).map_or_else(
             || rust_value_name(name),
             |(data_type, variant, _)| {
@@ -432,6 +538,25 @@ impl RenderContext {
                 )
             },
         )
+    }
+
+    fn effect_call_name(&self, name: &str, scope: &BTreeSet<String>) -> Option<String> {
+        if scope.contains(name) {
+            return None;
+        }
+        if self.effectful_definitions.contains_key(name) {
+            return Some(self.render_variable(name, scope));
+        }
+        if self.definitions.contains(name) || self.constructors.contains_key(name) {
+            return None;
+        }
+        capability_effect_name(name).map(str::to_owned)
+    }
+
+    fn is_primitive_reference(&self, name: &str, scope: &BTreeSet<String>) -> bool {
+        !scope.contains(name)
+            && !self.definitions.contains(name)
+            && !self.constructors.contains_key(name)
     }
 }
 

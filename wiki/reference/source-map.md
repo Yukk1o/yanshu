@@ -46,6 +46,20 @@
 | [analysis/effects.rs](/source/rust/crates/ail-analysis/src/effects.rs.txt) | export 调用闭包、高阶 callback 与 capability 校验 |
 | [analysis/review.rs](/source/rust/crates/ail-analysis/src/review.rs.txt) | 永久只读的 Rust 风格 semantic projection |
 
+## 编译器与 WASM
+
+| 文件 | 看什么 |
+| --- | --- |
+| [compiler/bytecode.rs](/source/rust/crates/ail-compiler/src/bytecode.rs.txt) | 最小栈式指令、code block 与规范 JSON |
+| [compiler/compile.rs](/source/rust/crates/ail-compiler/src/compile.rs.txt) | 从已验证 AST 降低控制流、闭包、scope 与 pattern |
+| [compiler/verify.rs](/source/rust/crates/ail-compiler/src/verify.rs.txt) | jump、stack、scope、return 与规模上限 verifier |
+| [compiler/artifact.rs](/source/rust/crates/ail-compiler/src/artifact.rs.txt) | Program 指纹、artifact hash、规范 envelope 与同源重验 |
+| [compiler/wasm.rs](/source/rust/crates/ail-compiler/src/wasm.rs.txt) | 标准 WASM 编码、`ail_v1.execute` handle ABI 与 bytecode custom section |
+| [runtime/compiled.rs](/source/rust/crates/ail-runtime/src/compiled.rs.txt) | 验证后字节码执行循环、词法 scope、闭包、match 与语义 fuel 计费点 |
+| [runtime/lib.rs](/source/rust/crates/ail-runtime/src/lib.rs.txt) | 解释器和编译 VM 共享的 Value、primitive、Library/capability 与动态 fuel |
+
+编译产物不信任自己携带的声明。加载器以已验证 Program 或 package lock 重新生成规范产物再完整比较；VM 执行前仍运行 verifier。完整契约见 [fuel 字节码与 WASM](/language/bytecode-wasm)。
+
 ## 内容寻址包与锁文件
 
 | 文件 | 看什么 |
@@ -86,6 +100,7 @@ Go/Rust 读者最值得先看的类型是 `Program`、`ExpressionKind`、`Schema
 | [store/lib.rs](/source/rust/crates/ail-store/src/lib.rs.txt) | SHA-256、不可变源码校验、metadata、active、events、锁和原子写 |
 | [store/scenario.rs](/source/rust/crates/ail-store/src/scenario.rs.txt) | 注册、晋升、重启读取和回滚生命周期 |
 | [provider/lib.rs](/source/rust/crates/ail-provider/src/lib.rs.txt) | provider trait、OpenAI/DeepSeek adapter、HTTPS、大小/超时、密钥零化 |
+| [provider/agent.rs](/source/rust/crates/ail-provider/src/agent.rs.txt) | Codex/Claude Code/OpenCode 非交互适配、一次性候选目录、权限/超时/输出边界 |
 | [cli/main.rs](/source/rust/crates/ail-cli/src/main.rs.txt) | deploy/evolve 如何组合 Parser、suite 和 VersionStore |
 | [ops/operations.rs](/source/rust/crates/ail-ops/src/operations.rs.txt) | 离线 backup/verify/restore 的失败关闭流程 |
 | [ops/manifest.rs](/source/rust/crates/ail-ops/src/manifest.rs.txt) | snapshot schema、逐文件 SHA-256/大小与路径限制 |

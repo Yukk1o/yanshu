@@ -85,11 +85,20 @@ pub fn restore_backup(
     reject_existing(data_store, "RESTORE_TARGET_EXISTS")?;
 
     let payload = snapshot.join("payload");
-    let mut created_code = false;
-    let mut created_data = false;
+    let staged_code = create_temporary_directory(code_store)?;
+    let staged_data = if manifest.data_store_present {
+        match create_temporary_directory(data_store) {
+            Ok(directory) => Some(directory),
+            Err(diagnostic) => {
+                let _ignored = fs::remove_dir_all(&staged_code);
+                return Err(diagnostic);
+            }
+        }
+    } else {
+        None
+    };
+    let mut committed_data = false;
     let result = (|| -> AilResult<()> {
-        fs::create_dir(code_store).map_err(|_| restore_write_failure(code_store))?;
-        created_code = true;
         for entry in manifest
             .entries
             .iter()
@@ -98,33 +107,46 @@ pub fn restore_backup(
             let suffix = entry.relative.strip_prefix("code/").ok_or_else(|| {
                 Diagnostic::simple("BACKUP_INVALID_MANIFEST", "backup manifest is invalid")
             })?;
-            let target = join_safe_relative(code_store, suffix)?;
+            let target = join_safe_relative(&staged_code, suffix)?;
             let source = join_safe_relative(&payload, &entry.relative)?;
             write_new_file(&target, &read_bounded(&source, MAXIMUM_FILE_BYTES)?)?;
         }
-        if manifest.data_store_present {
+        if let Some(staged_data) = &staged_data {
             let source = payload.join("data").join("store.json");
-            write_new_file(data_store, &read_bounded(&source, MAXIMUM_FILE_BYTES)?)?;
-            created_data = true;
+            write_new_file(
+                &staged_data.join("store.json"),
+                &read_bounded(&source, MAXIMUM_FILE_BYTES)?,
+            )?;
         }
-        let (active, _) = validate_code_store(code_store, false)?;
+        let (active, _) = validate_code_store(&staged_code, false)?;
         if active != manifest.active_version {
             return Err(Diagnostic::simple(
                 "BACKUP_SEMANTIC_MISMATCH",
                 "restored active version does not match the verified manifest",
             ));
         }
-        if manifest.data_store_present {
-            FileKvStore::open(data_store)?;
+        if let Some(staged_data) = &staged_data {
+            FileKvStore::open(staged_data.join("store.json"))?;
         }
+
+        reject_existing(code_store, "RESTORE_TARGET_EXISTS")?;
+        reject_existing(data_store, "RESTORE_TARGET_EXISTS")?;
+        if let Some(staged_data) = &staged_data {
+            fs::rename(staged_data.join("store.json"), data_store)
+                .map_err(|_| restore_write_failure(data_store))?;
+            committed_data = true;
+            fs::remove_dir(staged_data).map_err(|_| restore_write_failure(staged_data))?;
+        }
+        fs::rename(&staged_code, code_store).map_err(|_| restore_write_failure(code_store))?;
         Ok(())
     })();
     if let Err(diagnostic) = result {
-        if created_data {
+        if committed_data {
             let _ignored = fs::remove_file(data_store);
         }
-        if created_code {
-            let _ignored = fs::remove_dir_all(code_store);
+        let _ignored = fs::remove_dir_all(&staged_code);
+        if let Some(staged_data) = &staged_data {
+            let _ignored = fs::remove_dir_all(staged_data);
         }
         return Err(diagnostic);
     }

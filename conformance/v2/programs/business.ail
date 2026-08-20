@@ -1,0 +1,21 @@
+(program
+  (name conformance-business-v2)
+  (version 2)
+
+  (schema action-schema (enum "approve" "reject"))
+
+  (def total
+    (fn (items)
+      (sum (list-filter (fn (value) (> value 0)) items))))
+
+  (def decide
+    (fn (action items)
+      (cond
+        ((and (= action "approve") (>= (total items) 100))
+          (ok (map "status" "review" "total" (total items))))
+        ((or (= action "approve") (= action "reject"))
+          (ok (map "status" action "total" (total items))))
+        (else
+          (err "invalid-action")))))
+
+  (export total decide))

@@ -1,0 +1,38 @@
+{
+  "formatVersion": 1,
+  "cases": [
+    {
+      "name": "v4-sealed-typed-bundle",
+      "phase": "run-bundle",
+      "source": "bundles/typed",
+      "entry": "evaluate",
+      "args": [{"$int": "1200"}],
+      "expect": {
+        "kind": "value",
+        "value": {"status": "review", "amount": {"$int": "1200"}, "reason": "manual"}
+      }
+    },
+    {
+      "name": "v4-bytecode-matches-linked-bundle",
+      "phase": "run-bundle-compiled",
+      "source": "bundles/typed",
+      "entry": "evaluate",
+      "args": [{"$int": "1200"}],
+      "expect": {
+        "kind": "value",
+        "value": {"status": "review", "amount": {"$int": "1200"}, "reason": "manual"}
+      }
+    },
+    {
+      "name": "v4-bytecode-negative-pattern-branch",
+      "phase": "run-bundle-compiled",
+      "source": "bundles/typed",
+      "entry": "evaluate",
+      "args": [{"$int": "-1"}],
+      "expect": {
+        "kind": "value",
+        "value": {"status": "rejected", "reason": "negative"}
+      }
+    }
+  ]
+}

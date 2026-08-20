@@ -1,0 +1,19 @@
+(program
+  (name conformance-policy)
+  (version 4)
+
+  (data decision
+    (approved (amount integer))
+    (review (amount integer) (reason string))
+    (rejected (reason string)))
+  (export-types decision)
+
+  (signature decide (fn (integer) decision))
+  (def decide
+    (fn (amount)
+      (cond
+        ((< amount 0) (rejected "negative"))
+        ((>= amount 1000) (review amount "manual"))
+        (else (approved amount)))))
+
+  (export decide approved review rejected))

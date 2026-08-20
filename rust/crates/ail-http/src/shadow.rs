@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{panic::AssertUnwindSafe, sync::Arc};
 
 use ail_diagnostic::{AilResult, Diagnostic};
 use ail_rollout::{
@@ -130,7 +130,27 @@ pub(crate) struct ShadowJob {
 }
 
 pub(crate) fn launch(job: Box<ShadowJob>) {
-    let _task = task::spawn_blocking(move || execute(*job));
+    let runtime = Arc::clone(&job.runtime);
+    let timestamp_ms = job.timestamp_ms;
+    let request_id = job.request_id.clone();
+    let active_version = job.active_version.clone();
+    let candidate_version = job.runtime.candidate_version().to_owned();
+    let _task = task::spawn_blocking(move || {
+        if std::panic::catch_unwind(AssertUnwindSafe(|| execute(*job))).is_err() {
+            let observation = ShadowObservation {
+                timestamp_ms,
+                request_id: request_id.clone(),
+                active_version,
+                candidate_version,
+                outcome: ShadowOutcome::CandidateUnavailable {
+                    error_code: "SHADOW_WORKER_PANIC".to_owned(),
+                },
+            };
+            if let Err(diagnostic) = runtime.record(&observation) {
+                report_failure(&request_id, &diagnostic);
+            }
+        }
+    });
 }
 
 fn execute(mut job: ShadowJob) {
