@@ -44,7 +44,7 @@ flowchart LR
 
 下面是一个 v4 模块。它声明了数据类型、函数签名和唯一允许的宿主能力 `log`：
 
-```lisp
+```text
 (program
   (name expense-policy)
   (version 4)
@@ -74,7 +74,7 @@ flowchart LR
 
 供人类审核时，同一程序会生成 Rust 风格的**只读语义视图**。`log!` 明确表示副作用；视图不能作为 Rust 或衍术源码重新执行：
 
-```rust
+```rs
 // Generated semantic review — READ ONLY.
 // semantic Int = bounded arbitrary-precision integer.
 
@@ -92,7 +92,7 @@ fn decide(amount: Int) -> Decision ![log] {
 
 需要仓库声明的 Rust 工具链；当前最低 Rust 版本是 1.97。在 PowerShell 中：
 
-```powershell
+```ps1
 # 解析并检查一个最小程序
 cargo run --locked -p yanshu-cli -- `
   inspect examples\discount\v2.yan
@@ -108,14 +108,14 @@ cargo run --locked -p yanshu-cli -- `
 
 构建 CLI 后，可以直接使用 `target\debug\yanshu.exe`：
 
-```powershell
+```ps1
 cargo build --locked -p yanshu-cli
 .\target\debug\yanshu.exe inspect examples\discount\v2.yan
 ```
 
 运行真实任务服务及 11 个有状态场景：
 
-```powershell
+```ps1
 cargo run --locked -p yanshu-cli -- `
   test-service examples\tasks\service.yan examples\tasks\scenarios.json
 
@@ -126,22 +126,22 @@ cargo run --locked -p yanshu-cli -- `
 
 ## 现在能做什么
 
-| 能力 | 当前实现 |
+|能力 |当前实现 |
 |---|---|
-| 程序即数据 | S-expression AST、稳定 span、机器可读诊断与规范 JSON |
-| 业务表达 | 短路 `and/or`、`cond`、集合处理、Schema、Result、模式匹配 |
-| 模块化 | 用户数据类型、导出签名、密封 Bundle、模块链接 |
-| 静态审查 | 类型推断、效果分析、capability 闭包、Rust 风格只读视图 |
-| 供应链 | 内容寻址 package、闭包锁文件、全量重验 |
-| 受限执行 | 调用深度、值边界、Reader 边界与显式 fuel 计量 |
-| 编译路径 | 规范字节码、verifier、解释器/VM 差分与 WASM handle ABI |
-| 宿主生态 | 安全 Rust Library Backend；guest 不能直接调用 crates.io 或 FFI |
-| AI 开发 | DeepSeek/OpenAI-compatible HTTP，以及 Codex、Claude Code、OpenCode CLI 后端 |
-| 生命周期 | 候选注册、测试门禁、显式晋升、影子执行、审计事件与哈希回滚 |
+|程序即数据 |S-expression AST、稳定 span、机器可读诊断与规范 JSON |
+|业务表达 |短路 `and/or`、`cond`、集合处理、Schema、Result、模式匹配 |
+|模块化 |用户数据类型、导出签名、密封 Bundle、模块链接 |
+|静态审查 |类型推断、效果分析、capability 闭包、Rust 风格只读视图 |
+|供应链 |内容寻址 package、闭包锁文件、全量重验 |
+|受限执行 |调用深度、值边界、Reader 边界与显式 fuel 计量 |
+|编译路径 |规范字节码、verifier、解释器/VM 差分与 WASM handle ABI |
+|宿主生态 |安全 Rust Library Backend；guest 不能直接调用 crates.io 或 FFI |
+|AI 开发 |DeepSeek/OpenAI-compatible HTTP，以及 Codex、Claude Code、OpenCode CLI 后端 |
+|生命周期 |候选注册、测试门禁、显式晋升、影子执行、审计事件与哈希回滚 |
 
 编译一个锁定的费用审批 package：
 
-```powershell
+```ps1
 cargo run --locked -p yanshu-cli -- package-compile `
   .runtime\package-store `
   examples\packages\typed-expense\yanshu.lock.json `
@@ -166,7 +166,7 @@ cargo run --locked -p yanshu-cli -- package-compile `
 
 仓库根目录的 [AGENTS.md](AGENTS.md) 和 [CLAUDE.md](CLAUDE.md) 会把代理引导到同一份[共享契约](docs/ai-agent-guide.md)。代理也可以作为隔离候选的编写后端：
 
-```powershell
+```ps1
 $env:YANSHU_PROVIDER = "codex-cli" # 也可使用 claude-code-cli / opencode-cli
 
 cargo run --locked -p yanshu-cli -- `
@@ -209,7 +209,7 @@ wiki/                 面向使用者的中文语言 Wiki
 
 完整发布门禁：
 
-```powershell
+```ps1
 cargo fmt --all -- --check
 cargo test --workspace --locked -j 1
 cargo clippy --workspace --all-targets --locked -j 1 -- -D warnings
@@ -219,9 +219,5 @@ Push-Location wiki
 npm run build
 Pop-Location
 ```
-
-## 名称迁移与许可证
-
-旧实验名称到 **Yanshu（衍术）** 的破坏性迁移见 [docs/migration-to-yanshu.md](docs/migration-to-yanshu.md)。
 
 项目采用 [MIT](LICENSE-MIT) 或 [Apache License 2.0](LICENSE-APACHE) 双许可证。
