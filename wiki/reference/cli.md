@@ -246,7 +246,7 @@ verify-backup <snapshot-dir>
 restore-service <snapshot-dir> <code-store> <data-store.json>
 ```
 
-`backup-service` 在离线 service lock 和版本库锁内创建 schema v1 manifest，对每个 payload 文件记录相对路径、大小和 SHA-256。`verify-backup` 还检查源码哈希、metadata、active、事件生命周期与 KV v1 语义；路径穿越、符号链接、未知/重复/超限文件和 hash/size 不一致都会失败。运行中的 server 持有 `<data-store>.service.lock`，维护命令会返回 `SERVICE_MAINTENANCE_LOCKED`。
+`backup-service` 先完成 VersionStore pending journal，再在离线 service lock 和版本库锁内创建 schema v1 manifest，对每个 payload 文件记录相对路径、大小和 SHA-256。`verify-backup` 还检查源码哈希、metadata、active、事件 sequence/hash chain、晋升报告与 KV v1 语义，并拒绝而不执行快照中的 journal；路径穿越、符号链接、未知/重复/超限文件和 hash/size 不一致都会失败。运行中的 server 持有 `<data-store>.service.lock`，维护命令会返回 `SERVICE_MAINTENANCE_LOCKED`。
 
 观测 JSONL 不属于业务恢复点，不进入快照。恢复后应先重新运行完整业务场景，再在新的 loopback 端口验证；详细边界见[备份与恢复说明](/source/docs/backup-restore.md.txt)。
 

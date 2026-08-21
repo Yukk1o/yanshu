@@ -3,6 +3,7 @@ use std::{fs, path::Path};
 use serde_json::{Value as JsonValue, json};
 use yanshu_diagnostic::{Diagnostic, YanshuResult};
 use yanshu_service::FileKvStore;
+use yanshu_store::VersionStore;
 
 use crate::{
     MAXIMUM_FILE_BYTES,
@@ -28,6 +29,7 @@ pub fn create_backup(
     reject_destination_inside_source(code_store, destination)?;
 
     let _service_lease = acquire_service_lease(data_store)?;
+    VersionStore::new(code_store).recover()?;
     let _version_lease = acquire_version_lease(code_store)?;
     let (active_version, mut files) = validate_code_store(code_store, true)?;
     let data_store_present = regular_file_present(data_store, MAXIMUM_FILE_BYTES)?;

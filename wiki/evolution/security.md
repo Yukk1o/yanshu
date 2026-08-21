@@ -87,9 +87,9 @@ Codex、Claude Code 与 OpenCode Agent Backend 不继承名称包含 key/token/s
 
 ## 备份与恢复边界
 
-单机文件后端提供离线 `backup-service`、只读 `verify-backup` 和拒绝覆盖的 `restore-service`。server 在整个生命周期持有 service lock，备份同时持有版本库锁，避免活动指针、版本事件或 KV 在快照中间变化。恢复先写入不可见的同级暂存目标并完成语义校验，最后才提交；失败清理不会删除并发进程刚获得的版本锁。
+单机文件后端提供离线 `backup-service`、只读 `verify-backup` 和拒绝覆盖的 `restore-service`。VersionStore 用有界 journal 恢复中断的注册/晋升/回滚；备份先完成恢复，再持有版本库锁，避免活动指针、版本事件或 KV 在快照中间变化。快照验证绝不会执行其中夹带的 pending journal。恢复先写入不可见的同级暂存目标并完成语义校验，最后才提交；失败清理不会删除并发进程刚获得的版本锁。
 
-manifest 逐文件记录 SHA-256 和大小，验证还会检查版本事件与 KV 语义；恢复目标必须不存在。快照不包含 provider 密钥、TLS/反向代理配置、操作系统权限或观测日志，也不替代加密、签名、异地复制和恢复演练。命令见 [CLI 参考](/reference/cli#离线备份校验与恢复)。
+manifest 逐文件记录 SHA-256 和大小，验证还会检查版本事件 sequence/hash chain、metadata parent、晋升报告与 KV 语义；恢复目标必须不存在。事件 hash 没有密钥，不是签名。快照不包含 provider 密钥、TLS/反向代理配置、操作系统权限或观测日志，也不替代加密、签名、异地复制和恢复演练。命令见 [CLI 参考](/reference/cli#离线备份校验与恢复)。
 
 ## 影子运行边界
 
@@ -107,6 +107,8 @@ manifest 逐文件记录 SHA-256 和大小，验证还会检查版本事件与 K
 | 修改测试给自己放行 | runner 与 suite 在可信侧 | 测试变更审批与签名 |
 | 请求执行中切换版本 | 每请求固定 active hash + 隔离 shadow | canary 与自动停止门禁 |
 | 敏感请求进入观测 | 字段白名单 + 敏感 header 过滤 | 轮转、保留和访问控制 |
+| 版本状态与事件因中断分离 | 有界 journal + 幂等恢复 + 原子事件日志 | 数据库/PITR 与断电演练 |
+| 事件被删除、重排或修改 | sequence + SHA-256 hash chain | 有密钥签名与透明日志 |
 | 代码回滚但数据不兼容 | 不可变版本与 parent | 数据 migration 策略 |
 | Release 资产被替换 | SHA-256 闭包 + GitHub keyless provenance | 独立 rebuilder 与 hermetic runner |
 

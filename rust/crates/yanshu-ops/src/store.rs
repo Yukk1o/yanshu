@@ -1,6 +1,5 @@
 use std::{collections::BTreeSet, path::Path};
 
-use serde_json::Value as JsonValue;
 use yanshu_diagnostic::{Diagnostic, YanshuResult};
 use yanshu_store::VersionStore;
 
@@ -25,7 +24,6 @@ pub(crate) fn validate_code_store(
 ) -> YanshuResult<(Option<String>, Vec<SnapshotFile>)> {
     validate_directory(root)?;
     let store = VersionStore::new(root);
-    let active = store.active_hash()?;
     let mut files = Vec::new();
     let mut source_hashes = BTreeSet::new();
     let mut metadata_hashes = BTreeSet::new();
@@ -62,6 +60,7 @@ pub(crate) fn validate_code_store(
             return Err(backup_too_large());
         }
     }
+    let active = store.active_hash()?;
     if source_hashes != metadata_hashes {
         return Err(Diagnostic::simple(
             "BACKUP_VERSION_SET_MISMATCH",
@@ -156,90 +155,9 @@ fn validate_events(
     versions: &BTreeSet<String>,
     active: Option<&str>,
 ) -> YanshuResult<()> {
-    let source = std::str::from_utf8(bytes).map_err(|_| {
-        Diagnostic::simple(
-            "BACKUP_INVALID_EVENTS",
-            "version event log is not valid UTF-8",
-        )
-    })?;
-    let mut current: Option<String> = None;
-    let mut registered = BTreeSet::new();
-    for line in source.lines() {
-        let event: JsonValue = serde_json::from_str(line).map_err(|_| invalid_events())?;
-        let object = event.as_object().ok_or_else(invalid_events)?;
-        match object.get("event").and_then(JsonValue::as_str) {
-            Some("registered") if object.len() == 5 => {
-                let hash = event_hash(object.get("hash"), versions)?;
-                let parent = event_optional_hash(object.get("parent"), versions)?;
-                if object.get("provider").and_then(JsonValue::as_str).is_none()
-                    || object.get("at").and_then(JsonValue::as_u64).is_none()
-                    || metadata_parent(store, hash)?.as_deref() != parent
-                {
-                    return Err(invalid_events());
-                }
-                registered.insert(hash.to_owned());
-            }
-            Some("promoted") if object.len() == 4 => {
-                let from = event_optional_hash(object.get("from"), versions)?;
-                let to = event_hash(object.get("to"), versions)?;
-                if object.get("at").and_then(JsonValue::as_u64).is_none()
-                    || from != current.as_deref()
-                    || !registered.contains(to)
-                    || metadata_parent(store, to)?.as_deref() != from
-                {
-                    return Err(invalid_events());
-                }
-                current = Some(to.to_owned());
-            }
-            Some("rolled-back") if object.len() == 4 => {
-                let from = event_hash(object.get("from"), versions)?;
-                let to = event_hash(object.get("to"), versions)?;
-                if object.get("at").and_then(JsonValue::as_u64).is_none()
-                    || current.as_deref() != Some(from)
-                    || !registered.contains(to)
-                    || metadata_parent(store, from)?.as_deref() != Some(to)
-                {
-                    return Err(invalid_events());
-                }
-                current = Some(to.to_owned());
-            }
-            _ => return Err(invalid_events()),
-        }
-    }
-    if registered != *versions || current.as_deref() != active {
-        return Err(invalid_events());
-    }
-    Ok(())
-}
-
-fn event_hash<'value>(
-    value: Option<&'value JsonValue>,
-    versions: &BTreeSet<String>,
-) -> YanshuResult<&'value str> {
-    value
-        .and_then(JsonValue::as_str)
-        .filter(|hash| versions.contains(*hash))
-        .ok_or_else(invalid_events)
-}
-
-fn event_optional_hash<'value>(
-    value: Option<&'value JsonValue>,
-    versions: &BTreeSet<String>,
-) -> YanshuResult<Option<&'value str>> {
-    match value {
-        Some(JsonValue::Null) => Ok(None),
-        Some(JsonValue::String(hash)) if versions.contains(hash) => Ok(Some(hash)),
-        _ => Err(invalid_events()),
-    }
-}
-
-fn metadata_parent(store: &VersionStore, hash: &str) -> YanshuResult<Option<String>> {
-    let metadata = store.version_metadata(hash)?;
-    match metadata.get("parent") {
-        Some(JsonValue::Null) => Ok(None),
-        Some(JsonValue::String(parent)) => Ok(Some(parent.clone())),
-        _ => Err(invalid_events()),
-    }
+    store
+        .validate_event_log(bytes, versions, active)
+        .map_err(|_| invalid_events())
 }
 
 fn invalid_events() -> Diagnostic {

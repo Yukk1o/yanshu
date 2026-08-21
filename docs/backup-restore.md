@@ -48,9 +48,10 @@ snapshot/
 
 - `yanshu-server` 在整个进程生命周期持有 `<data-store>.service.lock`；运行中的服务会让离线
   backup/restore 返回 `SERVICE_MAINTENANCE_LOCKED`。
-- backup 同时持有版本库的 `.yanshu-store.lock`，避免候选注册或活动指针切换发生在快照中间。
+- backup 先在版本库锁内完成遗留 pending journal，再持有 `.yanshu-store.lock` 创建快照，避免候选注册或活动指针切换发生在快照中间。
 - 源码文件名、源码内容 SHA-256、metadata、活动指针以及 registered/promoted/rolled-back
-  事件序列必须形成完整生命周期。
+  事件序列必须形成完整生命周期；v2 事件的 sequence、previousHash 与 eventHash 也必须闭合。
+- `verify-backup` 不会重放快照里夹带的 recovery journal；任何该文件都按未知版本库文件拒绝。
 - KV 必须是当前 v1 文档，符号链接、未知版本库文件、manifest 外文件、路径穿越、超限文件、
   重复路径和 hash/size 不一致都会被拒绝。
 - snapshot 目标、恢复后的 code store 和 data store 必须不存在。实现使用 `create_new` 写文件，
@@ -60,5 +61,5 @@ snapshot/
 ## 当前限制
 
 这是单机文件后端的**离线**恢复点，不是在线数据库快照。它不包含操作系统权限、TLS 配置、
-反向代理配置、provider 密钥或观测日志，也不替代异地复制、加密、签名和定期恢复演练。
+反向代理配置、provider 密钥或观测日志，也不替代异地复制、加密、签名和定期恢复演练。事件 SHA-256 链没有密钥，只提供内部完整性，不提供作者真实性。
 未来数据库后端应使用数据库自身的一致性快照和 WAL/PITR，再把活动代码版本写入同一恢复清单。
