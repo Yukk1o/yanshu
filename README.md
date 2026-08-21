@@ -187,6 +187,7 @@ cargo run --locked -p yanshu-cli -- `
 rust/crates/
   yanshu-syntax       Reader、AST、Parser、语言版本门禁
   yanshu-format       注释保留、语义复核、幂等格式化
+  yanshu-lsp          有界 stdio、诊断、导航、只读格式化 edit
   yanshu-runtime      解释器、Schema、Value、模式匹配、字节码 VM
   yanshu-analysis     类型、效果、capability 闭包、审查投影
   yanshu-compiler     规范字节码、verifier、WASM ABI
@@ -205,7 +206,7 @@ wiki/                 面向使用者的中文语言 Wiki
 
 当前发布里程碑是 **v0.10**，语言版本是 **v4**；**v0.11 持续验证与安全加固正在开发中**。它已经是一个可执行、可分析、可编译的语言内核，但还不是 Rust/C++ 式系统语言，也不是可承诺生产稳定性的通用平台。
 
-接下来的优先级是修复审计发现、完善 Agent/LSP 工具链和解释器/VM 一致性；更广的标准库与有界结构化并发只会在 capability、fuel、取消和确定性语义明确后加入。路线图是方向，不是兼容性承诺。
+formatter v1、稳定表达式节点路径与最小 LSP 已进入 v0.12 开发分支；接下来的工具优先级是增量/局部导航、Tree-sitter、编辑器打包和只读 MCP。更广的标准库与有界结构化并发只会在 capability、fuel、取消和确定性语义明确后加入。路线图是方向，不是兼容性承诺。
 
 ## 可验证发布
 

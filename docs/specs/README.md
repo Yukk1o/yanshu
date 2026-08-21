@@ -9,4 +9,4 @@
 - [`v0.10.md`](v0.10.md)：fuel 字节码、verifier 与 WASM ABI。
 - [`v0.11.md`](v0.11.md)：持续验证、fuzz 与发布证据链。
 - [`v0.11-audit-closure.md`](v0.11-audit-closure.md)：已关闭审计项、证据和仍未解决的边界。
-- [`v0.12.md`](v0.12.md)：formatter、稳定节点路径与后续 Agent/编辑器工具链。
+- [`v0.12.md`](v0.12.md)：formatter、稳定节点路径、最小 LSP 与后续 Agent/编辑器工具链。

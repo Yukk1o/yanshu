@@ -7,8 +7,9 @@
 - [x] Implement the bounded, comment-preserving, idempotent safe-Rust formatter crate.
 - [x] Expose read-only JSON formatting and `--check` through the stable CLI.
 - [x] Exercise the formatter against the real expense-approval program.
-- [ ] Add atomic, concurrent-edit-aware application through LSP WorkspaceEdit.
-- [ ] Add Tree-sitter, minimum LSP diagnostics/navigation, and read-only MCP tools.
+- [x] Add bounded LSP full sync, diagnostics, hover, global navigation, and formatting edits.
+- [ ] Add incremental sync, local binding navigation, completion, rename, and editor packaging.
+- [ ] Add Tree-sitter and read-only MCP tools.
 - [x] Run the complete repository and release gates for this change.
 
 ## Historical milestones

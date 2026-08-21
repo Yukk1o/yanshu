@@ -11,13 +11,14 @@
 5. [yanshu-syntax AST](/source/rust/crates/yanshu-syntax/src/ast.rs.txt)：Program / Expression / Schema 的数据结构；
 6. [yanshu-syntax Reader](/source/rust/crates/yanshu-syntax/src/reader.rs.txt) 与 [Parser](/source/rust/crates/yanshu-syntax/src/parser.rs.txt)：源码怎样成为 AST；
 7. [yanshu-format](/source/rust/crates/yanshu-format/src/lib.rs.txt)：保留注释、复核语义和幂等性的规范布局；
-8. [yanshu-runtime](/source/rust/crates/yanshu-runtime/src/lib.rs.txt)：解释器、primitive 与 Library Backend；
-9. [yanshu-service](/source/rust/crates/yanshu-service/src/lib.rs.txt)：route、capability 和事务；
-10. [yanshu-store](/source/rust/crates/yanshu-store/src/lib.rs.txt)：候选、恢复 journal、active 与事件完整性；
-11. [yanshu-provider](/source/rust/crates/yanshu-provider/src/lib.rs.txt)：LLM 只能怎样提出候选；
-12. [yanshu-http](/source/rust/crates/yanshu-http/src/lib.rs.txt)：请求身份、版本固定与观测；
-13. [yanshu-rollout](/source/rust/crates/yanshu-rollout/src/lib.rs.txt)：隔离影子采样、比较与观测；
-14. [yanshu-ops](/source/rust/crates/yanshu-ops/src/lib.rs.txt)：服务锁、备份校验与恢复。
+8. [yanshu-lsp](/source/rust/crates/yanshu-lsp/src/lib.rs.txt)：编辑器怎样复用诊断、导航和 formatter；
+9. [yanshu-runtime](/source/rust/crates/yanshu-runtime/src/lib.rs.txt)：解释器、primitive 与 Library Backend；
+10. [yanshu-service](/source/rust/crates/yanshu-service/src/lib.rs.txt)：route、capability 和事务；
+11. [yanshu-store](/source/rust/crates/yanshu-store/src/lib.rs.txt)：候选、恢复 journal、active 与事件完整性；
+12. [yanshu-provider](/source/rust/crates/yanshu-provider/src/lib.rs.txt)：LLM 只能怎样提出候选；
+13. [yanshu-http](/source/rust/crates/yanshu-http/src/lib.rs.txt)：请求身份、版本固定与观测；
+14. [yanshu-rollout](/source/rust/crates/yanshu-rollout/src/lib.rs.txt)：隔离影子采样、比较与观测；
+15. [yanshu-ops](/source/rust/crates/yanshu-ops/src/lib.rs.txt)：服务锁、备份校验与恢复。
 
 ## 语言前端
 
@@ -31,6 +32,9 @@
 | [format/lib.rs](/source/rust/crates/yanshu-format/src/lib.rs.txt) | 公共 options/result、双 Parser 语义复核与幂等编排 |
 | [format/cst.rs](/source/rust/crates/yanshu-format/src/cst.rs.txt) | 保留注释但丢弃无意义空白的 bounded concrete tree |
 | [format/render.rs](/source/rust/crates/yanshu-format/src/render.rs.txt) | form-aware 布局、行宽、缩进与逐次输出上限 |
+| [lsp/protocol.rs](/source/rust/crates/yanshu-lsp/src/protocol.rs.txt) | Content-Length framing、JSON body 与 header/message 上限 |
+| [lsp/document.rs](/source/rust/crates/yanshu-lsp/src/document.rs.txt) | 文档快照、UTF-16 range、诊断、hover、词法安全跳转与 TextEdit |
+| [lsp/server.rs](/source/rust/crates/yanshu-lsp/src/server.rs.txt) | initialize/shutdown/exit、full sync 与 JSON-RPC method dispatch |
 | [diagnostic/lib.rs](/source/rust/crates/yanshu-diagnostic/src/lib.rs.txt) | 公共 code/message/details 与私有 span |
 
 ## 模块与 Bundle

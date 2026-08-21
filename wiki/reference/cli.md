@@ -2,6 +2,14 @@
 
 所有命令从仓库根目录运行。当前 CLI 是 Rust workspace 中的 `yanshu-cli`，正常结果、验证报告和已知错误都输出 JSON。
 
+编辑器协议由独立的 `yanshu-lsp` stdio binary 提供，不是 `yanshu` 子命令：
+
+```powershell
+cargo run --quiet --locked -p yanshu-lsp
+```
+
+它的 stdout 只用于 LSP `Content-Length` framing；不要把普通日志写入或混入这个流。能力和编辑器边界见[最小 LSP Server](/development/lsp)。
+
 下面写出完整 `cargo run`，便于直接复制。命令分发见 [yanshu-cli main.rs](/source/rust/crates/yanshu-cli/src/main.rs.txt)。
 
 ## `format`

@@ -10,7 +10,7 @@ Rust v0.10 已形成通用语言的安全内核；v0.11 正在把跨平台 CI、
 
 | 层 | 已实现 | 尚未完成 |
 | --- | --- | --- |
-| 语言前端 | 有边界 UTF-8 Reader、v1-v4 AST / Parser、imports、typed 封闭数据、模式匹配、signature、版本门控、source span、JSON inspect、稳定 expression-v1 节点路径 | 泛型声明、跨任意结构编辑的节点 identity reconciliation |
+| 语言前端 | 有边界 UTF-8 Reader、v1-v4 AST / Parser、imports、typed 封闭数据、模式匹配、signature、版本门控、source span、JSON inspect、稳定 expression-v1 节点路径、最小 LSP full sync | 泛型声明、增量语法树、跨任意结构编辑的节点 identity reconciliation |
 | 静态分析 | 内部类型推断、export 输入/输出门禁、传递 effect/capability 闭包、已知高阶 callback、失败关闭未知 callback | effect polymorphism、增量分析、LSP |
 | 模块/包制品 | Bundle manifest、module/root SHA-256、依赖图、命名空间链接、package store、精确 lock、锁定 capability closure | 签名、远端 registry、离线镜像导入 |
 | 审查 | Rust 风格只读投影、definition ID、模块/span/type/effect nodes | 结构化编辑明确推迟到 v0.10 之后 |
@@ -20,7 +20,7 @@ Rust v0.10 已形成通用语言的安全内核；v0.11 正在把跨平台 CI、
 | 运维快照 | 离线 service lock、逐文件 SHA-256 manifest、版本/KV 语义校验、拒绝覆盖恢复 | 加密、签名、异地复制、定期恢复演练 |
 | Provider | OpenAI Responses、DeepSeek Chat、HTTPS-only、拒绝 redirect、大小/超时、密钥零化 | 真实凭据 smoke gate、速率/费用治理 |
 | HTTP / rollout | Axum/Tokio、显式 header/body deadline、loopback-only、可选 Bearer、宿主 request ID、每请求固定 hash、脱敏 JSONL、隔离影子采样 | TLS、细粒度授权、进程沙箱、指标/trace/告警、canary、静态网页 |
-| 工具 | check/inspect/review、只读 formatter v1/CI check、Bundle、package pack/lock/verify/review/run/compile、bytecode/WASM compile/inspect/run、conformance、test/deploy/evolve service、version lifecycle、跨平台 CI、Reader/Value/artifact/结构化边界 fuzz、Windows/Linux CLI 双构建与 keyless provenance | Tree-sitter、LSP、MCP、结构化 AST diff、操作型 rollback CLI |
+| 工具 | check/inspect/review、只读 formatter v1/CI check、LSP 诊断/hover/全局 definition/formatting edit、Bundle、package pack/lock/verify/review/run/compile、bytecode/WASM compile/inspect/run、conformance、test/deploy/evolve service、version lifecycle、跨平台 CI、边界 fuzz、双构建与 keyless provenance | Tree-sitter、LSP 增量/局部导航/rename/completion、MCP、结构化 AST diff、操作型 rollback CLI |
 
 ## Crate 边界
 
@@ -69,7 +69,7 @@ Rust 实现不能为了方便静默改变：
 4. **v0.9**：内容寻址包管理、锁文件、Rust Library Backend；
 5. **v0.10**：有 fuel 计量的字节码 / WASM 编译器；
 6. **v0.11**：跨平台持续验证、fuzz、可复现发布与供应链证据；
-7. **v0.12**：Agent 工具协议、formatter、Tree-sitter、LSP 与 MCP；formatter v1 与稳定节点路径已经落地，其余仍在开发；
+7. **v0.12**：Agent 工具协议、formatter、Tree-sitter、LSP 与 MCP；formatter v1、稳定节点路径与最小 LSP 已经落地，其余仍在开发；
 8. **v0.13+**：标准库扩展，以及受 capability、effect、fuel、取消和确定性约束的结构化并发。
 
 模块必须与 Bundle 根 hash、模块 hash、依赖闭包和 capability 清单一起交付；不能先引入按路径动态加载。包管理不能运行安装脚本。类型系统不能把 fuel、效果或 capability 从 AST 中藏起来。编译器输出仍须通过独立验证器，不能因为“已经编译”就跳过语言门禁。
