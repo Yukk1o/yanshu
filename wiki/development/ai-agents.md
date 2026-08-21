@@ -80,4 +80,4 @@ $env:YANSHU_AGENT_TIMEOUT_SECONDS = "900"
 
 根目录另外提供 `AGENTS.md` 与 `CLAUDE.md`，它们共同引用 [`docs/ai-agent-guide.md`](/source/docs/ai-agent-guide.md.txt)。这是让 agent 修改语言实现时读取的项目契约，与上面的“一次性候选编写后端”互补，但不是同一件事。
 
-当前还没有 `.yan` LSP、Tree-sitter grammar、编辑器插件、MCP server 或审查视图结构化回写；这些属于后续开发体验层。
+当前已有 `.yan` LSP 与平台专用 VS Code 扩展，支持诊断、hover、同文档 definition/references 和格式化 edit；还没有 Tree-sitter grammar、其它编辑器安装包、MCP server 或审查视图结构化回写。

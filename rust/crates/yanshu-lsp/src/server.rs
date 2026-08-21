@@ -103,6 +103,7 @@ impl LanguageServer {
             ("textDocument/didClose", None) => self.did_close(params),
             ("textDocument/hover", Some(id)) => self.hover(id, params),
             ("textDocument/definition", Some(id)) => self.definition(id, params),
+            ("textDocument/references", Some(id)) => self.references(id, params),
             ("textDocument/formatting", Some(id)) => self.formatting(id, params),
             (_, Some(id)) => vec![error_response(
                 id,
@@ -135,6 +136,7 @@ impl LanguageServer {
                     "textDocumentSync": { "openClose": true, "change": 1 },
                     "hoverProvider": true,
                     "definitionProvider": true,
+                    "referencesProvider": true,
                     "documentFormattingProvider": true,
                 },
                 "serverInfo": {
@@ -253,6 +255,26 @@ impl LanguageServer {
         }
     }
 
+    fn references(&self, id: Value, params: &Value) -> Vec<Value> {
+        let result = (|| {
+            let (uri, line, character) = text_position(params)?;
+            let context = object_field(params, "context")?;
+            let include_declaration = boolean_field(context, "includeDeclaration")?;
+            Ok::<_, Diagnostic>(
+                self.documents
+                    .get(uri)
+                    .map_or(Ok(None), |document| {
+                        document.references(line, character, include_declaration)
+                    })?
+                    .map_or(Value::Null, Value::Array),
+            )
+        })();
+        match result {
+            Ok(references) => vec![success_response(id, references)],
+            Err(diagnostic) => vec![invalid_params_response(id, &diagnostic)],
+        }
+    }
+
     fn formatting(&self, id: Value, params: &Value) -> Vec<Value> {
         let result = (|| {
             let document = object_field(params, "textDocument")?;
@@ -291,6 +313,13 @@ fn integer_field(value: &Value, name: &str) -> Result<i64, Diagnostic> {
     value
         .get(name)
         .and_then(Value::as_i64)
+        .ok_or_else(invalid_params)
+}
+
+fn boolean_field(value: &Value, name: &str) -> Result<bool, Diagnostic> {
+    value
+        .get(name)
+        .and_then(Value::as_bool)
         .ok_or_else(invalid_params)
 }
 
@@ -390,6 +419,10 @@ mod tests {
             initialized["result"]["capabilities"]["textDocumentSync"]["change"],
             1
         );
+        assert_eq!(
+            initialized["result"]["capabilities"]["referencesProvider"],
+            true
+        );
         let shutdown = server.handle_message(&json!({
             "jsonrpc": "2.0",
             "id": 2,
@@ -440,7 +473,7 @@ mod tests {
     }
 
     #[test]
-    fn hover_definition_and_formatting_use_the_open_snapshot() {
+    fn hover_definition_references_and_formatting_use_the_open_snapshot() {
         let source = "(program (name tools) (version 4) (signature target (fn (integer) integer)) (def target (fn (x) x)) (signature use (fn (integer) integer)) (def use (fn (x) (target x))) (export target use))";
         let mut server = LanguageServer::new();
         initialize(&mut server);
@@ -462,6 +495,21 @@ mod tests {
             "params": { "textDocument": { "uri": "file:///tools.yan" }, "position": position }
         }));
         assert_eq!(definition[0]["result"]["uri"], "file:///tools.yan");
+
+        let references = server.handle_message(&json!({
+            "jsonrpc": "2.0", "id": 5, "method": "textDocument/references",
+            "params": {
+                "textDocument": { "uri": "file:///tools.yan" },
+                "position": position,
+                "context": { "includeDeclaration": true }
+            }
+        }));
+        assert_eq!(references[0]["result"].as_array().map(Vec::len), Some(4));
+        assert!(references[0]["result"].as_array().is_some_and(|locations| {
+            locations
+                .iter()
+                .all(|location| location["uri"] == "file:///tools.yan")
+        }));
 
         let hover = server.handle_message(&json!({
             "jsonrpc": "2.0", "id": 3, "method": "textDocument/hover",

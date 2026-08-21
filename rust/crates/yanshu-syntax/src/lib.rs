@@ -14,7 +14,10 @@ pub use ast::{
 pub use node_id::{ExpressionNode, expression_nodes};
 pub use parser::parse_program;
 pub use reader::{ReaderLimits, read_source};
-pub use symbol::{LocalBinding, LocalBindingKind, LocalSymbolIndex, local_symbol_index};
+pub use symbol::{
+    LocalBinding, LocalBindingKind, LocalSymbolIndex, SymbolBinding, SymbolBindingKind,
+    SymbolIndex, local_symbol_index, symbol_index,
+};
 
 use yanshu_diagnostic::YanshuResult;
 

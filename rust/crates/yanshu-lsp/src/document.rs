@@ -4,14 +4,20 @@ use serde_json::{Value, json};
 use yanshu_analysis::{AnalysisReport, analyze_program};
 use yanshu_diagnostic::{Diagnostic, Span, YanshuResult};
 use yanshu_format::{FormatOptions, format_source};
-use yanshu_syntax::{
-    Datum, DatumKind, Expression, ExpressionKind, Program, ReaderLimits, expression_nodes,
-    load_program_source, local_symbol_index, read_source,
-};
+use yanshu_syntax::{Program, ReaderLimits, expression_nodes, load_program_source, symbol_index};
 
 const MAXIMUM_OPEN_DOCUMENTS: usize = 32;
 const MAXIMUM_TOTAL_SOURCE_BYTES: usize = 16 * 1024 * 1024;
 const MAXIMUM_URI_BYTES: usize = 4 * 1024;
+const MAXIMUM_REFERENCE_LOCATIONS: usize = 1024;
+const MAXIMUM_LOCATION_JSON_OVERHEAD_BYTES: usize = 1024;
+
+// A JSON string byte can expand to a six-byte `\u00xx` escape. Keep the
+// complete worst-case Location[] below the protocol's outbound body limit.
+const _: () = assert!(
+    MAXIMUM_REFERENCE_LOCATIONS * (MAXIMUM_URI_BYTES * 6 + MAXIMUM_LOCATION_JSON_OVERHEAD_BYTES)
+        < crate::protocol::MAXIMUM_LSP_MESSAGE_BYTES
+);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OpenDocument {
@@ -170,22 +176,42 @@ impl OpenDocument {
     pub(crate) fn definition(&self, line: u64, character: u64) -> Option<Value> {
         let offset = offset_from_lsp(&self.source, line, character)?;
         let program = load_program_source(&self.source).ok()?;
-        let symbols = local_symbol_index(&program).ok()?;
-        if let Some(target) = symbols.definition_at(offset) {
-            return Some(json!({
-                "uri": self.uri,
-                "range": span_range(&self.source, target),
-            }));
-        }
-        let name = variable_at(&program, offset)?;
-        let target = definition_name_spans(&self.source)
-            .into_iter()
-            .find(|(candidate, _)| candidate == &name)
-            .map(|(_, span)| span)?;
+        let target = symbol_index(&program).ok()?.definition_at(offset)?;
         Some(json!({
             "uri": self.uri,
             "range": span_range(&self.source, target),
         }))
+    }
+
+    pub(crate) fn references(
+        &self,
+        line: u64,
+        character: u64,
+        include_declaration: bool,
+    ) -> YanshuResult<Option<Vec<Value>>> {
+        let Some(offset) = offset_from_lsp(&self.source, line, character) else {
+            return Ok(None);
+        };
+        let Ok(program) = load_program_source(&self.source) else {
+            return Ok(None);
+        };
+        let Ok(index) = symbol_index(&program) else {
+            return Ok(None);
+        };
+        let Some(spans) = index.references_at(offset, include_declaration) else {
+            return Ok(None);
+        };
+        if spans.len() > MAXIMUM_REFERENCE_LOCATIONS {
+            return Err(Diagnostic::new(
+                "LSP_REFERENCE_LIMIT",
+                "LSP reference result exceeds the configured location limit",
+                json!({
+                    "actual": spans.len(),
+                    "maximum": MAXIMUM_REFERENCE_LOCATIONS,
+                }),
+            ));
+        }
+        Ok(locations_for_sorted_spans(&self.uri, &self.source, &spans))
     }
 
     pub(crate) fn formatting_edits(&self) -> YanshuResult<Vec<Value>> {
@@ -304,108 +330,60 @@ fn contains_offset(span: Span, offset: usize) -> bool {
     span.start.offset <= offset && offset < span.end.offset
 }
 
-fn variable_at(program: &Program, offset: usize) -> Option<String> {
-    program
-        .definitions
-        .iter()
-        .find_map(|definition| resolve_variable(&definition.expression, offset))
+fn locations_for_sorted_spans(uri: &str, source: &str, spans: &[Span]) -> Option<Vec<Value>> {
+    let mut cursor = PositionCursor::new(source);
+    let mut locations = Vec::with_capacity(spans.len());
+    for span in spans {
+        let start = cursor.advance_to(span.start.offset)?;
+        let end = cursor.advance_to(span.end.offset)?;
+        locations.push(json!({
+            "uri": uri,
+            "range": {
+                "start": { "line": start.0, "character": start.1 },
+                "end": { "line": end.0, "character": end.1 },
+            },
+        }));
+    }
+    Some(locations)
 }
 
-fn resolve_variable(expression: &Expression, offset: usize) -> Option<String> {
-    if !contains_offset(expression.span, offset) {
-        return None;
+struct PositionCursor<'source> {
+    source: &'source str,
+    offset: usize,
+    line: usize,
+    character: usize,
+}
+
+impl<'source> PositionCursor<'source> {
+    fn new(source: &'source str) -> Self {
+        Self {
+            source,
+            offset: 0,
+            line: 0,
+            character: 0,
+        }
     }
-    let child = match &expression.kind {
-        ExpressionKind::If {
-            condition,
-            consequent,
-            alternative,
-        } => [
-            condition.as_ref(),
-            consequent.as_ref(),
-            alternative.as_ref(),
-        ]
-        .into_iter()
-        .find_map(|child| resolve_variable(child, offset)),
-        ExpressionKind::And(expressions)
-        | ExpressionKind::Or(expressions)
-        | ExpressionKind::Do(expressions) => expressions
-            .iter()
-            .find_map(|child| resolve_variable(child, offset)),
-        ExpressionKind::Cond {
-            clauses,
-            alternative,
-        } => clauses
-            .iter()
-            .find_map(|clause| {
-                resolve_variable(&clause.condition, offset)
-                    .or_else(|| resolve_variable(&clause.expression, offset))
-            })
-            .or_else(|| resolve_variable(alternative, offset)),
-        ExpressionKind::Match { value, arms } => resolve_variable(value, offset).or_else(|| {
-            arms.iter()
-                .find_map(|arm| resolve_variable(&arm.expression, offset))
-        }),
-        ExpressionKind::Let {
-            bindings: let_bindings,
-            body,
-        } => {
-            let mut found = None;
-            for binding in let_bindings {
-                found = resolve_variable(&binding.expression, offset);
-                if found.is_some() {
-                    break;
-                }
+
+    fn advance_to(&mut self, target: usize) -> Option<(usize, usize)> {
+        if target < self.offset || target > self.source.len() {
+            return None;
+        }
+        for character in self.source.get(self.offset..target)?.chars() {
+            if character == '\n' {
+                self.line = self.line.checked_add(1)?;
+                self.character = 0;
+            } else {
+                self.character = self.character.checked_add(character.len_utf16())?;
             }
-            found.or_else(|| resolve_variable(body, offset))
         }
-        ExpressionKind::Function { body, .. } => resolve_variable(body, offset),
-        ExpressionKind::Call { callee, arguments } => {
-            resolve_variable(callee, offset).or_else(|| {
-                arguments
-                    .iter()
-                    .find_map(|argument| resolve_variable(argument, offset))
-            })
-        }
-        ExpressionKind::Literal(_) | ExpressionKind::Variable(_) | ExpressionKind::Quote(_) => None,
-    };
-    child.or_else(|| match &expression.kind {
-        ExpressionKind::Variable(name) => Some(name.clone()),
-        _ => None,
-    })
-}
-
-fn definition_name_spans(source: &str) -> Vec<(String, Span)> {
-    let Ok(root) = read_source(source, ReaderLimits::default()) else {
-        return Vec::new();
-    };
-    let Some(forms) = root.list() else {
-        return Vec::new();
-    };
-    forms
-        .iter()
-        .skip(1)
-        .filter_map(definition_name_span)
-        .collect()
-}
-
-fn definition_name_span(form: &Datum) -> Option<(String, Span)> {
-    let values = form.list()?;
-    let [head, name, ..] = values else {
-        return None;
-    };
-    if head.symbol()? != "def" {
-        return None;
+        self.offset = target;
+        Some((self.line, self.character))
     }
-    let DatumKind::Symbol(name_value) = &name.kind else {
-        return None;
-    };
-    Some((name_value.clone(), name.span))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{OpenDocument, offset_from_lsp};
+    use super::{OpenDocument, lsp_position, offset_from_lsp};
 
     fn document(source: &str) -> OpenDocument {
         OpenDocument {
@@ -425,6 +403,25 @@ mod tests {
             .definition(0, character_at(source, offset))
             .and_then(|location| location["range"]["start"]["character"].as_u64())
             .unwrap_or_else(|| panic!("definition location missing"))
+    }
+
+    fn reference_starts(
+        document: &OpenDocument,
+        source: &str,
+        offset: usize,
+        include_declaration: bool,
+    ) -> Vec<u64> {
+        document
+            .references(0, character_at(source, offset), include_declaration)
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"))
+            .unwrap_or_else(|| panic!("reference locations missing"))
+            .iter()
+            .map(|location| {
+                location["range"]["start"]["character"]
+                    .as_u64()
+                    .unwrap_or_else(|| panic!("reference start missing"))
+            })
+            .collect()
     }
 
     #[test]
@@ -522,6 +519,166 @@ mod tests {
         assert_eq!(
             definition_start(&document, source, default_reference),
             character_at(source, parameter),
+        );
+    }
+
+    #[test]
+    fn references_separate_global_definitions_from_local_shadowing() {
+        let source = "(program (name refs) (version 1) (def target (fn (value) value)) (def shadow (fn (target) (list target target))) (def call (fn (value) (target value))) (export target shadow call))";
+        let document = document(source);
+        let global_declaration = source
+            .find("(def target")
+            .unwrap_or_else(|| panic!("global target declaration missing"))
+            + "(def ".len();
+        let global_reference = source
+            .rfind("(target value)")
+            .unwrap_or_else(|| panic!("global target reference missing"))
+            + '('.len_utf8();
+        let export_reference = source
+            .rfind("(export target")
+            .unwrap_or_else(|| panic!("global target export missing"))
+            + "(export ".len();
+        assert_eq!(
+            reference_starts(&document, source, global_reference, false),
+            vec![
+                character_at(source, global_reference),
+                character_at(source, export_reference),
+            ]
+        );
+        assert_eq!(
+            reference_starts(&document, source, global_reference, true),
+            vec![
+                character_at(source, global_declaration),
+                character_at(source, global_reference),
+                character_at(source, export_reference),
+            ]
+        );
+
+        let local_declaration = source
+            .find("(fn (target)")
+            .unwrap_or_else(|| panic!("local target declaration missing"))
+            + "(fn (".len();
+        let first_local_reference = source
+            .find("(list target target)")
+            .unwrap_or_else(|| panic!("local target references missing"))
+            + "(list ".len();
+        let second_local_reference = first_local_reference + "target ".len();
+        assert_eq!(
+            reference_starts(&document, source, first_local_reference, true),
+            vec![
+                character_at(source, local_declaration),
+                character_at(source, first_local_reference),
+                character_at(source, second_local_reference),
+            ]
+        );
+    }
+
+    #[test]
+    fn references_respect_sequential_let_and_pattern_arm_scopes() {
+        let let_source = "(program (name lets) (version 1) (def use (fn (outer) (let ((value outer) (outer value)) (list outer value)))) (export use))";
+        let let_document = document(let_source);
+        let parameter_declaration = let_source
+            .find("(fn (outer)")
+            .unwrap_or_else(|| panic!("outer parameter missing"))
+            + "(fn (".len();
+        let parameter_reference = let_source
+            .find("((value outer)")
+            .unwrap_or_else(|| panic!("outer parameter reference missing"))
+            + "((value ".len();
+        assert_eq!(
+            reference_starts(&let_document, let_source, parameter_reference, true,),
+            vec![
+                character_at(let_source, parameter_declaration),
+                character_at(let_source, parameter_reference),
+            ]
+        );
+
+        let pattern_source = "(program (name patterns) (version 3) (data decision (approved amount) (rejected reason)) (def inspect (fn (decision) (match decision ((approved value) value) ((rejected value) value) (_ decision)))) (export inspect approved rejected))";
+        let pattern_document = document(pattern_source);
+        let first_pattern = pattern_source
+            .find("(approved value) value")
+            .unwrap_or_else(|| panic!("first pattern arm missing"));
+        let first_declaration = first_pattern + "(approved ".len();
+        let first_reference = first_pattern + "(approved value) ".len();
+        let second_pattern = pattern_source
+            .find("(rejected value) value")
+            .unwrap_or_else(|| panic!("second pattern arm missing"));
+        let second_declaration = second_pattern + "(rejected ".len();
+        let second_reference = second_pattern + "(rejected value) ".len();
+        assert_eq!(
+            reference_starts(&pattern_document, pattern_source, first_reference, true,),
+            vec![
+                character_at(pattern_source, first_declaration),
+                character_at(pattern_source, first_reference),
+            ]
+        );
+        assert_eq!(
+            reference_starts(&pattern_document, pattern_source, second_reference, true,),
+            vec![
+                character_at(pattern_source, second_declaration),
+                character_at(pattern_source, second_reference),
+            ]
+        );
+    }
+
+    #[test]
+    fn references_stream_multiline_utf16_positions_in_source_order() {
+        let source = "(program\n  ; 😀 does not shift later UTF-16 lines\n  (name unicode)\n  (version 1)\n  (def use\n    (fn (value)\n      (list value value)))\n  (export use))";
+        let document = document(source);
+        let selected = source
+            .rfind("value)))")
+            .unwrap_or_else(|| panic!("selected value reference missing"));
+        let position = lsp_position(source, selected);
+        let locations = document
+            .references(
+                position["line"]
+                    .as_u64()
+                    .unwrap_or_else(|| panic!("selected line missing")),
+                position["character"]
+                    .as_u64()
+                    .unwrap_or_else(|| panic!("selected character missing")),
+                true,
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"))
+            .unwrap_or_else(|| panic!("multiline references missing"));
+        assert_eq!(
+            locations
+                .iter()
+                .map(|location| location["range"]["start"]["line"].as_u64())
+                .collect::<Vec<_>>(),
+            vec![Some(5), Some(6), Some(6)]
+        );
+        assert!(locations.windows(2).all(|pair| {
+            let left = &pair[0]["range"]["start"];
+            let right = &pair[1]["range"]["start"];
+            (left["line"].as_u64(), left["character"].as_u64())
+                < (right["line"].as_u64(), right["character"].as_u64())
+        }));
+    }
+
+    #[test]
+    fn references_fail_before_building_an_unbounded_location_response() {
+        let mut source =
+            String::from("(program (name bounded) (version 1) (def use (fn (value) (list");
+        for _ in 0..=super::MAXIMUM_REFERENCE_LOCATIONS {
+            source.push_str(" value");
+        }
+        source.push_str("))) (export use))");
+        let document = document(&source);
+        let reference = source
+            .rfind("value")
+            .unwrap_or_else(|| panic!("bounded reference fixture missing"));
+        let diagnostic = document
+            .references(0, character_at(&source, reference), false)
+            .err()
+            .unwrap_or_else(|| panic!("oversized reference result unexpectedly succeeded"));
+        assert_eq!(diagnostic.code, "LSP_REFERENCE_LIMIT");
+        assert_eq!(
+            diagnostic.details.as_ref(),
+            &serde_json::json!({
+                "actual": super::MAXIMUM_REFERENCE_LOCATIONS + 1,
+                "maximum": super::MAXIMUM_REFERENCE_LOCATIONS,
+            })
         );
     }
 

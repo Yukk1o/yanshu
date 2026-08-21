@@ -7,3 +7,4 @@
 - Add deterministic platform-specific VSIX packaging with a bounded non-symlink server input.
 - Add isolated Windows/Linux Extension Host tests for activation, diagnostics, hover, definition, and formatting.
 - Resolve parameter, sequential `let`, and pattern binding definitions with lexical shadowing.
+- Find same-document references for global definitions and lexical local bindings without text search.
