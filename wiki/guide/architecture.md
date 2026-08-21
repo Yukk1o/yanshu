@@ -99,7 +99,7 @@ service 层验证 response 必须只有 `status`、`headers`、`body`，并限�
 
 ## 4. 版本与演化控制面
 
-[yanshu-store](/source/rust/crates/yanshu-store/src/lib.rs.txt) 使用源码 SHA-256 作为版本 ID，保存不可变源码、metadata、active pointer 和事件。写入使用原子文件替换、跨进程锁和有界锁等待。[yanshu-ops](/source/rust/crates/yanshu-ops/src/lib.rs.txt) 在这一层之上提供离线快照、逐文件 hash 与语义校验，以及拒绝覆盖的恢复；server 持有 service lease，避免运行与维护并发。
+[yanshu-store](/source/rust/crates/yanshu-store/src/lib.rs.txt) 使用源码 SHA-256 作为版本 ID，保存不可变源码、metadata、active pointer 和事件。写入使用跨进程锁、有界 recovery journal、幂等重放、原子文件替换与 v2 event hash chain。[yanshu-ops](/source/rust/crates/yanshu-ops/src/lib.rs.txt) 在这一层之上提供离线快照、逐文件 hash 与语义校验，以及拒绝覆盖的恢复；server 持有 service lease，避免运行与维护并发。
 
 [yanshu-provider](/source/rust/crates/yanshu-provider/src/lib.rs.txt) 负责请求 LLM 候选，但 provider 返回后仍要重新经过 Parser 和完整 suite。[yanshu-cli](/source/rust/crates/yanshu-cli/src/main.rs.txt) 的 `evolve-service` 默认不晋升；`--promote` 也不能绕过失败报告。
 

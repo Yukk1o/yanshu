@@ -16,7 +16,7 @@ Rust v0.10 已形成通用语言的安全内核；v0.11 正在把跨平台 CI、
 | 审查 | Rust 风格只读投影、definition ID、模块/span/type/effect nodes | 结构化编辑明确推迟到 v0.10 之后 |
 | 运行时 | BigInt、闭包、递归、短路条件、有界集合、Result、enum/union Schema、校验成本、可替换 Rust `text@1` Backend、验证式字节码、跨解释器/VM 一致的语义 fuel、WASM handle ABI | 原生 WASM lowering、独立内存配额、可安全取消的进程级 deadline |
 | 业务服务 | route dispatch、response 校验、事务内存/文件 KV、固定时钟与日志、11 个场景 | 正式数据库 adapter、migration、连接池 |
-| 版本库 | SHA-256、不可变校验、metadata、active、events、原子写、跨进程锁、回滚 | 签名、远端 artifact store、生产审批流 |
+| 版本库 | SHA-256、不可变校验、有界恢复 journal、幂等重放、v2 event hash chain、原子写、跨进程锁、回滚 | 有密钥签名、透明日志、远端 artifact store、生产审批流 |
 | 运维快照 | 离线 service lock、逐文件 SHA-256 manifest、版本/KV 语义校验、拒绝覆盖恢复 | 加密、签名、异地复制、定期恢复演练 |
 | Provider | OpenAI Responses、DeepSeek Chat、HTTPS-only、拒绝 redirect、大小/超时、密钥零化 | 真实凭据 smoke gate、速率/费用治理 |
 | HTTP / rollout | Axum/Tokio、显式 header/body deadline、loopback-only、可选 Bearer、宿主 request ID、每请求固定 hash、脱敏 JSONL、隔离影子采样 | TLS、细粒度授权、进程沙箱、指标/trace/告警、canary、静态网页 |

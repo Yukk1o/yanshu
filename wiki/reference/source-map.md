@@ -12,7 +12,7 @@
 6. [yanshu-syntax Reader](/source/rust/crates/yanshu-syntax/src/reader.rs.txt) 与 [Parser](/source/rust/crates/yanshu-syntax/src/parser.rs.txt)：源码怎样成为 AST；
 7. [yanshu-runtime](/source/rust/crates/yanshu-runtime/src/lib.rs.txt)：解释器、primitive 与 Library Backend；
 8. [yanshu-service](/source/rust/crates/yanshu-service/src/lib.rs.txt)：route、capability 和事务；
-9. [yanshu-store](/source/rust/crates/yanshu-store/src/lib.rs.txt)：候选、active 与回滚；
+9. [yanshu-store](/source/rust/crates/yanshu-store/src/lib.rs.txt)：候选、恢复 journal、active 与事件完整性；
 10. [yanshu-provider](/source/rust/crates/yanshu-provider/src/lib.rs.txt)：LLM 只能怎样提出候选；
 11. [yanshu-http](/source/rust/crates/yanshu-http/src/lib.rs.txt)：请求身份、版本固定与观测；
 12. [yanshu-rollout](/source/rust/crates/yanshu-rollout/src/lib.rs.txt)：隔离影子采样、比较与观测；
@@ -97,7 +97,13 @@ Go/Rust 读者最值得先看的类型是 `Program`、`ExpressionKind`、`Schema
 
 | 文件 | 看什么 |
 | --- | --- |
-| [store/lib.rs](/source/rust/crates/yanshu-store/src/lib.rs.txt) | SHA-256、不可变源码校验、metadata、active、events、锁和原子写 |
+| [store/lib.rs](/source/rust/crates/yanshu-store/src/lib.rs.txt) | 极小公共入口、内容 hash 与稳定诊断 |
+| [store/store.rs](/source/rust/crates/yanshu-store/src/store.rs.txt) | 注册/晋升/回滚、锁、journal 提交与幂等恢复 |
+| [store/transaction.rs](/source/rust/crates/yanshu-store/src/transaction.rs.txt) | 只允许 register/activate 的有界 pending journal schema |
+| [store/recovery.rs](/source/rust/crates/yanshu-store/src/recovery.rs.txt) | journal 持久化顺序、逐阶段重放与冲突拒绝 |
+| [store/events.rs](/source/rust/crates/yanshu-store/src/events.rs.txt) | legacy event 兼容、v2 sequence/hash chain 与生命周期验证 |
+| [store/metadata.rs](/source/rust/crates/yanshu-store/src/metadata.rs.txt) | metadata schema、大小、provider/report 与原子 JSON 边界 |
+| [store/storage.rs](/source/rust/crates/yanshu-store/src/storage.rs.txt) | 有界非 symlink 读取、同步临时文件、原子替换与平台持久化边界 |
 | [store/scenario.rs](/source/rust/crates/yanshu-store/src/scenario.rs.txt) | 注册、晋升、重启读取和回滚生命周期 |
 | [provider/lib.rs](/source/rust/crates/yanshu-provider/src/lib.rs.txt) | provider trait、OpenAI/DeepSeek adapter、HTTPS、大小/超时、密钥零化 |
 | [provider/agent.rs](/source/rust/crates/yanshu-provider/src/agent.rs.txt) | Codex/Claude Code/OpenCode 非交互适配、一次性候选目录、权限/超时/输出边界 |
@@ -111,7 +117,7 @@ Go/Rust 读者最值得先看的类型是 `Program`、`ExpressionKind`、`Schema
 
 `evolve_service_with_provider` 是最短的控制流入口：读 active → 测当前版本 → 请求候选 → 解析候选 → 测完整 suite → 注册 → 可选晋升。
 
-运维快照不包含 observations；它校验版本源码、metadata、active、事件序列和可选 KV v1 文档。恢复始终拒绝覆盖既有 code/data 目标。
+运维快照不包含 observations；它校验版本源码、metadata、active、事件 sequence/hash chain 和可选 KV v1 文档，并拒绝执行快照中夹带的 pending journal。恢复始终拒绝覆盖既有 code/data 目标。VersionStore 的崩溃恢复协议见[设计文档](/source/docs/version-store-recovery.md.txt)。
 
 ## Rust 请求安全链
 

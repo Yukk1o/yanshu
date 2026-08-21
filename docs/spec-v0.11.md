@@ -72,6 +72,8 @@ cargo fuzz run boundary_inputs -- -max_total_time=30 -max_len=1048576 -rss_limit
 
 Bundle manifest、Bundle module、package document 和 HTTP request-header deadline 现在都在昂贵工作前具有明确边界；相关实现、既有审计项与回归证据见 [v0.11-audit-closure.md](v0.11-audit-closure.md)。`boundary_inputs` fuzz 的是 Hyper 解析后的 Yanshu trust boundary；原始 HTTP wire parser 仍由上游 Hyper 提供，慢 header 防御由真实 TCP 回归测试覆盖。
 
+VersionStore 使用有界恢复 journal 将 source/metadata/active 与事件更新组成可重放操作，并用 v2 event hash chain 检查中间记录删除、重排和修改。它不把无密钥 hash 冒充签名或外部完整历史证明；合法前缀的尾部截断仍需要外部 head 锚点。事务顺序、旧事件兼容、显式大小上限和 Windows 持久化限制见 [version-store-recovery.md](version-store-recovery.md)。
+
 ## 7. 未完成范围
 
 v0.11 后续仍需长期 fuzz corpus 治理、独立重构建者和 hermetic runner。当前双构建证明限定为同源码、同 runner 环境，不宣称任意机器已能得到相同 hash。LSP、formatter 和 MCP 属于 v0.12；标准库扩展与有界结构化并发属于 v0.13 以后。

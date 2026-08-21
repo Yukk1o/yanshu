@@ -105,7 +105,7 @@ fn a_missing_data_store_round_trips_as_missing() {
 }
 
 #[test]
-fn semantic_event_corruption_fails_after_checksum_is_recomputed() {
+fn event_chain_corruption_fails_after_snapshot_checksum_is_recomputed() {
     let temporary = TestDirectory::new();
     let code = temporary.path.join("code");
     let data = temporary.path.join("data.json");
@@ -118,11 +118,15 @@ fn semantic_event_corruption_fails_after_checksum_is_recomputed() {
     let events = snapshot.join("payload").join("code").join("events.jsonl");
     let source =
         fs::read_to_string(&events).unwrap_or_else(|error| panic!("event read failed: {error}"));
-    let first_line = source
-        .lines()
-        .next()
-        .unwrap_or_else(|| panic!("event fixture must not be empty"));
-    let corrupted = format!("{first_line}\n").into_bytes();
+    let mut lines = source.lines().map(str::to_owned).collect::<Vec<_>>();
+    let second = lines
+        .get_mut(1)
+        .unwrap_or_else(|| panic!("promoted event fixture must exist"));
+    let mut event: JsonValue =
+        serde_json::from_str(second).unwrap_or_else(|error| panic!("event parse failed: {error}"));
+    event["previousHash"] = json!("0".repeat(64));
+    *second = event.to_string();
+    let corrupted = format!("{}\n", lines.join("\n")).into_bytes();
     fs::write(&events, &corrupted)
         .unwrap_or_else(|error| panic!("event corruption failed: {error}"));
 
@@ -147,8 +151,51 @@ fn semantic_event_corruption_fails_after_checksum_is_recomputed() {
 
     let diagnostic = verify_backup(&snapshot)
         .err()
-        .unwrap_or_else(|| panic!("semantic corruption must fail"));
+        .unwrap_or_else(|| panic!("event chain corruption must fail"));
     assert_eq!(diagnostic.code, "BACKUP_INVALID_EVENTS");
+}
+
+#[test]
+fn backup_verification_never_replays_an_embedded_recovery_journal() {
+    let temporary = TestDirectory::new();
+    let code = temporary.path.join("code");
+    let data = temporary.path.join("data.json");
+    let snapshot = temporary.path.join("snapshot");
+    deployed_store(&code);
+    fs::write(&data, b"{\"version\":1,\"entries\":[]}\n")
+        .unwrap_or_else(|error| panic!("fixture write failed: {error}"));
+    create_backup(&code, &data, &snapshot).unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+
+    let journal = snapshot
+        .join("payload")
+        .join("code")
+        .join(".yanshu-store.pending.json");
+    let journal_bytes = b"{}\n";
+    fs::write(&journal, journal_bytes)
+        .unwrap_or_else(|error| panic!("journal fixture failed: {error}"));
+    let manifest_path = snapshot.join("manifest.json");
+    let mut manifest: JsonValue = serde_json::from_slice(&read(&manifest_path))
+        .unwrap_or_else(|error| panic!("manifest parse failed: {error}"));
+    manifest["files"]
+        .as_array_mut()
+        .unwrap_or_else(|| panic!("manifest files must be an array"))
+        .push(json!({
+            "path": "code/.yanshu-store.pending.json",
+            "bytes": journal_bytes.len(),
+            "sha256": hex_digest(journal_bytes),
+        }));
+    fs::write(
+        &manifest_path,
+        serde_json::to_vec(&manifest)
+            .unwrap_or_else(|error| panic!("manifest encode failed: {error}")),
+    )
+    .unwrap_or_else(|error| panic!("manifest rewrite failed: {error}"));
+
+    let diagnostic = verify_backup(&snapshot)
+        .err()
+        .unwrap_or_else(|| panic!("embedded recovery journal must be rejected"));
+    assert_eq!(diagnostic.code, "BACKUP_UNEXPECTED_STORE_FILE");
+    assert_eq!(read(&journal), journal_bytes);
 }
 
 fn deployed_store(path: &Path) -> String {
