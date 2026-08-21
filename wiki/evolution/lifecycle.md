@@ -115,7 +115,7 @@ code-store/
 
 注册不会覆盖旧源码。读取版本时还会重新校验 hash，防止路径替换或内容损坏。active 是很小的原子指针，不是工作目录里的可变源码。
 
-注册、晋升和回滚先在锁内同步一个有界 pending journal，再写状态，最后原子替换完整事件日志；中途失败后，下一次访问会验证并幂等完成。事件 v2 带 `sequence / previousHash / eventHash`，旧事件由第一个 v2 事件锚定。哈希链能发现删除、重排和修改，但没有密钥，不能证明事件作者；详细协议和平台持久化限制见[VersionStore 恢复协议](/source/docs/version-store-recovery.md.txt)。
+注册、晋升和回滚先在锁内同步一个有界 pending journal，再写状态，最后原子替换完整事件日志；中途失败后，下一次访问会验证并幂等完成。事件 v2 带 `sequence / previousHash / eventHash`，旧事件由第一个 v2 事件锚定。哈希链能发现中间记录删除、重排和修改，但没有密钥，不能证明事件作者；没有外部 head 锚点时也不保证发现合法前缀的尾部截断。详细协议和平台持久化限制见[VersionStore 恢复协议](/source/docs/version-store-recovery.md.txt)。
 
 同一语言版本的源码只要内容变化就生成新 hash；测试失败的候选仍可保留自己的报告与父链证据，但不能成为 active。于是“程序即数据，演化留痕，回滚廉价”是存储约束，不依赖模型自觉。
 
