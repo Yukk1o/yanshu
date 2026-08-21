@@ -17,7 +17,8 @@ const manifest = require('../package.json');
 
 const maximumServerBytes = 128 * 1024 * 1024;
 const maximumExtensionFileBytes = 16 * 1024 * 1024;
-const excludedTestEnvironmentName = /(?:auth|credential|key|password|secret|token)|^(?:npm_config_)?(?:all|http|https|no)_proxy$/iu;
+const credentialOrProxyEnvironmentName = /(?:auth|credential|key|password|secret|token)|^(?:all|http|https|no)_proxy$|^npm_config_(?:(?:all|http|https|no)_)?proxy$|^npm_config_noproxy$/iu;
+const requiredDisplayEnvironmentNames = new Set(['DISPLAY', 'XAUTHORITY']);
 const extensionRoot = path.resolve(__dirname, '..');
 const repositoryRoot = path.resolve(extensionRoot, '..', '..');
 const vscodeVersion = '1.101.2';
@@ -159,7 +160,7 @@ async function validateExecutableOverride(candidate) {
 async function withoutHostCredentialsAndProxy(operation) {
   const removed = [];
   for (const [name, value] of Object.entries(process.env)) {
-    if (excludedTestEnvironmentName.test(name)) {
+    if (shouldExcludeTestEnvironmentName(name)) {
       removed.push([name, value]);
       delete process.env[name];
     }
@@ -175,8 +176,19 @@ async function withoutHostCredentialsAndProxy(operation) {
   }
 }
 
-main().catch((error) => {
-  const message = error instanceof Error ? error.message : 'unknown Extension Host failure';
-  process.stderr.write(`VSCODE_E2E_FAILED: ${message}\n`);
-  process.exitCode = 1;
-});
+function shouldExcludeTestEnvironmentName(name) {
+  if (requiredDisplayEnvironmentNames.has(name.toUpperCase())) {
+    return false;
+  }
+  return credentialOrProxyEnvironmentName.test(name);
+}
+
+if (require.main === module) {
+  main().catch((error) => {
+    const message = error instanceof Error ? error.message : 'unknown Extension Host failure';
+    process.stderr.write(`VSCODE_E2E_FAILED: ${message}\n`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { shouldExcludeTestEnvironmentName };

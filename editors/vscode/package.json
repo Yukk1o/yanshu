@@ -51,7 +51,7 @@
     "typecheck": "tsc -p ./tsconfig.json --noEmit",
     "bundle": "node scripts/bundle.cjs",
     "compile": "npm run typecheck && npm run bundle",
-    "test": "node --test tests/server-command.test.cjs tests/manifest.test.cjs",
+    "test": "node --test tests/server-command.test.cjs tests/manifest.test.cjs tests/test-environment.test.cjs",
     "test:e2e": "npm run compile && node scripts/test-e2e.cjs",
     "check": "npm run compile && npm test",
     "package": "npm run check && node scripts/package.cjs"
