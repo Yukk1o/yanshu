@@ -16,6 +16,7 @@ use yanshu_compiler::{
 };
 use yanshu_conformance::run_manifest;
 use yanshu_diagnostic::{Diagnostic, YanshuResult};
+use yanshu_format::{FORMATTER_VERSION, FormatOptions, format_source};
 use yanshu_ops::{create_backup, restore_backup, verify_backup};
 use yanshu_package::{load_locked_package, lock_workspace, pack_workspace, verify_package};
 use yanshu_provider::{EvolutionProvider, EvolutionRequest, configured_evolution_provider};
@@ -374,6 +375,39 @@ fn run(arguments: Vec<String>) -> YanshuResult<Value> {
                 "result": result.to_json()?,
             }))
         }
+        [command, path] if command == "format" => {
+            let source = read_bounded_program_source(path)?;
+            let formatted = format_source(&source, FormatOptions::default())?;
+            Ok(json!({
+                "ok": true,
+                "path": path,
+                "changed": formatted.changed,
+                "formatterVersion": FORMATTER_VERSION,
+                "formattedSource": formatted.source,
+            }))
+        }
+        [command, path, option] if command == "format" && option == "--check" => {
+            let source = read_bounded_program_source(path)?;
+            let formatted = format_source(&source, FormatOptions::default())?;
+            if formatted.changed {
+                return Err(Diagnostic::new(
+                    "FORMAT_REQUIRED",
+                    "source is not in canonical formatter layout",
+                    json!({ "path": path, "formatterVersion": FORMATTER_VERSION }),
+                ));
+            }
+            Ok(json!({
+                "ok": true,
+                "path": path,
+                "changed": false,
+                "formatterVersion": FORMATTER_VERSION,
+            }))
+        }
+        [command, _, option] if command == "format" => Err(Diagnostic::new(
+            "CLI_INVALID_OPTION",
+            "the only format option is --check",
+            json!({ "option": option }),
+        )),
         [command, path] if matches!(command.as_str(), "check" | "inspect") => {
             let source = fs::read_to_string(path).map_err(|error| {
                 Diagnostic::new(
@@ -511,6 +545,7 @@ fn run(arguments: Vec<String>) -> YanshuResult<Value> {
                 "review-bundle <directory>",
                 "review-bundle <directory> --text",
                 "run-bundle <directory> <export> <arguments.json>",
+                "format <program.yan> [--check]",
                 "check <program.yan>",
                 "inspect <program.yan>",
                 "review <program.yan>",
@@ -526,6 +561,51 @@ fn run(arguments: Vec<String>) -> YanshuResult<Value> {
             ] }),
         )),
     }
+}
+
+fn read_bounded_program_source(path: &str) -> YanshuResult<String> {
+    let maximum = yanshu_syntax::ReaderLimits::default().max_source_bytes;
+    let file = fs::File::open(path).map_err(|error| {
+        Diagnostic::new(
+            "HOST_FILE_READ",
+            "host could not open the program source file",
+            json!({ "path": path, "kind": error.kind().to_string() }),
+        )
+    })?;
+    let metadata = file.metadata().map_err(|error| {
+        Diagnostic::new(
+            "HOST_FILE_READ",
+            "host could not inspect the program source file",
+            json!({ "path": path, "kind": error.kind().to_string() }),
+        )
+    })?;
+    if !metadata.is_file() || metadata.len() > u64::try_from(maximum).unwrap_or(u64::MAX) {
+        return Err(Diagnostic::new(
+            "FORMAT_SOURCE_LIMIT",
+            "program source is not a regular file within the formatter byte limit",
+            json!({ "path": path, "maximum": maximum }),
+        ));
+    }
+
+    let read_limit = u64::try_from(maximum).unwrap_or(u64::MAX).saturating_add(1);
+    let mut source = String::new();
+    file.take(read_limit)
+        .read_to_string(&mut source)
+        .map_err(|error| {
+            Diagnostic::new(
+                "HOST_FILE_READ",
+                "host could not read the program source file as UTF-8",
+                json!({ "path": path, "kind": error.kind().to_string() }),
+            )
+        })?;
+    if source.len() > maximum {
+        return Err(Diagnostic::new(
+            "FORMAT_SOURCE_LIMIT",
+            "program source exceeds the formatter byte limit",
+            json!({ "path": path, "actual": source.len(), "maximum": maximum }),
+        ));
+    }
+    Ok(source)
 }
 
 fn read_program_file(path: &str) -> YanshuResult<Program> {
@@ -790,6 +870,44 @@ mod tests {
 
         let misplaced_text = require_error(run(vec!["review".to_owned(), "--text".to_owned()]));
         assert_eq!(misplaced_text.code, "CLI_INVALID_OPTION");
+    }
+
+    #[test]
+    fn formats_programs_as_json_and_checks_canonical_layout() {
+        let temporary = TestDirectory::new();
+        let program = temporary.path.join("compact.yan");
+        fs::write(
+            &program,
+            b"(program (name cli-format) (version 1) (def value (fn () 1)) (export value))",
+        )
+        .unwrap_or_else(|error| panic!("format fixture failed: {error}"));
+
+        let rendered = run(vec!["format".to_owned(), program.display().to_string()])
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(rendered["ok"], true);
+        assert_eq!(rendered["changed"], true);
+        assert_eq!(rendered["formatterVersion"], 1);
+        let canonical = rendered["formattedSource"]
+            .as_str()
+            .unwrap_or_else(|| panic!("formatted source was not a string"));
+
+        let required = require_error(run(vec![
+            "format".to_owned(),
+            program.display().to_string(),
+            "--check".to_owned(),
+        ]));
+        assert_eq!(required.code, "FORMAT_REQUIRED");
+
+        fs::write(&program, canonical)
+            .unwrap_or_else(|error| panic!("canonical fixture failed: {error}"));
+        let checked = run(vec![
+            "format".to_owned(),
+            program.display().to_string(),
+            "--check".to_owned(),
+        ])
+        .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(checked["ok"], true);
+        assert_eq!(checked["changed"], false);
     }
 
     #[test]

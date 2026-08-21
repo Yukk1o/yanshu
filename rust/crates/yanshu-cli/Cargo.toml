@@ -19,6 +19,7 @@ yanshu-bundle = { path = "../yanshu-bundle", version = "=0.10.0" }
 yanshu-compiler = { path = "../yanshu-compiler", version = "=0.10.0" }
 yanshu-conformance = { path = "../yanshu-conformance", version = "=0.10.0" }
 yanshu-diagnostic = { path = "../yanshu-diagnostic", version = "=0.10.0" }
+yanshu-format = { path = "../yanshu-format", version = "=0.10.0" }
 yanshu-ops = { path = "../yanshu-ops", version = "=0.10.0" }
 yanshu-package = { path = "../yanshu-package", version = "=0.10.0" }
 yanshu-provider = { path = "../yanshu-provider", version = "=0.10.0" }

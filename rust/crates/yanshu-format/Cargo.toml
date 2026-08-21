@@ -1,0 +1,15 @@
+[package]
+name = "yanshu-format"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+yanshu-diagnostic = { path = "../yanshu-diagnostic", version = "=0.10.0" }
+yanshu-syntax = { path = "../yanshu-syntax", version = "=0.10.0" }
+serde_json.workspace = true

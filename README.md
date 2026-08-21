@@ -186,6 +186,7 @@ cargo run --locked -p yanshu-cli -- `
 ```text
 rust/crates/
   yanshu-syntax       Reader、AST、Parser、语言版本门禁
+  yanshu-format       注释保留、语义复核、幂等格式化
   yanshu-runtime      解释器、Schema、Value、模式匹配、字节码 VM
   yanshu-analysis     类型、效果、capability 闭包、审查投影
   yanshu-compiler     规范字节码、verifier、WASM ABI

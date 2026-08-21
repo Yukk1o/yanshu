@@ -1650,6 +1650,7 @@ dependencies = [
  "yanshu-compiler",
  "yanshu-conformance",
  "yanshu-diagnostic",
+ "yanshu-format",
  "yanshu-ops",
  "yanshu-package",
  "yanshu-provider",
@@ -1688,6 +1689,15 @@ name = "yanshu-diagnostic"
 version = "0.10.0"
 dependencies = [
  "serde_json",
+]
+
+[[package]]
+name = "yanshu-format"
+version = "0.10.0"
+dependencies = [
+ "serde_json",
+ "yanshu-diagnostic",
+ "yanshu-syntax",
 ]
 
 [[package]]

@@ -38,6 +38,7 @@ const publishedFiles = [
   'docs/specs/v0.10.md',
   'docs/specs/v0.11.md',
   'docs/specs/v0.11-audit-closure.md',
+  'docs/specs/v0.12.md',
   'docs/ai-agent-guide.md',
   'examples/discount/tests.json',
   'examples/discount/v1.yan',
@@ -133,6 +134,9 @@ const publishedFiles = [
   'rust/crates/yanshu-runtime/src/matcher.rs',
   'rust/crates/yanshu-runtime/src/schema.rs',
   'rust/crates/yanshu-runtime/src/value.rs',
+  'rust/crates/yanshu-format/src/cst.rs',
+  'rust/crates/yanshu-format/src/lib.rs',
+  'rust/crates/yanshu-format/src/render.rs',
   'rust/crates/yanshu-service/src/lib.rs',
   'rust/crates/yanshu-server/src/main.rs',
   'rust/crates/yanshu-server/src/configuration.rs',
@@ -146,6 +150,7 @@ const publishedFiles = [
   'rust/crates/yanshu-store/src/transaction.rs',
   'rust/crates/yanshu-syntax/src/ast.rs',
   'rust/crates/yanshu-syntax/src/lib.rs',
+  'rust/crates/yanshu-syntax/src/node_id.rs',
   'rust/crates/yanshu-syntax/src/parser.rs',
   'rust/crates/yanshu-syntax/src/reader.rs'
 ]

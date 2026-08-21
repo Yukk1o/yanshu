@@ -4,6 +4,26 @@
 
 下面写出完整 `cargo run`，便于直接复制。命令分发见 [yanshu-cli main.rs](/source/rust/crates/yanshu-cli/src/main.rs.txt)。
 
+## `format`
+
+```powershell
+cargo run --quiet --locked -p yanshu-cli -- `
+  format examples\expenses\service.yan
+
+cargo run --quiet --locked -p yanshu-cli -- `
+  format examples\expenses\service.yan --check
+```
+
+格式：
+
+```text
+format <program.yan> [--check]
+```
+
+默认命令只读返回 `formattedSource`、`changed` 和 `formatterVersion`，不会覆盖源文件。输出会重新经过正式 Parser、Program inspection 等价检查、注释顺序检查与第二遍幂等检查。
+
+`--check` 适合 CI：源码已经符合 formatter v1 时成功；否则返回 `FORMAT_REQUIRED` 和非零退出码。输入和格式化输出都受 Reader 的 4 MiB source 上限约束。设计边界与稳定表达式节点路径见 [Formatter 与稳定节点 ID](/development/formatter)。
+
 ## `check` / `inspect`
 
 ```powershell
