@@ -2,7 +2,35 @@
 
 所有命令从仓库根目录运行。当前 CLI 是 Rust workspace 中的 `yanshu-cli`，正常结果、验证报告和已知错误都输出 JSON。
 
+编辑器协议由独立的 `yanshu-lsp` stdio binary 提供，不是 `yanshu` 子命令：
+
+```powershell
+cargo run --quiet --locked -p yanshu-lsp
+```
+
+它的 stdout 只用于 LSP `Content-Length` framing；不要把普通日志写入或混入这个流。能力和编辑器边界见[最小 LSP Server](/development/lsp)。
+
 下面写出完整 `cargo run`，便于直接复制。命令分发见 [yanshu-cli main.rs](/source/rust/crates/yanshu-cli/src/main.rs.txt)。
+
+## `format`
+
+```powershell
+cargo run --quiet --locked -p yanshu-cli -- `
+  format examples\expenses\service.yan
+
+cargo run --quiet --locked -p yanshu-cli -- `
+  format examples\expenses\service.yan --check
+```
+
+格式：
+
+```text
+format <program.yan> [--check]
+```
+
+默认命令只读返回 `formattedSource`、`changed` 和 `formatterVersion`，不会覆盖源文件。输出会重新经过正式 Parser、Program inspection 等价检查、注释顺序检查与第二遍幂等检查。
+
+`--check` 适合 CI：源码已经符合 formatter v1 时成功；否则返回 `FORMAT_REQUIRED` 和非零退出码。输入和格式化输出都受 Reader 的 4 MiB source 上限约束。设计边界与稳定表达式节点路径见 [Formatter 与稳定节点 ID](/development/formatter)。
 
 ## `check` / `inspect`
 

@@ -1650,6 +1650,7 @@ dependencies = [
  "yanshu-compiler",
  "yanshu-conformance",
  "yanshu-diagnostic",
+ "yanshu-format",
  "yanshu-ops",
  "yanshu-package",
  "yanshu-provider",
@@ -1691,6 +1692,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "yanshu-format"
+version = "0.10.0"
+dependencies = [
+ "serde_json",
+ "yanshu-diagnostic",
+ "yanshu-syntax",
+]
+
+[[package]]
 name = "yanshu-http"
 version = "0.10.0"
 dependencies = [
@@ -1720,6 +1730,17 @@ dependencies = [
  "num-bigint",
  "serde_json",
  "yanshu-diagnostic",
+]
+
+[[package]]
+name = "yanshu-lsp"
+version = "0.10.0"
+dependencies = [
+ "serde_json",
+ "yanshu-analysis",
+ "yanshu-diagnostic",
+ "yanshu-format",
+ "yanshu-syntax",
 ]
 
 [[package]]

@@ -62,6 +62,9 @@ export default defineConfig({
         items: [
           { text: '实现架构', link: '/guide/architecture' },
           { text: 'CLI 参考', link: '/reference/cli' },
+          { text: 'Formatter 与稳定节点 ID', link: '/development/formatter' },
+          { text: '最小 LSP Server', link: '/development/lsp' },
+          { text: 'VS Code 扩展', link: '/development/vscode' },
           { text: '源码地图', link: '/reference/source-map' },
           { text: 'AI Agent Backend', link: '/development/ai-agents' },
           { text: 'Rust 宿主与生态路线', link: '/development/rust-roadmap' },

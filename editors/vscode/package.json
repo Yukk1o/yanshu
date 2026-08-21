@@ -1,0 +1,103 @@
+{
+  "name": "yanshu-language",
+  "displayName": "衍术 Yanshu",
+  "description": "Experimental language support for .yan source, backed by the safe-Rust yanshu-lsp server.",
+  "version": "0.10.0",
+  "publisher": "Yukk1o",
+  "license": "MIT OR Apache-2.0",
+  "homepage": "https://yukk1o.github.io/yanshu/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Yukk1o/yanshu.git",
+    "directory": "editors/vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/Yukk1o/yanshu/issues"
+  },
+  "engines": {
+    "vscode": "^1.101.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Formatters",
+    "Linters"
+  ],
+  "keywords": [
+    "yanshu",
+    "衍术",
+    "lisp",
+    "language-server",
+    "ai"
+  ],
+  "preview": true,
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "The extension only sends open .yan snapshots to the bounded language server and never executes guest source."
+    },
+    "virtualWorkspaces": {
+      "supported": true
+    }
+  },
+  "activationEvents": [
+    "onLanguage:yanshu"
+  ],
+  "main": "./out/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "typecheck": "tsc -p ./tsconfig.json --noEmit",
+    "bundle": "node scripts/bundle.cjs",
+    "compile": "npm run typecheck && npm run bundle",
+    "test": "node --test tests/server-command.test.cjs tests/manifest.test.cjs tests/test-environment.test.cjs",
+    "test:e2e": "npm run compile && node scripts/test-e2e.cjs",
+    "check": "npm run compile && npm test",
+    "package": "npm run check && node scripts/package.cjs"
+  },
+  "dependencies": {
+    "vscode-languageclient": "10.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.0",
+    "@types/vscode": "1.101.0",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "3.9.2",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "yanshu",
+        "aliases": [
+          "衍术",
+          "Yanshu"
+        ],
+        "extensions": [
+          ".yan"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "yanshu",
+        "scopeName": "source.yanshu",
+        "path": "./syntaxes/yanshu.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "衍术 Yanshu",
+      "properties": {
+        "yanshu.server.path": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "Absolute path to a trusted `yanshu-lsp` executable. When empty, the extension uses its bundled platform binary and then falls back to `yanshu-lsp` on the host `PATH`. Reload the extension host after changing this value."
+        }
+      }
+    }
+  }
+}

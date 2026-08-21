@@ -116,6 +116,15 @@ cargo build --locked -p yanshu-cli
 .\target\debug\yanshu.exe inspect examples\discount\v2.yan
 ```
 
+VS Code 扩展源码位于 `editors/vscode`。它识别 `.yan`、提供基础高亮，并通过独立 `yanshu-lsp` 显示诊断、hover、全局跳转和格式化；固定 VS Code 1.101.2 的隔离 Extension Host 测试会在 Windows/Linux CI 验证这些能力。生成携带当前平台 server 的本机 VSIX：
+
+```ps1
+cargo build --locked --release -p yanshu-lsp
+Set-Location editors\vscode
+npm ci
+npm run package
+```
+
 运行真实任务服务及 11 个有状态场景：
 
 ```ps1
@@ -163,7 +172,7 @@ cargo run --locked -p yanshu-cli -- package-compile `
 - `.yan`、密封 manifest 与 lock 是规范输入；生成的审查视图永远只读。
 - 内容哈希绑定规范语义与制品，失败候选不能获得活动版本资格。
 
-当前仍缺少独立进程级生产沙箱、正式权限系统、TLS 终止、成熟数据库适配、LSP、独立安全审计及长期兼容承诺。完整政策见 [SECURITY.md](SECURITY.md) 与 [Rust 安全策略](docs/engineering/rust-safety-policy.md)。
+当前仍缺少独立进程级生产沙箱、正式权限系统、TLS 终止、成熟数据库适配、成熟编辑器生态、独立安全审计及长期兼容承诺。完整政策见 [SECURITY.md](SECURITY.md) 与 [Rust 安全策略](docs/engineering/rust-safety-policy.md)。
 
 ## 让 Codex / Claude Code / OpenCode 编写候选
 
@@ -186,6 +195,8 @@ cargo run --locked -p yanshu-cli -- `
 ```text
 rust/crates/
   yanshu-syntax       Reader、AST、Parser、语言版本门禁
+  yanshu-format       注释保留、语义复核、幂等格式化
+  yanshu-lsp          有界 stdio、诊断、导航、只读格式化 edit
   yanshu-runtime      解释器、Schema、Value、模式匹配、字节码 VM
   yanshu-analysis     类型、效果、capability 闭包、审查投影
   yanshu-compiler     规范字节码、verifier、WASM ABI
@@ -195,6 +206,7 @@ rust/crates/
   yanshu-cli          面向人类和 Agent 的稳定 JSON CLI
 
 conformance/v1..v4    跨版本可执行语言契约
+editors/vscode/       .yan 语言贡献、LSP client 与平台 VSIX 打包
 examples/             费用审批、任务服务、Bundle 与 package
 docs/                 规范、安全和运维设计
 wiki/                 面向使用者的中文语言 Wiki
@@ -204,7 +216,7 @@ wiki/                 面向使用者的中文语言 Wiki
 
 当前发布里程碑是 **v0.10**，语言版本是 **v4**；**v0.11 持续验证与安全加固正在开发中**。它已经是一个可执行、可分析、可编译的语言内核，但还不是 Rust/C++ 式系统语言，也不是可承诺生产稳定性的通用平台。
 
-接下来的优先级是修复审计发现、完善 Agent/LSP 工具链和解释器/VM 一致性；更广的标准库与有界结构化并发只会在 capability、fuel、取消和确定性语义明确后加入。路线图是方向，不是兼容性承诺。
+formatter v1、稳定表达式节点路径、最小 LSP、平台专用 VS Code VSIX 与 Windows/Linux Extension Host 验收已进入 v0.12 开发分支；接下来的工具优先级是增量/局部导航、Tree-sitter、更广编辑器集成和只读 MCP。更广的标准库与有界结构化并发只会在 capability、fuel、取消和确定性语义明确后加入。路线图是方向，不是兼容性承诺。
 
 ## 可验证发布
 

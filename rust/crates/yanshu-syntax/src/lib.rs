@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod ast;
+mod node_id;
 mod parser;
 mod reader;
 
@@ -9,6 +10,7 @@ pub use ast::{
     ExpressionKind, FunctionSignature, LibraryRequirement, MatchArm, Pattern, PatternKind, Program,
     Route, Schema, SchemaField, SchemaKind, TypeExpression, VariantDefinition,
 };
+pub use node_id::{ExpressionNode, expression_nodes};
 pub use parser::parse_program;
 pub use reader::{ReaderLimits, read_source};
 

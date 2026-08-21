@@ -1,5 +1,20 @@
 # Implementation Tasks
 
+## Current: developer-tooling-v0.12
+
+- [x] Define the formatter trust boundary and fail-closed equivalence contract.
+- [x] Add source-offset-independent expression node paths.
+- [x] Implement the bounded, comment-preserving, idempotent safe-Rust formatter crate.
+- [x] Expose read-only JSON formatting and `--check` through the stable CLI.
+- [x] Exercise the formatter against the real expense-approval program.
+- [x] Add bounded LSP full sync, diagnostics, hover, global navigation, and formatting edits.
+- [x] Add a platform-specific VS Code package with language registration, baseline highlighting, and a bundled LSP binary.
+- [ ] Add incremental sync, local binding navigation, completion, rename, and wider editor integrations.
+- [ ] Add Tree-sitter and read-only MCP tools.
+- [x] Run the complete repository and release gates for this change.
+
+## Historical milestones
+
 - [x] Define v0.1 scope, semantics, trust boundary, and acceptance scenario.
 - [x] Implement structured errors, reader, AST, and program parser.
 - [x] Implement the bounded evaluator and pure primitive library.
@@ -74,4 +89,6 @@
 - [x] Add append-only redacted request observations with exact pinned-version identity.
 - [x] Add offline locked backups, semantic/hash verification, and no-overwrite restore.
 - [x] Add deterministic bounded shadow traffic over isolated pre-request data snapshots.
-- [ ] Pass canary, database/PITR, and release gates.
+- [x] Establish cross-platform CI and verifiable binary release gates.
+- [ ] Add a production canary controller with automatic stop conditions.
+- [ ] Add a production database adapter, migrations, and PITR exercises.
