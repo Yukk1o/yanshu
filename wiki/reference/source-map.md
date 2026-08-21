@@ -40,6 +40,8 @@
 | [VS Code grammar](/source/editors/vscode/syntaxes/yanshu.tmLanguage.json.txt) | 不参与语义的基础 TextMate token 显示 |
 | [VSIX package.cjs](/source/editors/vscode/scripts/package.cjs.txt) | 当前平台 binary、大小/symlink 边界与安装包生成 |
 | [VS Code bundle.cjs](/source/editors/vscode/scripts/bundle.cjs.txt) | 单入口 CommonJS bundle 与可复现输出目录 |
+| [VS Code test-e2e.cjs](/source/editors/vscode/scripts/test-e2e.cjs.txt) | 临时扩展副本、固定编辑器版本、隔离 profile 与凭据环境过滤 |
+| [VS Code Extension Host suite](/source/editors/vscode/src/test/suite/index.ts.txt) | 激活、诊断、hover、definition 与 formatting 的有界端到端断言 |
 | [diagnostic/lib.rs](/source/rust/crates/yanshu-diagnostic/src/lib.rs.txt) | 公共 code/message/details 与私有 span |
 
 ## 模块与 Bundle

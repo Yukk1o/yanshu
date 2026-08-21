@@ -1,0 +1,1 @@
+(program (name tools) (version 4) (signature target (fn (integer) integer)) (def target (fn (value) value)) (signature use (fn (integer) integer)) (def use (fn (value) (target value))) (export target use))

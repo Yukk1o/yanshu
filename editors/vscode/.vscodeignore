@@ -6,6 +6,7 @@ tsconfig.json
 package-lock.json
 node_modules/**
 dist/**
+out/test/**
 *.vsix
 server/**/*.pdb
 server/**/*.d

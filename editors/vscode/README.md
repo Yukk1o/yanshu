@@ -41,12 +41,27 @@ npm run package
 code --install-extension dist\yanshu-vscode-0.10.0-win32-x64.vsix
 ```
 
+## Extension Host 端到端测试
+
+先构建 release server，再启动固定的 VS Code 1.101.2 测试实例：
+
+```powershell
+cargo build --locked --release -p yanshu-lsp
+Set-Location editors\vscode
+npm run test:e2e
+```
+
+测试使用临时扩展副本和独立 user-data/extensions 目录，验证激活、`.yan` 识别、诊断、hover、同文件全局跳转与格式化 edit。下载阶段可以使用宿主代理；测试实例启动前会移除代理和凭据形状的环境变量。下载缓存只存放在忽略的 `.vscode-test/`。若要使用当前机器上的独立 VS Code 安装，可用绝对路径设置 `YANSHU_VSCODE_EXECUTABLE`；该安装正在运行或更新时应使用默认下载副本。
+
+CI 在 Windows x64 和 Linux x64（Xvfb）上运行同一套测试并生成对应 VSIX。测试 bundle 位于 `out/test/`，明确排除在 VSIX 之外。
+
 ## 安全边界
 
 - `.yan` 仍是唯一规范源码；Rust 风格审查视图不是输入。
 - 扩展只把编辑器中已打开的完整文档快照交给 LSP，不自行读取 URI 文件。
 - server 子进程不会继承名称包含 key、token、secret、password、credential 或 auth 的环境变量。
 - extension client 会 bundle 为单个 CommonJS 入口，VSIX 不携带开发依赖或散落的 `node_modules`。
+- Extension Host 测试 bundle 不进入 VSIX；测试所用编辑器、用户数据和扩展目录也不进入产物。
 - 打包器从锁定的生产依赖闭包生成第三方许可证正文；缺失、symlink 或超限许可证会失败关闭。
 - formatting 只返回 `TextEdit[]`；是否应用由 VS Code 和用户决定。
 - 当前没有 completion、rename、references、Tree-sitter 或局部 binding 跳转。

@@ -122,8 +122,15 @@ jobs:
         run: node scripts/wasm-smoke.mjs .runtime/ci/typed-expense.wasm
 
   vscode:
-    name: VS Code extension (linux-x64)
-    runs-on: ubuntu-latest
+    name: VS Code extension (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -144,11 +151,11 @@ jobs:
 
       - name: Install locked extension dependencies
         working-directory: editors/vscode
-        run: npm ci
+        run: npm ci --registry=https://registry.npmjs.org
 
       - name: Audit extension dependencies
         working-directory: editors/vscode
-        run: npm audit --audit-level=high
+        run: npm audit --registry=https://registry.npmjs.org --audit-level=high
 
       - name: Check extension types and unit tests
         working-directory: editors/vscode
@@ -157,6 +164,16 @@ jobs:
       - name: Build release language server
         run: cargo build --locked --release -p yanshu-lsp
 
+      - name: Test Extension Host on Linux
+        if: runner.os == 'Linux'
+        working-directory: editors/vscode
+        run: xvfb-run -a npm run test:e2e
+
+      - name: Test Extension Host on Windows
+        if: runner.os == 'Windows'
+        working-directory: editors/vscode
+        run: npm run test:e2e
+
       - name: Package platform VSIX
         working-directory: editors/vscode
         run: npm run package
@@ -164,8 +181,8 @@ jobs:
       - name: Upload CI VSIX
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: yanshu-vscode-linux-x64
-          path: editors/vscode/dist/yanshu-vscode-0.10.0-linux-x64.vsix
+          name: yanshu-vscode-${{ runner.os }}-${{ runner.arch }}
+          path: editors/vscode/dist/*.vsix
           if-no-files-found: error
           retention-days: 7
 

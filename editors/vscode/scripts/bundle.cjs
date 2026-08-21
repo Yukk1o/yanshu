@@ -38,6 +38,18 @@ async function main() {
     sourcesContent: false,
     logLevel: 'warning',
   });
+  await build({
+    entryPoints: [path.join(extensionRoot, 'src', 'test', 'suite', 'index.ts')],
+    outfile: path.join(outputRoot, 'test', 'suite', 'index.js'),
+    bundle: true,
+    external: ['vscode'],
+    format: 'cjs',
+    platform: 'node',
+    target: 'node22',
+    sourcemap: 'external',
+    sourcesContent: false,
+    logLevel: 'warning',
+  });
 }
 
 main().catch((error) => {

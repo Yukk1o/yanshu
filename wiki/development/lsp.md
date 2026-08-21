@@ -56,7 +56,7 @@ framing 缺失、重复 `Content-Length`、超限 header/body 或截断 body 会
 - 没有局部增量同步；
 - 局部参数、`let` 和 pattern binding 只用于防止误跳，尚不能跳到声明；
 - 没有 completion、references、rename、semantic tokens、code action；
-- 没有 Tree-sitter grammar、Neovim 安装包或 VS Code Extension Host 端到端测试；
+- 没有 Tree-sitter grammar、Neovim 安装包或 macOS/Arm Extension Host 平台验收；
 - 没有跨 Bundle/package 的多文件链接导航。
 
 实现入口：[协议 framing](/source/rust/crates/yanshu-lsp/src/protocol.rs.txt)、[文档与导航](/source/rust/crates/yanshu-lsp/src/document.rs.txt)、[server 生命周期](/source/rust/crates/yanshu-lsp/src/server.rs.txt)。完整契约见 [v0.12 规格](/source/docs/specs/v0.12.md.txt)。

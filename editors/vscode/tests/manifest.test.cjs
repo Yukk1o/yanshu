@@ -28,6 +28,11 @@ test('language configuration and grammar are valid JSON', () => {
   assert.ok(grammar.patterns.length >= 10);
 });
 
+test('Extension Host test output is excluded from the VSIX', () => {
+  const ignore = readFileSync(path.join(extensionRoot, '.vscodeignore'), 'utf8');
+  assert.match(ignore, /^out\/test\/\*\*$/mu);
+});
+
 test('runtime and build dependencies are exactly pinned', () => {
   for (const dependencies of [manifest.dependencies, manifest.devDependencies]) {
     for (const version of Object.values(dependencies)) {

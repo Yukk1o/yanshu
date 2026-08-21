@@ -23,7 +23,27 @@ npm run package
 code --install-extension dist\yanshu-vscode-0.10.0-win32-x64.vsix
 ```
 
-这个本地打包流程只生成当前宿主平台的 VSIX。CI 会额外构建并暂存 Linux x64 包，但这不等于已经完成 Marketplace 或全平台发布。
+这个本地打包流程只生成当前宿主平台的 VSIX。CI 会在 Windows x64 与 Linux x64 分别测试并暂存平台包，但这不等于已经完成 Marketplace、macOS 或 Arm 发布。
+
+## Extension Host 自动验收
+
+在仓库根目录先构建 release server，再进入扩展目录运行：
+
+```powershell
+cargo build --locked --release -p yanshu-lsp
+Set-Location editors\vscode
+npm run test:e2e
+```
+
+测试固定 VS Code 1.101.2，在系统临时目录组装最小扩展副本、内置 LSP 和隔离 user-data/extensions 目录，自动验证：
+
+- 扩展激活与 `.yan` language ID；
+- Parser 诊断；
+- hover 的稳定 expression node；
+- 同文档全局 definition；
+- formatter 只返回 edit、不直接修改文档。
+
+下载测试编辑器时可以沿用宿主代理；Extension Host 启动前会移除代理、过滤凭据形状的环境变量，并关闭更新与遥测。测试编辑器下载缓存位于忽略的 `.vscode-test/`；测试 bundle 明确排除在 VSIX 之外。CI 在 Windows 与 Linux/Xvfb 上执行同一验收。
 
 ## Server 怎样选择
 
@@ -53,13 +73,13 @@ code --install-extension dist\yanshu-vscode-0.10.0-win32-x64.vsix
 - formatting 仅返回 `TextEdit[]`，由 VS Code 和用户决定是否应用；
 - 平台包只接受不超过 128 MiB 的非 symlink release binary，并记录 SHA-256 和字节数；
 - npm 依赖精确固定，官方 registry 审计当前为 0 known vulnerabilities。
+- Extension Host 使用隔离配置目录；测试进程不继承凭据形状的环境变量。
 
 ## 仍未实现
 
 - Tree-sitter 与 semantic tokens；
 - completion、references、rename 和局部 binding 跳转；
-- VS Code Extension Host 端到端测试；
-- 自动生成 Windows/Linux/macOS 全矩阵 VSIX 的发布工作流；
+- 自动生成 Windows/Linux/macOS 与 x64/Arm 全矩阵 VSIX 的发布工作流；
 - Neovim、Zed、JetBrains 等安装包。
 
 源码入口：[扩展 client](/source/editors/vscode/src/extension.ts.txt)、[server 选择与脱敏](/source/editors/vscode/src/server-command.ts.txt)、[语言 grammar](/source/editors/vscode/syntaxes/yanshu.tmLanguage.json.txt)、[VSIX 打包边界](/source/editors/vscode/scripts/package.cjs.txt)。LSP 能力见[最小 LSP Server](/development/lsp)。
