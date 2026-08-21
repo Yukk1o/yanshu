@@ -1,0 +1,11 @@
+.github/**
+src/**
+tests/**
+scripts/**
+tsconfig.json
+package-lock.json
+node_modules/**
+dist/**
+*.vsix
+server/**/*.pdb
+server/**/*.d

@@ -121,6 +121,54 @@ jobs:
       - name: Validate and instantiate the WASM ABI
         run: node scripts/wasm-smoke.mjs .runtime/ci/typed-expense.wasm
 
+  vscode:
+    name: VS Code extension (linux-x64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: editors/vscode/package-lock.json
+
+      - name: Install Rust 1.97
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: 1.97.0
+
+      - name: Install locked extension dependencies
+        working-directory: editors/vscode
+        run: npm ci
+
+      - name: Audit extension dependencies
+        working-directory: editors/vscode
+        run: npm audit --audit-level=high
+
+      - name: Check extension types and unit tests
+        working-directory: editors/vscode
+        run: npm run check
+
+      - name: Build release language server
+        run: cargo build --locked --release -p yanshu-lsp
+
+      - name: Package platform VSIX
+        working-directory: editors/vscode
+        run: npm run package
+
+      - name: Upload CI VSIX
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: yanshu-vscode-linux-x64
+          path: editors/vscode/dist/yanshu-vscode-0.10.0-linux-x64.vsix
+          if-no-files-found: error
+          retention-days: 7
+
   wiki:
     name: Wiki
     runs-on: ubuntu-latest

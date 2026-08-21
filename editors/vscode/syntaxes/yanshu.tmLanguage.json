@@ -1,0 +1,79 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Yanshu",
+  "scopeName": "source.yanshu",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "name": "keyword.control.yanshu",
+      "match": "(?<![^\\s()\\[\\]{}'\\\"])(if|and|or|cond|else|let|fn|do|match|quote)(?![^\\s()\\[\\]{}'\\\"])"
+    },
+    {
+      "name": "keyword.declaration.yanshu",
+      "match": "(?<![^\\s()\\[\\]{}'\\\"])(program|name|version|capabilities|libraries|imports|data|export-types|signature|def|export|schema|route)(?![^\\s()\\[\\]{}'\\\"])"
+    },
+    {
+      "name": "storage.type.yanshu",
+      "match": "(?<![^\\s()\\[\\]{}'\\\"])(integer|boolean|string|list|map|any|nil)(?![^\\s()\\[\\]{}'\\\"])"
+    },
+    {
+      "name": "constant.language.boolean.yanshu",
+      "match": "(?<![^\\s()\\[\\]{}'\\\"])#(?:t|f)(?![^\\s()\\[\\]{}'\\\"])"
+    },
+    {
+      "name": "constant.numeric.integer.yanshu",
+      "match": "(?<![^\\s()\\[\\]{}'\\\"])-?[0-9]+(?![^\\s()\\[\\]{}'\\\"])"
+    },
+    {
+      "name": "constant.language.http-method.yanshu",
+      "match": "(?<![^\\s()\\[\\]{}'\\\"])(GET|POST|PUT|PATCH|DELETE)(?![^\\s()\\[\\]{}'\\\"])"
+    },
+    {
+      "name": "support.function.primitive.yanshu",
+      "match": "(?<![^\\s()\\[\\]{}'\\\"])(quotient|remainder|checked-quotient|checked-remainder|not|integer\\?|boolean\\?|string\\?|list\\?|map\\?|empty\\?|length|first|rest|list-map|list-filter|list-fold|sum|get|get-or|has-key\\?|assoc|string-append|number->string|ok|err|ok\\?|err\\?|result-value|unwrap|validate|validate-report|api-response|api-error|log|now-ms|kv-get|kv-put|kv-delete|kv-list|map|list|text/[A-Za-z0-9?+*/<>=_-]+)(?![^\\s()\\[\\]{}'\\\"])"
+    },
+    {
+      "name": "keyword.operator.yanshu",
+      "match": "(?<![^\\s()\\[\\]{}'\\\"])(\\+|-|\\*|=|<|<=|>|>=)(?![^\\s()\\[\\]{}'\\\"])"
+    },
+    {
+      "name": "punctuation.definition.quote.yanshu",
+      "match": "'"
+    },
+    {
+      "name": "punctuation.section.parens.yanshu",
+      "match": "[()\\[\\]{}]"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.semicolon.yanshu",
+          "begin": ";",
+          "end": "$"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.yanshu",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.yanshu",
+          "match": "\\\\[abtnvfre\"'\\\\]"
+        },
+        {
+          "name": "invalid.illegal.escape.yanshu",
+          "match": "\\\\."
+        }
+      ]
+    }
+  }
+}

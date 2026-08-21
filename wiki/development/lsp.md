@@ -19,6 +19,8 @@ target/debug/yanshu-lsp       # Linux
 
 server 不监听端口，不读取 workspace 文件，也不访问网络。编辑器必须用 `didOpen` / `didChange` 发送完整 `.yan` 文本。
 
+VS Code 用户可以直接使用[平台专用扩展](/development/vscode)，不必手工配置 protocol client。
+
 ## 当前能力
 
 | LSP 能力 | 当前行为 |
@@ -54,7 +56,7 @@ framing 缺失、重复 `Content-Length`、超限 header/body 或截断 body 会
 - 没有局部增量同步；
 - 局部参数、`let` 和 pattern binding 只用于防止误跳，尚不能跳到声明；
 - 没有 completion、references、rename、semantic tokens、code action；
-- 没有 Tree-sitter grammar 或 VS Code/Neovim 安装包；
+- 没有 Tree-sitter grammar、Neovim 安装包或 VS Code Extension Host 端到端测试；
 - 没有跨 Bundle/package 的多文件链接导航。
 
 实现入口：[协议 framing](/source/rust/crates/yanshu-lsp/src/protocol.rs.txt)、[文档与导航](/source/rust/crates/yanshu-lsp/src/document.rs.txt)、[server 生命周期](/source/rust/crates/yanshu-lsp/src/server.rs.txt)。完整契约见 [v0.12 规格](/source/docs/specs/v0.12.md.txt)。

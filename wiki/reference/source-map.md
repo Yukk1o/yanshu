@@ -35,6 +35,11 @@
 | [lsp/protocol.rs](/source/rust/crates/yanshu-lsp/src/protocol.rs.txt) | Content-Length framing、JSON body 与 header/message 上限 |
 | [lsp/document.rs](/source/rust/crates/yanshu-lsp/src/document.rs.txt) | 文档快照、UTF-16 range、诊断、hover、词法安全跳转与 TextEdit |
 | [lsp/server.rs](/source/rust/crates/yanshu-lsp/src/server.rs.txt) | initialize/shutdown/exit、full sync 与 JSON-RPC method dispatch |
+| [VS Code extension.ts](/source/editors/vscode/src/extension.ts.txt) | language client、快照 selector 与 LSP 生命周期 |
+| [VS Code server-command.ts](/source/editors/vscode/src/server-command.ts.txt) | machine/bundled/PATH 选择、平台映射与子进程环境脱敏 |
+| [VS Code grammar](/source/editors/vscode/syntaxes/yanshu.tmLanguage.json.txt) | 不参与语义的基础 TextMate token 显示 |
+| [VSIX package.cjs](/source/editors/vscode/scripts/package.cjs.txt) | 当前平台 binary、大小/symlink 边界与安装包生成 |
+| [VS Code bundle.cjs](/source/editors/vscode/scripts/bundle.cjs.txt) | 单入口 CommonJS bundle 与可复现输出目录 |
 | [diagnostic/lib.rs](/source/rust/crates/yanshu-diagnostic/src/lib.rs.txt) | 公共 code/message/details 与私有 span |
 
 ## 模块与 Bundle

@@ -8,7 +8,8 @@
 - [x] Expose read-only JSON formatting and `--check` through the stable CLI.
 - [x] Exercise the formatter against the real expense-approval program.
 - [x] Add bounded LSP full sync, diagnostics, hover, global navigation, and formatting edits.
-- [ ] Add incremental sync, local binding navigation, completion, rename, and editor packaging.
+- [x] Add a platform-specific VS Code package with language registration, baseline highlighting, and a bundled LSP binary.
+- [ ] Add incremental sync, local binding navigation, completion, rename, and wider editor integrations.
 - [ ] Add Tree-sitter and read-only MCP tools.
 - [x] Run the complete repository and release gates for this change.
 
