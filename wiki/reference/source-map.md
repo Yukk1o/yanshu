@@ -35,6 +35,8 @@
 | [format/render.rs](/source/rust/crates/yanshu-format/src/render.rs.txt) | form-aware 布局、行宽、缩进与逐次输出上限 |
 | [lsp/protocol.rs](/source/rust/crates/yanshu-lsp/src/protocol.rs.txt) | Content-Length framing、JSON body 与 header/message 上限 |
 | [lsp/document.rs](/source/rust/crates/yanshu-lsp/src/document.rs.txt) | 文档快照、UTF-16 range、诊断、导航、TextEdit 与有界 review 投影 |
+| [lsp/hover/mod.rs](/source/rust/crates/yanshu-lsp/src/hover/mod.rs.txt) | 精确 symbol、词法遮蔽、AST/类型/Library 合约解析与 8 KiB 输出边界 |
+| [lsp/hover/catalog.rs](/source/rust/crates/yanshu-lsp/src/hover/catalog.rs.txt) | form 与 core primitive 的版本化 plaintext 提示目录 |
 | [lsp/server.rs](/source/rust/crates/yanshu-lsp/src/server.rs.txt) | initialize/shutdown/exit、full sync、标准与 experimental method dispatch |
 | [VS Code extension.ts](/source/editors/vscode/src/extension.ts.txt) | language client、快照 selector 与 LSP 生命周期 |
 | [VS Code server-command.ts](/source/editors/vscode/src/server-command.ts.txt) | machine/bundled/PATH 选择、平台映射与子进程环境脱敏 |

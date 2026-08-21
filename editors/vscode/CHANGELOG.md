@@ -9,3 +9,4 @@
 - Resolve parameter, sequential `let`, and pattern binding definitions with lexical shadowing.
 - Find same-document references for global definitions and lexical local bindings without text search.
 - Open a scriptless, version-bound Rust-style review panel beside the canonical `.yan` editor.
+- Show exact plaintext hover help for language forms, primitives, library operations, user functions, and lexical bindings.

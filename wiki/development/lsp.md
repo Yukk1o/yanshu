@@ -28,7 +28,7 @@ VS Code 用户可以直接使用[平台专用扩展](/development/vscode)，不�
 | position encoding | 明确协商 `utf-16`，中文和非 BMP 字符不会错位 |
 | document sync | open/close + full change；version 必须递增 |
 | diagnostics | Parser 错误；language v4 还包含类型与 effect/capability 错误 |
-| hover | 当前 definition 的类型、effects 和最深 `expression-v1` 节点路径 |
+| hover | 精确 token 的 form 语法、primitive/Library 合约、用户函数类型/effects、局部 binding 与稳定节点路径 |
 | definition | 跳到同文件全局 `def`，或参数、顺序 `let`、pattern binding 的精确声明 |
 | references | 查找同文件全局/局部变量引用，遵守 `includeDeclaration` 与词法遮蔽 |
 | formatting | 返回 canonical full-document `TextEdit[]`；server 不写文件 |
@@ -42,6 +42,12 @@ VS Code 用户可以直接使用[平台专用扩展](/development/vscode)，不�
 
 通知本身没有 JSON-RPC response。若 change 版本倒退、携带增量 `range`、超过大小或形状不合法，server 不修改现有快照，只发送不含源码和 URI 的 `window/logMessage`。
 
+## Hover 怎样避免猜名字
+
+hover 不是按单词表搜索源码。bounded Reader 只定位光标下一个 symbol 及其精确 span；正式 AST 判断它是否真是可执行 special form/变量，词法符号索引先解析全局 `def`、参数、顺序 `let` 和 pattern binding，再考虑 core primitive、构造器、Schema 或 Library operation。因此局部参数叫 `log` 时不会显示日志 capability，`'(cond log)`、字符串和注释里的同名文本也没有代码提示。
+
+提示使用 plaintext，最多 8 KiB，不包含 HTML、命令链接、源码值、URI 或宿主自由文本。special form 显示语法、最低 language version 与短路/作用域语义；core primitive 显示类型、effect/capability 和适用的 fuel 规则；`text@1` 一类 Library operation 的参数、返回类型和 fuel 公式直接读取可信 `LibraryContract`；用户函数显示推断/声明类型、传递 capability effect 与适用的 `expression-v1` 节点路径。返回 range 只覆盖被命中的 UTF-16 token，而不是整个 definition。
+
 ## 有界协议
 
 - JSON-RPC body 最多 32 MiB；
@@ -49,6 +55,7 @@ VS Code 用户可以直接使用[平台专用扩展](/development/vscode)，不�
 - 单份源码最多 4 MiB；
 - 最多 32 个打开文档，总源码最多 16 MiB；
 - URI 最多 4 KiB；
+- hover plaintext 最多 8 KiB，六倍 JSON 转义上界仍小于消息限制；
 - 单次 references 最多 1,024 个 Location，超限返回 `LSP_REFERENCE_LIMIT`，不静默截断；
 - review 输入最多 512 KiB、投影文本最多 4 MiB，版本和 renderer/read-only 契约必须精确匹配；
 - 只接受 ASCII header 和 UTF-8 JSON body。
@@ -70,4 +77,4 @@ definition 与 references 不使用文本搜索。正式 AST 决定全局 `def`�
 - 没有 Tree-sitter grammar、Neovim 安装包或 macOS/Arm Extension Host 平台验收；
 - 没有跨 Bundle/package 的多文件链接导航。
 
-实现入口：[符号索引](/source/rust/crates/yanshu-syntax/src/symbol.rs.txt)、[协议 framing](/source/rust/crates/yanshu-lsp/src/protocol.rs.txt)、[文档与导航](/source/rust/crates/yanshu-lsp/src/document.rs.txt)、[server 生命周期](/source/rust/crates/yanshu-lsp/src/server.rs.txt)。完整契约见 [v0.12 规格](/source/docs/specs/v0.12.md.txt)。
+实现入口：[符号索引](/source/rust/crates/yanshu-syntax/src/symbol.rs.txt)、[Hover 解析](/source/rust/crates/yanshu-lsp/src/hover/mod.rs.txt)、[Hover 目录](/source/rust/crates/yanshu-lsp/src/hover/catalog.rs.txt)、[协议 framing](/source/rust/crates/yanshu-lsp/src/protocol.rs.txt)、[文档与导航](/source/rust/crates/yanshu-lsp/src/document.rs.txt)、[server 生命周期](/source/rust/crates/yanshu-lsp/src/server.rs.txt)。完整契约见 [v0.12 规格](/source/docs/specs/v0.12.md.txt)。
