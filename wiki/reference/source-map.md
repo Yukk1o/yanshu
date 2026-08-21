@@ -28,7 +28,7 @@
 | [reader.rs](/source/rust/crates/yanshu-syntax/src/reader.rs.txt) | UTF-8 token、datum、节点数和嵌套限制、BigInt |
 | [ast.rs](/source/rust/crates/yanshu-syntax/src/ast.rs.txt) | `Program`、`ExpressionKind`、`SchemaKind`、source span、inspect JSON |
 | [node_id.rs](/source/rust/crates/yanshu-syntax/src/node_id.rs.txt) | 不依赖 source offset 的 `expression-v1` 语义路径 |
-| [symbol.rs](/source/rust/crates/yanshu-syntax/src/symbol.rs.txt) | 参数、顺序 `let`、pattern binding、嵌套遮蔽与声明—引用索引 |
+| [symbol.rs](/source/rust/crates/yanshu-syntax/src/symbol.rs.txt) | 全局 `def`、参数、顺序 `let`、pattern binding、嵌套遮蔽与有界引用索引 |
 | [parser.rs](/source/rust/crates/yanshu-syntax/src/parser.rs.txt) | 顶层 form、命名、capability、library、Schema、route 和 expression 校验 |
 | [format/lib.rs](/source/rust/crates/yanshu-format/src/lib.rs.txt) | 公共 options/result、双 Parser 语义复核与幂等编排 |
 | [format/cst.rs](/source/rust/crates/yanshu-format/src/cst.rs.txt) | 保留注释但丢弃无意义空白的 bounded concrete tree |
@@ -42,7 +42,7 @@
 | [VSIX package.cjs](/source/editors/vscode/scripts/package.cjs.txt) | 当前平台 binary、大小/symlink 边界与安装包生成 |
 | [VS Code bundle.cjs](/source/editors/vscode/scripts/bundle.cjs.txt) | 单入口 CommonJS bundle 与可复现输出目录 |
 | [VS Code test-e2e.cjs](/source/editors/vscode/scripts/test-e2e.cjs.txt) | 临时扩展副本、固定编辑器版本、隔离 profile 与凭据环境过滤 |
-| [VS Code Extension Host suite](/source/editors/vscode/src/test/suite/index.ts.txt) | 激活、诊断、hover、definition 与 formatting 的有界端到端断言 |
+| [VS Code Extension Host suite](/source/editors/vscode/src/test/suite/index.ts.txt) | 激活、诊断、hover、definition、references 与 formatting 的有界端到端断言 |
 | [diagnostic/lib.rs](/source/rust/crates/yanshu-diagnostic/src/lib.rs.txt) | 公共 code/message/details 与私有 span |
 
 ## 模块与 Bundle

@@ -76,6 +76,25 @@ async function verifyLanguageFeatures(uri: vscode.Uri, expectedFormatUri: vscode
   assert.equal(targetUri.toString(), uri.toString(), 'definition escaped the open document');
   assert.equal(document.getText(targetRange), 'target', 'definition resolved to the wrong symbol');
 
+  const globalReferences = await withTimeout(vscode.commands.executeCommand<vscode.Location[]>(
+    'vscode.executeReferenceProvider',
+    uri,
+    callPosition,
+  ), 'global references request');
+  assert.ok(globalReferences && globalReferences.length > 0, 'global reference provider returned no result');
+  assert.ok(
+    globalReferences.every((reference) => reference.uri.toString() === uri.toString()),
+    'global references escaped the open document',
+  );
+  assert.ok(
+    globalReferences.some((reference) => reference.range.start.isEqual(callPosition)),
+    'global references omitted the selected call',
+  );
+  assert.ok(
+    globalReferences.every((reference) => document.getText(reference.range) === 'target'),
+    'global references mixed unrelated symbols',
+  );
+
   const localReferenceOffset = callOffset + 'target '.length;
   const localDeclarationMarker = '(fn (value) (target value))';
   const localDeclarationOffset = sourceBeforeFormatting.lastIndexOf(localDeclarationMarker)
@@ -102,6 +121,26 @@ async function verifyLanguageFeatures(uri: vscode.Uri, expectedFormatUri: vscode
   assert.ok(
     localRange.start.isEqual(document.positionAt(localDeclarationOffset)),
     'local definition ignored the parameter declaration span',
+  );
+
+  const localReferencePosition = document.positionAt(localReferenceOffset);
+  const localReferences = await withTimeout(vscode.commands.executeCommand<vscode.Location[]>(
+    'vscode.executeReferenceProvider',
+    uri,
+    localReferencePosition,
+  ), 'local references request');
+  assert.ok(localReferences && localReferences.length > 0, 'local reference provider returned no result');
+  assert.ok(
+    localReferences.every((reference) => reference.uri.toString() === uri.toString()),
+    'local references escaped the open document',
+  );
+  assert.ok(
+    localReferences.some((reference) => reference.range.start.isEqual(localReferencePosition)),
+    'local references omitted the selected parameter use',
+  );
+  assert.ok(
+    localReferences.every((reference) => document.getText(reference.range) === 'value'),
+    'local references mixed a shadowed or unrelated symbol',
   );
 
   const edits = await withTimeout(vscode.commands.executeCommand<vscode.TextEdit[]>(
