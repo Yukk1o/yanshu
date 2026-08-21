@@ -1,12 +1,12 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use serde_json::{Value, json};
 use yanshu_analysis::{AnalysisReport, analyze_program};
 use yanshu_diagnostic::{Diagnostic, Span, YanshuResult};
 use yanshu_format::{FormatOptions, format_source};
 use yanshu_syntax::{
-    Datum, DatumKind, Expression, ExpressionKind, Pattern, PatternKind, Program, ReaderLimits,
-    expression_nodes, load_program_source, read_source,
+    Datum, DatumKind, Expression, ExpressionKind, Program, ReaderLimits, expression_nodes,
+    load_program_source, local_symbol_index, read_source,
 };
 
 const MAXIMUM_OPEN_DOCUMENTS: usize = 32;
@@ -170,13 +170,17 @@ impl OpenDocument {
     pub(crate) fn definition(&self, line: u64, character: u64) -> Option<Value> {
         let offset = offset_from_lsp(&self.source, line, character)?;
         let program = load_program_source(&self.source).ok()?;
-        let resolution = variable_at(&program, offset)?;
-        if resolution.local {
-            return None;
+        let symbols = local_symbol_index(&program).ok()?;
+        if let Some(target) = symbols.definition_at(offset) {
+            return Some(json!({
+                "uri": self.uri,
+                "range": span_range(&self.source, target),
+            }));
         }
+        let name = variable_at(&program, offset)?;
         let target = definition_name_spans(&self.source)
             .into_iter()
-            .find(|(name, _)| name == &resolution.name)
+            .find(|(candidate, _)| candidate == &name)
             .map(|(_, span)| span)?;
         Some(json!({
             "uri": self.uri,
@@ -300,25 +304,14 @@ fn contains_offset(span: Span, offset: usize) -> bool {
     span.start.offset <= offset && offset < span.end.offset
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct VariableResolution {
-    name: String,
-    local: bool,
-}
-
-fn variable_at(program: &Program, offset: usize) -> Option<VariableResolution> {
-    let bindings = BTreeSet::new();
+fn variable_at(program: &Program, offset: usize) -> Option<String> {
     program
         .definitions
         .iter()
-        .find_map(|definition| resolve_variable(&definition.expression, offset, &bindings))
+        .find_map(|definition| resolve_variable(&definition.expression, offset))
 }
 
-fn resolve_variable(
-    expression: &Expression,
-    offset: usize,
-    bindings: &BTreeSet<String>,
-) -> Option<VariableResolution> {
+fn resolve_variable(expression: &Expression, offset: usize) -> Option<String> {
     if !contains_offset(expression.span, offset) {
         return None;
     }
@@ -333,80 +326,53 @@ fn resolve_variable(
             alternative.as_ref(),
         ]
         .into_iter()
-        .find_map(|child| resolve_variable(child, offset, bindings)),
+        .find_map(|child| resolve_variable(child, offset)),
         ExpressionKind::And(expressions)
         | ExpressionKind::Or(expressions)
         | ExpressionKind::Do(expressions) => expressions
             .iter()
-            .find_map(|child| resolve_variable(child, offset, bindings)),
+            .find_map(|child| resolve_variable(child, offset)),
         ExpressionKind::Cond {
             clauses,
             alternative,
         } => clauses
             .iter()
             .find_map(|clause| {
-                resolve_variable(&clause.condition, offset, bindings)
-                    .or_else(|| resolve_variable(&clause.expression, offset, bindings))
+                resolve_variable(&clause.condition, offset)
+                    .or_else(|| resolve_variable(&clause.expression, offset))
             })
-            .or_else(|| resolve_variable(alternative, offset, bindings)),
-        ExpressionKind::Match { value, arms } => {
-            resolve_variable(value, offset, bindings).or_else(|| {
-                arms.iter().find_map(|arm| {
-                    let mut arm_bindings = bindings.clone();
-                    collect_pattern_bindings(&arm.pattern, &mut arm_bindings);
-                    resolve_variable(&arm.expression, offset, &arm_bindings)
-                })
-            })
-        }
+            .or_else(|| resolve_variable(alternative, offset)),
+        ExpressionKind::Match { value, arms } => resolve_variable(value, offset).or_else(|| {
+            arms.iter()
+                .find_map(|arm| resolve_variable(&arm.expression, offset))
+        }),
         ExpressionKind::Let {
             bindings: let_bindings,
             body,
         } => {
-            let mut scope = bindings.clone();
             let mut found = None;
             for binding in let_bindings {
-                found = resolve_variable(&binding.expression, offset, &scope);
+                found = resolve_variable(&binding.expression, offset);
                 if found.is_some() {
                     break;
                 }
-                scope.insert(binding.name.clone());
             }
-            found.or_else(|| resolve_variable(body, offset, &scope))
+            found.or_else(|| resolve_variable(body, offset))
         }
-        ExpressionKind::Function { parameters, body } => {
-            let mut scope = bindings.clone();
-            scope.extend(parameters.iter().cloned());
-            resolve_variable(body, offset, &scope)
-        }
-        ExpressionKind::Call { callee, arguments } => resolve_variable(callee, offset, bindings)
-            .or_else(|| {
+        ExpressionKind::Function { body, .. } => resolve_variable(body, offset),
+        ExpressionKind::Call { callee, arguments } => {
+            resolve_variable(callee, offset).or_else(|| {
                 arguments
                     .iter()
-                    .find_map(|argument| resolve_variable(argument, offset, bindings))
-            }),
+                    .find_map(|argument| resolve_variable(argument, offset))
+            })
+        }
         ExpressionKind::Literal(_) | ExpressionKind::Variable(_) | ExpressionKind::Quote(_) => None,
     };
     child.or_else(|| match &expression.kind {
-        ExpressionKind::Variable(name) => Some(VariableResolution {
-            name: name.clone(),
-            local: bindings.contains(name),
-        }),
+        ExpressionKind::Variable(name) => Some(name.clone()),
         _ => None,
     })
-}
-
-fn collect_pattern_bindings(pattern: &Pattern, bindings: &mut BTreeSet<String>) {
-    match &pattern.kind {
-        PatternKind::Binding(name) => {
-            bindings.insert(name.clone());
-        }
-        PatternKind::Variant { fields, .. } => {
-            for field in fields {
-                collect_pattern_bindings(field, bindings);
-            }
-        }
-        PatternKind::Wildcard | PatternKind::Literal(_) => {}
-    }
 }
 
 fn definition_name_spans(source: &str) -> Vec<(String, Span)> {
@@ -449,6 +415,18 @@ mod tests {
         }
     }
 
+    fn character_at(source: &str, offset: usize) -> u64 {
+        u64::try_from(source[..offset].encode_utf16().count())
+            .unwrap_or_else(|_| panic!("test character offset overflowed"))
+    }
+
+    fn definition_start(document: &OpenDocument, source: &str, offset: usize) -> u64 {
+        document
+            .definition(0, character_at(source, offset))
+            .and_then(|location| location["range"]["start"]["character"].as_u64())
+            .unwrap_or_else(|| panic!("definition location missing"))
+    }
+
     #[test]
     fn utf16_positions_do_not_split_surrogate_pairs() {
         assert_eq!(offset_from_lsp("a😀b", 0, 1), Some(1));
@@ -457,15 +435,94 @@ mod tests {
     }
 
     #[test]
-    fn definition_avoids_lexically_shadowed_globals() {
+    fn definition_resolves_a_parameter_that_shadows_a_global() {
         let source = "(program (name nav) (version 4) (signature target (fn (integer) integer)) (def target (fn (x) x)) (signature use (fn (integer) integer)) (def use (fn (target) target)) (export target use))";
         let document = document(source);
+        let declaration = source
+            .rfind("(fn (target)")
+            .unwrap_or_else(|| panic!("local target declaration missing"))
+            + "(fn (".len();
         let local_offset = source
             .rfind("target))")
             .unwrap_or_else(|| panic!("local target fixture missing"));
-        let prefix = &source[..local_offset];
-        let character = prefix.encode_utf16().count() as u64;
-        assert_eq!(document.definition(0, character), None);
+        assert_eq!(
+            definition_start(&document, source, local_offset),
+            character_at(source, declaration),
+        );
+    }
+
+    #[test]
+    fn definition_respects_sequential_let_scope_and_shadowing() {
+        let source = "(program (name lets) (version 1) (def use (fn (outer) (let ((value outer) (outer value)) (+ outer value)))) (export use))";
+        let document = document(source);
+        let parameter = source
+            .find("(fn (outer)")
+            .unwrap_or_else(|| panic!("parameter declaration missing"))
+            + "(fn (".len();
+        let first_binding = source
+            .find("((value outer)")
+            .unwrap_or_else(|| panic!("first let declaration missing"))
+            + "((".len();
+        let second_binding = source
+            .find("(outer value)")
+            .unwrap_or_else(|| panic!("second let declaration missing"))
+            + '('.len_utf8();
+        let parameter_reference = source
+            .find("value outer)")
+            .unwrap_or_else(|| panic!("parameter reference missing"))
+            + "value ".len();
+        let first_binding_reference = source
+            .find("(outer value)")
+            .unwrap_or_else(|| panic!("first let reference missing"))
+            + "(outer ".len();
+        let body = source
+            .find("(+ outer value)")
+            .unwrap_or_else(|| panic!("let body missing"));
+        let second_binding_reference = body + "(+ ".len();
+        let body_first_binding_reference = body + "(+ outer ".len();
+
+        for (reference, declaration) in [
+            (parameter_reference, parameter),
+            (first_binding_reference, first_binding),
+            (second_binding_reference, second_binding),
+            (body_first_binding_reference, first_binding),
+        ] {
+            assert_eq!(
+                definition_start(&document, source, reference),
+                character_at(source, declaration),
+            );
+        }
+    }
+
+    #[test]
+    fn definition_resolves_pattern_bindings_only_inside_their_arm() {
+        let source = "(program (name patterns) (version 3) (data decision (approved amount)) (def inspect (fn (decision) (match decision ((approved amount) amount) (_ decision)))) (export inspect approved))";
+        let document = document(source);
+        let pattern = source
+            .find("(approved amount) amount")
+            .unwrap_or_else(|| panic!("pattern fixture missing"))
+            + "(approved ".len();
+        let pattern_reference = source
+            .find("(approved amount) amount")
+            .unwrap_or_else(|| panic!("pattern reference missing"))
+            + "(approved amount) ".len();
+        let parameter = source
+            .find("(fn (decision)")
+            .unwrap_or_else(|| panic!("pattern parameter missing"))
+            + "(fn (".len();
+        let default_reference = source
+            .rfind("_ decision")
+            .unwrap_or_else(|| panic!("default arm reference missing"))
+            + "_ ".len();
+
+        assert_eq!(
+            definition_start(&document, source, pattern_reference),
+            character_at(source, pattern),
+        );
+        assert_eq!(
+            definition_start(&document, source, default_reference),
+            character_at(source, parameter),
+        );
     }
 
     #[test]

@@ -29,7 +29,7 @@ VS Code 用户可以直接使用[平台专用扩展](/development/vscode)，不�
 | document sync | open/close + full change；version 必须递增 |
 | diagnostics | Parser 错误；language v4 还包含类型与 effect/capability 错误 |
 | hover | 当前 definition 的类型、effects 和最深 `expression-v1` 节点路径 |
-| definition | 跳到同文件全局 `def` 名称；局部遮蔽时返回空，不会误跳 |
+| definition | 跳到同文件全局 `def`，或参数、顺序 `let`、pattern binding 的精确声明 |
 | formatting | 返回 canonical full-document `TextEdit[]`；server 不写文件 |
 
 格式化 edit 由编辑器展示和应用。`.yan` 原文仍是规范输入，LSP 不能执行 Rust 审查视图，也不能替 Parser、测试、fuel 或内容哈希做决定。
@@ -51,12 +51,17 @@ VS Code 用户可以直接使用[平台专用扩展](/development/vscode)，不�
 
 framing 缺失、重复 `Content-Length`、超限 header/body 或截断 body 会终止 server，而不是尝试猜测流边界。
 
+## 局部名称怎样解析
+
+局部跳转不使用文本搜索。正式 AST 决定函数、顺序 `let`、match arm 和嵌套遮蔽的作用域；同源 Reader datum 只提供参数与 `let` 名称的精确 span，pattern binding 使用 Parser 已保存的 span。声明和引用总量受 Reader 节点上限约束，AST 与源码 span 对不上时失败关闭。
+
+因此，内层参数或 binding 与全局 `def` 同名时会跳到内层声明；顺序 `let` 的右侧只能引用更早的 binding；退出嵌套函数或 match arm 后会恢复外层作用域。这个只读索引不改变 `.yan`、Bundle、package 或运行语义。
+
 ## 当前限制
 
 - 没有局部增量同步；
-- 局部参数、`let` 和 pattern binding 只用于防止误跳，尚不能跳到声明；
 - 没有 completion、references、rename、semantic tokens、code action；
 - 没有 Tree-sitter grammar、Neovim 安装包或 macOS/Arm Extension Host 平台验收；
 - 没有跨 Bundle/package 的多文件链接导航。
 
-实现入口：[协议 framing](/source/rust/crates/yanshu-lsp/src/protocol.rs.txt)、[文档与导航](/source/rust/crates/yanshu-lsp/src/document.rs.txt)、[server 生命周期](/source/rust/crates/yanshu-lsp/src/server.rs.txt)。完整契约见 [v0.12 规格](/source/docs/specs/v0.12.md.txt)。
+实现入口：[局部符号索引](/source/rust/crates/yanshu-syntax/src/symbol.rs.txt)、[协议 framing](/source/rust/crates/yanshu-lsp/src/protocol.rs.txt)、[文档与导航](/source/rust/crates/yanshu-lsp/src/document.rs.txt)、[server 生命周期](/source/rust/crates/yanshu-lsp/src/server.rs.txt)。完整契约见 [v0.12 规格](/source/docs/specs/v0.12.md.txt)。

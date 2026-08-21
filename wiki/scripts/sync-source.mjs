@@ -166,7 +166,8 @@ const publishedFiles = [
   'rust/crates/yanshu-syntax/src/lib.rs',
   'rust/crates/yanshu-syntax/src/node_id.rs',
   'rust/crates/yanshu-syntax/src/parser.rs',
-  'rust/crates/yanshu-syntax/src/reader.rs'
+  'rust/crates/yanshu-syntax/src/reader.rs',
+  'rust/crates/yanshu-syntax/src/symbol.rs'
 ]
 
 // Recreate the generated mirror so removed allowlist entries cannot linger.

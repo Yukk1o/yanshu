@@ -28,12 +28,13 @@
 | [reader.rs](/source/rust/crates/yanshu-syntax/src/reader.rs.txt) | UTF-8 token、datum、节点数和嵌套限制、BigInt |
 | [ast.rs](/source/rust/crates/yanshu-syntax/src/ast.rs.txt) | `Program`、`ExpressionKind`、`SchemaKind`、source span、inspect JSON |
 | [node_id.rs](/source/rust/crates/yanshu-syntax/src/node_id.rs.txt) | 不依赖 source offset 的 `expression-v1` 语义路径 |
+| [symbol.rs](/source/rust/crates/yanshu-syntax/src/symbol.rs.txt) | 参数、顺序 `let`、pattern binding、嵌套遮蔽与声明—引用索引 |
 | [parser.rs](/source/rust/crates/yanshu-syntax/src/parser.rs.txt) | 顶层 form、命名、capability、library、Schema、route 和 expression 校验 |
 | [format/lib.rs](/source/rust/crates/yanshu-format/src/lib.rs.txt) | 公共 options/result、双 Parser 语义复核与幂等编排 |
 | [format/cst.rs](/source/rust/crates/yanshu-format/src/cst.rs.txt) | 保留注释但丢弃无意义空白的 bounded concrete tree |
 | [format/render.rs](/source/rust/crates/yanshu-format/src/render.rs.txt) | form-aware 布局、行宽、缩进与逐次输出上限 |
 | [lsp/protocol.rs](/source/rust/crates/yanshu-lsp/src/protocol.rs.txt) | Content-Length framing、JSON body 与 header/message 上限 |
-| [lsp/document.rs](/source/rust/crates/yanshu-lsp/src/document.rs.txt) | 文档快照、UTF-16 range、诊断、hover、词法安全跳转与 TextEdit |
+| [lsp/document.rs](/source/rust/crates/yanshu-lsp/src/document.rs.txt) | 文档快照、UTF-16 range、诊断、hover、全局/局部跳转与 TextEdit |
 | [lsp/server.rs](/source/rust/crates/yanshu-lsp/src/server.rs.txt) | initialize/shutdown/exit、full sync 与 JSON-RPC method dispatch |
 | [VS Code extension.ts](/source/editors/vscode/src/extension.ts.txt) | language client、快照 selector 与 LSP 生命周期 |
 | [VS Code server-command.ts](/source/editors/vscode/src/server-command.ts.txt) | machine/bundled/PATH 选择、平台映射与子进程环境脱敏 |
