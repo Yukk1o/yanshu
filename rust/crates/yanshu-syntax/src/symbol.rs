@@ -74,6 +74,7 @@ pub struct SymbolBinding {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SymbolIndex {
     bindings: Vec<SymbolBinding>,
+    visibility: Vec<BindingVisibility>,
 }
 
 impl SymbolIndex {
@@ -106,6 +107,34 @@ impl SymbolIndex {
         Some(spans)
     }
 
+    /// Returns the guest bindings visible at `offset`, sorted by name.
+    ///
+    /// Inner lexical bindings replace outer bindings with the same name.
+    /// Sequential `let` bindings become visible only after their initializer,
+    /// while pattern bindings remain confined to one match arm.
+    #[must_use]
+    pub fn visible_bindings_at(&self, offset: usize) -> Vec<&SymbolBinding> {
+        let mut visible = BTreeMap::<&str, (usize, usize)>::new();
+        for (index, (binding, visibility)) in self.bindings.iter().zip(&self.visibility).enumerate()
+        {
+            if !visibility.contains(offset) {
+                continue;
+            }
+            let replace = visible
+                .get(binding.name.as_str())
+                .is_none_or(|(depth, previous)| {
+                    visibility.depth > *depth || (visibility.depth == *depth && index > *previous)
+                });
+            if replace {
+                visible.insert(binding.name.as_str(), (visibility.depth, index));
+            }
+        }
+        visible
+            .into_values()
+            .map(|(_, index)| &self.bindings[index])
+            .collect()
+    }
+
     fn binding_at(&self, offset: usize) -> Option<&SymbolBinding> {
         self.bindings.iter().find(|binding| {
             contains_offset(binding.declaration, offset)
@@ -117,6 +146,43 @@ impl SymbolIndex {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct BindingVisibility {
+    start: usize,
+    end: usize,
+    include_start: bool,
+    depth: usize,
+}
+
+impl BindingVisibility {
+    fn closed(span: Span, depth: usize) -> Self {
+        Self {
+            start: span.start.offset,
+            end: span.end.offset,
+            include_start: true,
+            depth,
+        }
+    }
+
+    fn after(start: usize, end: usize, depth: usize) -> Self {
+        Self {
+            start,
+            end,
+            include_start: false,
+            depth,
+        }
+    }
+
+    fn contains(self, offset: usize) -> bool {
+        let after_start = if self.include_start {
+            offset >= self.start
+        } else {
+            offset > self.start
+        };
+        after_start && offset <= self.end
+    }
+}
+
 /// Builds the local lexical symbol graph from the canonical parsed program.
 ///
 /// The AST defines scope and resolution. A second bounded Reader pass over the
@@ -124,6 +190,7 @@ impl SymbolIndex {
 /// executable semantics. A mismatch fails closed instead of guessing offsets.
 pub fn local_symbol_index(program: &Program) -> YanshuResult<LocalSymbolIndex> {
     let bindings = build_symbol_bindings(program, false)?
+        .bindings
         .into_iter()
         .filter_map(|binding| {
             let kind = match binding.kind {
@@ -150,15 +217,22 @@ pub fn local_symbol_index(program: &Program) -> YanshuResult<LocalSymbolIndex> {
 /// definition's signature, route handler, and export sites are also semantic
 /// references. Type, schema, quoted, string, and comment names are not.
 pub fn symbol_index(program: &Program) -> YanshuResult<SymbolIndex> {
+    let built = build_symbol_bindings(program, true)?;
     Ok(SymbolIndex {
-        bindings: build_symbol_bindings(program, true)?,
+        bindings: built.bindings,
+        visibility: built.visibility,
     })
+}
+
+struct BuiltSymbolBindings {
+    bindings: Vec<SymbolBinding>,
+    visibility: Vec<BindingVisibility>,
 }
 
 fn build_symbol_bindings(
     program: &Program,
     include_definitions: bool,
-) -> YanshuResult<Vec<SymbolBinding>> {
+) -> YanshuResult<BuiltSymbolBindings> {
     let root = read_source(&program.source, ReaderLimits::default())?;
     let mut declarations = DeclarationSpans::default();
     collect_program_spans(&root, &mut declarations);
@@ -168,6 +242,7 @@ fn build_symbol_bindings(
         source: &program.source,
         declarations: &declarations,
         bindings: Vec::new(),
+        visibility: Vec::new(),
         scope_stack: Vec::new(),
         active_bindings: BTreeMap::new(),
         global_bindings: BTreeMap::new(),
@@ -176,13 +251,16 @@ fn build_symbol_bindings(
         include_definitions,
     };
     if include_definitions {
-        builder.bind_definitions(program)?;
+        builder.bind_definitions(program, root.span)?;
         builder.record_program_references(program)?;
     }
     for definition in &program.definitions {
         builder.visit_expression(&definition.expression)?;
     }
-    Ok(builder.bindings)
+    Ok(BuiltSymbolBindings {
+        bindings: builder.bindings,
+        visibility: builder.visibility,
+    })
 }
 
 #[derive(Default)]
@@ -262,6 +340,7 @@ struct SymbolBuilder<'declarations> {
     source: &'declarations str,
     declarations: &'declarations DeclarationSpans,
     bindings: Vec<SymbolBinding>,
+    visibility: Vec<BindingVisibility>,
     scope_stack: Vec<String>,
     active_bindings: BTreeMap<String, Vec<usize>>,
     global_bindings: BTreeMap<String, usize>,
@@ -271,7 +350,7 @@ struct SymbolBuilder<'declarations> {
 }
 
 impl SymbolBuilder<'_> {
-    fn bind_definitions(&mut self, program: &Program) -> YanshuResult<()> {
+    fn bind_definitions(&mut self, program: &Program, program_span: Span) -> YanshuResult<()> {
         if self.declarations.definition_names.len() != program.definitions.len() {
             let diagnostic = definition_source_mismatch_without_span("definition declaration");
             return Err(program
@@ -286,7 +365,7 @@ impl SymbolBuilder<'_> {
             .iter()
             .zip(&self.declarations.definition_names)
         {
-            self.bind_global(&definition.name, *declaration)?;
+            self.bind_global(&definition.name, *declaration, program_span)?;
         }
         Ok(())
     }
@@ -396,7 +475,7 @@ impl SymbolBuilder<'_> {
                 self.visit_expression(value)?;
                 for arm in arms {
                     let outer_scope = self.scope_stack.len();
-                    self.bind_pattern(&arm.pattern)?;
+                    self.bind_pattern(&arm.pattern, arm.expression.span)?;
                     self.visit_expression(&arm.expression)?;
                     self.restore_scope(outer_scope);
                 }
@@ -412,7 +491,17 @@ impl SymbolBuilder<'_> {
                 let outer_scope = self.scope_stack.len();
                 for (binding, declaration) in bindings.iter().zip(spans) {
                     self.visit_expression(&binding.expression)?;
-                    self.bind_local(&binding.name, SymbolBindingKind::Let, *declaration)?;
+                    let visibility = BindingVisibility::after(
+                        binding.expression.span.end.offset,
+                        body.span.end.offset,
+                        self.scope_stack.len().saturating_add(1),
+                    );
+                    self.bind_local(
+                        &binding.name,
+                        SymbolBindingKind::Let,
+                        *declaration,
+                        visibility,
+                    )?;
                 }
                 self.visit_expression(body)?;
                 self.restore_scope(outer_scope);
@@ -427,7 +516,16 @@ impl SymbolBuilder<'_> {
                     .ok_or_else(|| source_mismatch("function parameter", expression.span))?;
                 let outer_scope = self.scope_stack.len();
                 for (parameter, declaration) in parameters.iter().zip(spans) {
-                    self.bind_local(parameter, SymbolBindingKind::Parameter, *declaration)?;
+                    let visibility = BindingVisibility::closed(
+                        body.span,
+                        self.scope_stack.len().saturating_add(1),
+                    );
+                    self.bind_local(
+                        parameter,
+                        SymbolBindingKind::Parameter,
+                        *declaration,
+                        visibility,
+                    )?;
                 }
                 self.visit_expression(body)?;
                 self.restore_scope(outer_scope);
@@ -447,14 +545,17 @@ impl SymbolBuilder<'_> {
         Ok(())
     }
 
-    fn bind_pattern(&mut self, pattern: &Pattern) -> YanshuResult<()> {
+    fn bind_pattern(&mut self, pattern: &Pattern, arm_span: Span) -> YanshuResult<()> {
         match &pattern.kind {
-            PatternKind::Binding(name) => {
-                self.bind_local(name, SymbolBindingKind::Pattern, pattern.span)
-            }
+            PatternKind::Binding(name) => self.bind_local(
+                name,
+                SymbolBindingKind::Pattern,
+                pattern.span,
+                BindingVisibility::closed(arm_span, self.scope_stack.len().saturating_add(1)),
+            ),
             PatternKind::Variant { fields, .. } => {
                 for field in fields {
-                    self.bind_pattern(field)?;
+                    self.bind_pattern(field, arm_span)?;
                 }
                 Ok(())
             }
@@ -462,7 +563,12 @@ impl SymbolBuilder<'_> {
         }
     }
 
-    fn bind_global(&mut self, name: &str, declaration: Span) -> YanshuResult<()> {
+    fn bind_global(
+        &mut self,
+        name: &str,
+        declaration: Span,
+        program_span: Span,
+    ) -> YanshuResult<()> {
         if self
             .source
             .get(declaration.start.offset..declaration.end.offset)
@@ -478,6 +584,8 @@ impl SymbolBuilder<'_> {
             declaration,
             references: Vec::new(),
         });
+        self.visibility
+            .push(BindingVisibility::closed(program_span, 0));
         if self
             .global_bindings
             .insert(name.to_owned(), identifier)
@@ -496,6 +604,7 @@ impl SymbolBuilder<'_> {
         name: &str,
         kind: SymbolBindingKind,
         declaration: Span,
+        visibility: BindingVisibility,
     ) -> YanshuResult<()> {
         self.validate_name(name, declaration)?;
         debug_assert!(kind != SymbolBindingKind::Definition);
@@ -507,6 +616,7 @@ impl SymbolBuilder<'_> {
             declaration,
             references: Vec::new(),
         });
+        self.visibility.push(visibility);
         self.active_bindings
             .entry(name.to_owned())
             .or_default()
@@ -621,11 +731,21 @@ fn contains_offset(span: Span, offset: usize) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{LocalBindingKind, SymbolBindingKind, local_symbol_index, symbol_index};
+    use super::{
+        LocalBindingKind, SymbolBindingKind, SymbolIndex, local_symbol_index, symbol_index,
+    };
     use crate::load_program_source;
 
     fn parsed(source: &str) -> crate::Program {
         load_program_source(source).unwrap_or_else(|diagnostic| panic!("{diagnostic}"))
+    }
+
+    fn visible_kind(index: &SymbolIndex, offset: usize, name: &str) -> Option<SymbolBindingKind> {
+        index
+            .visible_bindings_at(offset)
+            .into_iter()
+            .find(|binding| binding.name == name)
+            .map(|binding| binding.kind)
     }
 
     #[test]
@@ -763,6 +883,58 @@ mod tests {
         assert_eq!(shadowing_parameters.len(), 2);
         assert_eq!(shadowing_parameters[0].references.len(), 2);
         assert_eq!(shadowing_parameters[1].references.len(), 1);
+    }
+
+    #[test]
+    fn visible_bindings_follow_sequential_let_and_match_arm_scope() {
+        let source = "(program (name visible) (version 3) (data decision (approved amount)) (def target (fn (value) value)) (def use (fn (target decision) (let ((before target) (target before)) (match decision ((approved amount) (list before target amount)) (_ target))))) (export target use approved))";
+        let index =
+            symbol_index(&parsed(source)).unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+
+        let first_initializer = source
+            .find("before target")
+            .map(|offset| offset + "before ".len())
+            .unwrap_or_else(|| panic!("first initializer missing"));
+        assert_eq!(visible_kind(&index, first_initializer, "before"), None);
+        assert_eq!(
+            visible_kind(&index, first_initializer, "target"),
+            Some(SymbolBindingKind::Parameter)
+        );
+
+        let second_initializer = source
+            .find("target before")
+            .map(|offset| offset + "target ".len())
+            .unwrap_or_else(|| panic!("second initializer missing"));
+        assert_eq!(
+            visible_kind(&index, second_initializer, "before"),
+            Some(SymbolBindingKind::Let)
+        );
+        assert_eq!(
+            visible_kind(&index, second_initializer, "target"),
+            Some(SymbolBindingKind::Parameter)
+        );
+
+        let arm_body = source
+            .find("list before target amount")
+            .unwrap_or_else(|| panic!("match arm body missing"));
+        assert_eq!(
+            visible_kind(&index, arm_body, "target"),
+            Some(SymbolBindingKind::Let)
+        );
+        assert_eq!(
+            visible_kind(&index, arm_body, "amount"),
+            Some(SymbolBindingKind::Pattern)
+        );
+
+        let fallback = source
+            .rfind("_ target")
+            .map(|offset| offset + "_ ".len())
+            .unwrap_or_else(|| panic!("fallback arm missing"));
+        assert_eq!(visible_kind(&index, fallback, "amount"), None);
+        assert_eq!(
+            visible_kind(&index, fallback, "target"),
+            Some(SymbolBindingKind::Let)
+        );
     }
 
     #[test]

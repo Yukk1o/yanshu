@@ -74,6 +74,58 @@ async function verifyLanguageFeatures(uri: vscode.Uri, expectedFormatUri: vscode
     `hover omitted the selected user function type: ${JSON.stringify(hoverText)}`,
   );
 
+  const completions = await withTimeout(vscode.commands.executeCommand<vscode.CompletionList>(
+    'vscode.executeCompletionItemProvider',
+    uri,
+    document.positionAt(callOffset + 3),
+  ), 'completion request');
+  assert.ok(completions, 'completion provider returned no result');
+  assert.equal(completions.isIncomplete, false, 'bounded completion must be complete');
+  const targetCompletion = completions.items.find(
+    (item) => completionLabel(item) === 'target',
+  );
+  assert.ok(targetCompletion, 'completion omitted the visible target function');
+  assert.equal(targetCompletion.kind, vscode.CompletionItemKind.Function);
+  assert.match(
+    targetCompletion.detail ?? '',
+    /fn\(Int\) -> Int/u,
+    'completion omitted the target function type',
+  );
+  assertCompletionEdit(
+    document,
+    targetCompletion,
+    'target',
+    new vscode.Range(
+      document.positionAt(callOffset),
+      document.positionAt(callOffset + 'target'.length),
+    ),
+  );
+
+  const parameterOffset = callOffset + 'target '.length;
+  const parameterCompletions = await withTimeout(
+    vscode.commands.executeCommand<vscode.CompletionList>(
+      'vscode.executeCompletionItemProvider',
+      uri,
+      document.positionAt(parameterOffset + 2),
+    ),
+    'parameter completion request',
+  );
+  const valueCompletion = parameterCompletions?.items.find(
+    (item) => completionLabel(item) === 'value',
+  );
+  assert.ok(valueCompletion, 'completion omitted the visible function parameter');
+  assert.equal(valueCompletion.kind, vscode.CompletionItemKind.Variable);
+  assert.match(valueCompletion.detail ?? '', /function parameter · lexical scope/u);
+  assertCompletionEdit(
+    document,
+    valueCompletion,
+    'value',
+    new vscode.Range(
+      document.positionAt(parameterOffset),
+      document.positionAt(parameterOffset + 'value'.length),
+    ),
+  );
+
   const functionFormOffset = sourceBeforeFormatting.lastIndexOf(localDeclarationMarker) + 1;
   assert.ok(functionFormOffset > 0, 'function form fixture is missing');
   const functionFormHovers = await withTimeout(vscode.commands.executeCommand<vscode.Hover[]>(
@@ -290,6 +342,24 @@ function definitionTargetRange(definition: vscode.Location | vscode.LocationLink
     return definition.range;
   }
   return definition.targetSelectionRange ?? definition.targetRange;
+}
+
+function completionLabel(item: vscode.CompletionItem): string {
+  return typeof item.label === 'string' ? item.label : item.label.label;
+}
+
+function assertCompletionEdit(
+  document: vscode.TextDocument,
+  item: vscode.CompletionItem,
+  expectedText: string,
+  expectedRange: vscode.Range,
+): void {
+  const edit = item.textEdit;
+  assert.ok(edit, `completion has no text edit: ${completionLabel(item)}`);
+  const range = edit.range;
+  assert.ok(range.isEqual(expectedRange), 'completion replaced more than the selected symbol');
+  assert.equal(document.getText(range), expectedText, 'completion edit selected the wrong source');
+  assert.equal(edit.newText, expectedText, 'completion edit inserted unexpected text');
 }
 
 async function waitFor(predicate: () => boolean): Promise<void> {
