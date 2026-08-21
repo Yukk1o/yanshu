@@ -1,6 +1,6 @@
 # VS Code 扩展
 
-`editors/vscode` 是 `.yan` 的首个编辑器安装包。它按 VS Code 官方 language client 架构启动独立 `yanshu-lsp`，提供文件识别、基础 TextMate 高亮、诊断、hover、同文件全局跳转和全文格式化。
+`editors/vscode` 是 `.yan` 的首个编辑器安装包。它按 VS Code 官方 language client 架构启动独立 `yanshu-lsp`，提供文件识别、基础 TextMate 高亮、诊断、hover、同文件全局/局部跳转和全文格式化。
 
 最低支持 VS Code 1.101；官方从该版本把 Node extension host 升级到 Node 22，与当前 client 和 bundle target 一致。
 
@@ -40,7 +40,7 @@ npm run test:e2e
 - 扩展激活与 `.yan` language ID；
 - Parser 诊断；
 - hover 的稳定 expression node；
-- 同文档全局 definition；
+- 同文档全局与局部 parameter definition；
 - formatter 只返回 edit、不直接修改文档。
 
 下载测试编辑器时可以沿用宿主代理；Extension Host 启动前会移除代理、过滤凭据形状的环境变量，并关闭更新与遥测。测试编辑器下载缓存位于忽略的 `.vscode-test/`；测试 bundle 明确排除在 VSIX 之外。CI 在 Windows 与 Linux/Xvfb 上执行同一验收。
@@ -78,7 +78,7 @@ npm run test:e2e
 ## 仍未实现
 
 - Tree-sitter 与 semantic tokens；
-- completion、references、rename 和局部 binding 跳转；
+- completion、references 和防捕获 rename；
 - 自动生成 Windows/Linux/macOS 与 x64/Arm 全矩阵 VSIX 的发布工作流；
 - Neovim、Zed、JetBrains 等安装包。
 

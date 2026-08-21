@@ -76,6 +76,34 @@ async function verifyLanguageFeatures(uri: vscode.Uri, expectedFormatUri: vscode
   assert.equal(targetUri.toString(), uri.toString(), 'definition escaped the open document');
   assert.equal(document.getText(targetRange), 'target', 'definition resolved to the wrong symbol');
 
+  const localReferenceOffset = callOffset + 'target '.length;
+  const localDeclarationMarker = '(fn (value) (target value))';
+  const localDeclarationOffset = sourceBeforeFormatting.lastIndexOf(localDeclarationMarker)
+    + '(fn ('.length;
+  assert.ok(
+    localDeclarationOffset >= '(fn ('.length,
+    'local parameter declaration fixture is missing',
+  );
+  const localDefinitions = await withTimeout(vscode.commands.executeCommand<Array<vscode.Location | vscode.LocationLink>>(
+    'vscode.executeDefinitionProvider',
+    uri,
+    document.positionAt(localReferenceOffset),
+  ), 'local definition request');
+  assert.ok(localDefinitions && localDefinitions.length > 0, 'local definition returned no result');
+  const [localDefinition] = localDefinitions;
+  assert.ok(localDefinition, 'local definition returned an empty array');
+  const localRange = definitionTargetRange(localDefinition);
+  assert.equal(
+    definitionTargetUri(localDefinition).toString(),
+    uri.toString(),
+    'local definition escaped the open document',
+  );
+  assert.equal(document.getText(localRange), 'value', 'local definition resolved to the wrong binding');
+  assert.ok(
+    localRange.start.isEqual(document.positionAt(localDeclarationOffset)),
+    'local definition ignored the parameter declaration span',
+  );
+
   const edits = await withTimeout(vscode.commands.executeCommand<vscode.TextEdit[]>(
     'vscode.executeFormatDocumentProvider',
     uri,

@@ -216,7 +216,7 @@ wiki/                 面向使用者的中文语言 Wiki
 
 当前发布里程碑是 **v0.10**，语言版本是 **v4**；**v0.11 持续验证与安全加固正在开发中**。它已经是一个可执行、可分析、可编译的语言内核，但还不是 Rust/C++ 式系统语言，也不是可承诺生产稳定性的通用平台。
 
-formatter v1、稳定表达式节点路径、最小 LSP、平台专用 VS Code VSIX 与 Windows/Linux Extension Host 验收已进入 v0.12 开发分支；接下来的工具优先级是增量/局部导航、Tree-sitter、更广编辑器集成和只读 MCP。更广的标准库与有界结构化并发只会在 capability、fuel、取消和确定性语义明确后加入。路线图是方向，不是兼容性承诺。
+formatter v1、稳定表达式节点路径、有界局部符号索引、全局/局部 definition、平台专用 VS Code VSIX 与 Windows/Linux Extension Host 验收已进入 v0.12 开发分支；接下来的工具优先级是 references、作用域感知 completion、防捕获 rename、Tree-sitter、更广编辑器集成和只读 MCP。更广的标准库与有界结构化并发只会在 capability、fuel、取消和确定性语义明确后加入。路线图是方向，不是兼容性承诺。
 
 ## 可验证发布
 
