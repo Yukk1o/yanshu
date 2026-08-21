@@ -32,6 +32,7 @@ VS Code 用户可以直接使用[平台专用扩展](/development/vscode)，不�
 | definition | 跳到同文件全局 `def`，或参数、顺序 `let`、pattern binding 的精确声明 |
 | references | 查找同文件全局/局部变量引用，遵守 `includeDeclaration` 与词法遮蔽 |
 | formatting | 返回 canonical full-document `TextEdit[]`；server 不写文件 |
+| `yanshu/reviewDocument` | experimental 版本化请求；返回 `rust-readonly-v3`、`editable:false` 与审查文本 |
 
 格式化 edit 由编辑器展示和应用。`.yan` 原文仍是规范输入，LSP 不能执行 Rust 审查视图，也不能替 Parser、测试、fuel 或内容哈希做决定。
 
@@ -49,9 +50,12 @@ VS Code 用户可以直接使用[平台专用扩展](/development/vscode)，不�
 - 最多 32 个打开文档，总源码最多 16 MiB；
 - URI 最多 4 KiB；
 - 单次 references 最多 1,024 个 Location，超限返回 `LSP_REFERENCE_LIMIT`，不静默截断；
+- review 输入最多 512 KiB、投影文本最多 4 MiB，版本和 renderer/read-only 契约必须精确匹配；
 - 只接受 ASCII header 和 UTF-8 JSON body。
 
 framing 缺失、重复 `Content-Length`、超限 header/body 或截断 body 会终止 server，而不是尝试猜测流边界。
+
+review 请求只消费 `didOpen` / `didChange` 保存的指定版本快照。它调用正式 Parser、类型/效果分析和单向审查 renderer，不读取 URI 文件、不执行 guest、不返回 edit；六倍 JSON 转义上界仍小于 32 MiB 消息限制。版本漂移与 `LSP_REVIEW_*_LIMIT` 都失败关闭。
 
 ## 名称怎样解析
 

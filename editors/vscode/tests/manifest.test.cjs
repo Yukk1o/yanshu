@@ -11,6 +11,14 @@ const manifest = JSON.parse(readFileSync(path.join(extensionRoot, 'package.json'
 test('manifest activates only for the declared Yanshu language', () => {
   assert.equal(manifest.engines.vscode, '^1.101.0');
   assert.deepEqual(manifest.activationEvents, ['onLanguage:yanshu']);
+  assert.deepEqual(manifest.contributes.commands, [{
+    command: 'yanshu.openRustReview',
+    title: '打开 Rust 风格只读审查',
+    category: '衍术 Yanshu',
+    icon: '$(open-preview)',
+  }]);
+  assert.equal(manifest.contributes.menus['editor/title'][0].when, 'editorLangId == yanshu');
+  assert.equal(manifest.contributes.menus['editor/context'][0].when, 'editorLangId == yanshu');
   assert.deepEqual(manifest.contributes.languages[0].extensions, ['.yan']);
   assert.equal(manifest.contributes.grammars[0].scopeName, 'source.yanshu');
   assert.equal(manifest.contributes.configuration.properties['yanshu.server.path'].scope, 'machine');
@@ -31,6 +39,10 @@ test('language configuration and grammar are valid JSON', () => {
 test('Extension Host test output is excluded from the VSIX', () => {
   const ignore = readFileSync(path.join(extensionRoot, '.vscodeignore'), 'utf8');
   assert.match(ignore, /^out\/test\/\*\*$/mu);
+  assert.match(ignore, /^out\/review-protocol\.js$/mu);
+  assert.match(ignore, /^out\/review-protocol\.js\.map$/mu);
+  assert.match(ignore, /^out\/review-html\.js$/mu);
+  assert.match(ignore, /^out\/review-html\.js\.map$/mu);
 });
 
 test('runtime and build dependencies are exactly pinned', () => {

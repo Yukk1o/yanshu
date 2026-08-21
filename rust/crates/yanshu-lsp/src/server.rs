@@ -1,7 +1,10 @@
 use serde_json::{Map, Value, json};
 use yanshu_diagnostic::Diagnostic;
 
-use crate::document::DocumentStore;
+use crate::document::{
+    DocumentStore, MAXIMUM_REVIEW_SOURCE_BYTES, MAXIMUM_REVIEW_TEXT_BYTES, REVIEW_LANGUAGE_ID,
+    REVIEW_RENDERER,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Lifecycle {
@@ -105,6 +108,7 @@ impl LanguageServer {
             ("textDocument/definition", Some(id)) => self.definition(id, params),
             ("textDocument/references", Some(id)) => self.references(id, params),
             ("textDocument/formatting", Some(id)) => self.formatting(id, params),
+            ("yanshu/reviewDocument", Some(id)) => self.review(id, params),
             (_, Some(id)) => vec![error_response(
                 id,
                 -32601,
@@ -138,6 +142,17 @@ impl LanguageServer {
                     "definitionProvider": true,
                     "referencesProvider": true,
                     "documentFormattingProvider": true,
+                    "experimental": {
+                        "yanshuReviewDocument": {
+                            "method": "yanshu/reviewDocument",
+                            "version": 1,
+                            "renderer": REVIEW_RENDERER,
+                            "editable": false,
+                            "languageId": REVIEW_LANGUAGE_ID,
+                            "maximumSourceBytes": MAXIMUM_REVIEW_SOURCE_BYTES,
+                            "maximumTextBytes": MAXIMUM_REVIEW_TEXT_BYTES,
+                        },
+                    },
                 },
                 "serverInfo": {
                     "name": "yanshu-lsp",
@@ -292,6 +307,25 @@ impl LanguageServer {
             Err(diagnostic) => vec![invalid_params_response(id, &diagnostic)],
         }
     }
+
+    fn review(&self, id: Value, params: &Value) -> Vec<Value> {
+        let result = (|| {
+            let document = object_field(params, "textDocument")?;
+            let uri = string_field(document, "uri")?;
+            let version = integer_field(document, "version")?;
+            let open = self.documents.get(uri).ok_or_else(|| {
+                Diagnostic::simple(
+                    "LSP_DOCUMENT_UNKNOWN",
+                    "review preview requires an open document",
+                )
+            })?;
+            open.review(version)
+        })();
+        match result {
+            Ok(review) => vec![success_response(id, review)],
+            Err(diagnostic) => vec![invalid_params_response(id, &diagnostic)],
+        }
+    }
 }
 
 fn object_field<'value>(value: &'value Value, name: &str) -> Result<&'value Value, Diagnostic> {
@@ -423,6 +457,14 @@ mod tests {
             initialized["result"]["capabilities"]["referencesProvider"],
             true
         );
+        assert_eq!(
+            initialized["result"]["capabilities"]["experimental"]["yanshuReviewDocument"]["renderer"],
+            "rust-readonly-v3"
+        );
+        assert_eq!(
+            initialized["result"]["capabilities"]["experimental"]["yanshuReviewDocument"]["editable"],
+            false
+        );
         let shutdown = server.handle_message(&json!({
             "jsonrpc": "2.0",
             "id": 2,
@@ -473,7 +515,7 @@ mod tests {
     }
 
     #[test]
-    fn hover_definition_references_and_formatting_use_the_open_snapshot() {
+    fn hover_definition_references_review_and_formatting_use_the_open_snapshot() {
         let source = "(program (name tools) (version 4) (signature target (fn (integer) integer)) (def target (fn (x) x)) (signature use (fn (integer) integer)) (def use (fn (x) (target x))) (export target use))";
         let mut server = LanguageServer::new();
         initialize(&mut server);
@@ -519,6 +561,32 @@ mod tests {
             hover[0]["result"]["contents"]["value"]
                 .as_str()
                 .is_some_and(|value| value.contains("node: expression-v1"))
+        );
+
+        let review = server.handle_message(&json!({
+            "jsonrpc": "2.0", "id": 6, "method": "yanshu/reviewDocument",
+            "params": {
+                "textDocument": { "uri": "file:///tools.yan", "version": 1 }
+            }
+        }));
+        assert_eq!(review[0]["result"]["sourceVersion"], 1);
+        assert_eq!(review[0]["result"]["renderer"], "rust-readonly-v3");
+        assert_eq!(review[0]["result"]["editable"], false);
+        assert!(
+            review[0]["result"]["text"]
+                .as_str()
+                .is_some_and(|text| text.contains("READ ONLY") && text.contains("fn target"))
+        );
+
+        let stale_review = server.handle_message(&json!({
+            "jsonrpc": "2.0", "id": 7, "method": "yanshu/reviewDocument",
+            "params": {
+                "textDocument": { "uri": "file:///tools.yan", "version": 0 }
+            }
+        }));
+        assert_eq!(
+            stale_review[0]["error"]["data"]["yanshuCode"],
+            "LSP_REVIEW_VERSION"
         );
 
         let formatting = server.handle_message(&json!({

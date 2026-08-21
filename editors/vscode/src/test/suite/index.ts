@@ -165,6 +165,33 @@ async function verifyLanguageFeatures(uri: vscode.Uri, expectedFormatUri: vscode
   assert.equal(document.isDirty, false, 'format provider modified the document instead of returning edits');
 
   await withTimeout(
+    vscode.commands.executeCommand('yanshu.openRustReview'),
+    'open Rust-style review preview',
+  );
+  const reviewTab = await waitForResult(() => {
+    const current = vscode.window.tabGroups.activeTabGroup.activeTab;
+    return current?.input instanceof vscode.TabInputWebview ? current : undefined;
+  });
+  const reviewInput = reviewTab.input;
+  assert.ok(reviewInput instanceof vscode.TabInputWebview, 'review command did not open a webview');
+  assert.ok(
+    reviewInput.viewType.endsWith('yanshu.review'),
+    `review command opened the wrong view: ${reviewInput.viewType}`,
+  );
+  assert.match(reviewTab.label, /tools\.yan.*只读审查/u);
+  assert.equal(
+    vscode.workspace.textDocuments.some((candidate) => candidate.uri.scheme === 'yanshu-review'),
+    false,
+    'review panel exposed an editable text model',
+  );
+  assert.equal(document.getText(), sourceBeforeFormatting, 'review preview changed canonical .yan source');
+  assert.equal(document.isDirty, false, 'review preview dirtied canonical .yan source');
+  await withTimeout(
+    vscode.commands.executeCommand('workbench.action.closeActiveEditor'),
+    'close review preview',
+  );
+
+  await withTimeout(
     vscode.commands.executeCommand('workbench.action.closeActiveEditor'),
     'close tools fixture',
   );

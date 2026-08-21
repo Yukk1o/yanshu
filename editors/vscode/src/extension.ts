@@ -5,6 +5,7 @@ import {
   type ServerOptions,
 } from 'vscode-languageclient/node';
 
+import { registerReviewPreview } from './review-preview';
 import { sanitizedServerEnvironment, selectServerCommand } from './server-command';
 
 let client: LanguageClient | undefined;
@@ -54,6 +55,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   try {
     await nextClient.start();
+    registerReviewPreview(context, nextClient);
   } catch {
     client = undefined;
     await nextClient.dispose();

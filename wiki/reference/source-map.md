@@ -34,15 +34,18 @@
 | [format/cst.rs](/source/rust/crates/yanshu-format/src/cst.rs.txt) | 保留注释但丢弃无意义空白的 bounded concrete tree |
 | [format/render.rs](/source/rust/crates/yanshu-format/src/render.rs.txt) | form-aware 布局、行宽、缩进与逐次输出上限 |
 | [lsp/protocol.rs](/source/rust/crates/yanshu-lsp/src/protocol.rs.txt) | Content-Length framing、JSON body 与 header/message 上限 |
-| [lsp/document.rs](/source/rust/crates/yanshu-lsp/src/document.rs.txt) | 文档快照、UTF-16 range、诊断、hover、全局/局部跳转与 TextEdit |
-| [lsp/server.rs](/source/rust/crates/yanshu-lsp/src/server.rs.txt) | initialize/shutdown/exit、full sync 与 JSON-RPC method dispatch |
+| [lsp/document.rs](/source/rust/crates/yanshu-lsp/src/document.rs.txt) | 文档快照、UTF-16 range、诊断、导航、TextEdit 与有界 review 投影 |
+| [lsp/server.rs](/source/rust/crates/yanshu-lsp/src/server.rs.txt) | initialize/shutdown/exit、full sync、标准与 experimental method dispatch |
 | [VS Code extension.ts](/source/editors/vscode/src/extension.ts.txt) | language client、快照 selector 与 LSP 生命周期 |
 | [VS Code server-command.ts](/source/editors/vscode/src/server-command.ts.txt) | machine/bundled/PATH 选择、平台映射与子进程环境脱敏 |
 | [VS Code grammar](/source/editors/vscode/syntaxes/yanshu.tmLanguage.json.txt) | 不参与语义的基础 TextMate token 显示 |
 | [VSIX package.cjs](/source/editors/vscode/scripts/package.cjs.txt) | 当前平台 binary、大小/symlink 边界与安装包生成 |
 | [VS Code bundle.cjs](/source/editors/vscode/scripts/bundle.cjs.txt) | 单入口 CommonJS bundle 与可复现输出目录 |
 | [VS Code test-e2e.cjs](/source/editors/vscode/scripts/test-e2e.cjs.txt) | 临时扩展副本、固定编辑器版本、隔离 profile 与凭据环境过滤 |
-| [VS Code Extension Host suite](/source/editors/vscode/src/test/suite/index.ts.txt) | 激活、诊断、hover、definition、references 与 formatting 的有界端到端断言 |
+| [VS Code Extension Host suite](/source/editors/vscode/src/test/suite/index.ts.txt) | 激活、诊断、导航、formatting 与无文本模型审查面板的端到端断言 |
+| [VS Code review-preview.ts](/source/editors/vscode/src/review-preview.ts.txt) | 版本绑定、debounce、面板生命周期和自定义 LSP 请求 |
+| [VS Code review-html.ts](/source/editors/vscode/src/review-html.ts.txt) | 无脚本 CSP、HTML 转义和响应式只读审查布局 |
+| [VS Code review-protocol.ts](/source/editors/vscode/src/review-protocol.ts.txt) | renderer/version/read-only marker 与 4 MiB client 复核 |
 | [diagnostic/lib.rs](/source/rust/crates/yanshu-diagnostic/src/lib.rs.txt) | 公共 code/message/details 与私有 span |
 
 ## 模块与 Bundle

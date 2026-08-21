@@ -13,14 +13,14 @@ Rust v0.10 已形成通用语言的安全内核；v0.11 正在把跨平台 CI、
 | 语言前端 | 有边界 UTF-8 Reader、v1-v4 AST / Parser、imports、typed 封闭数据、模式匹配、signature、版本门控、source span、JSON inspect、稳定 expression-v1 节点路径、最小 LSP full sync | 泛型声明、增量语法树、跨任意结构编辑的节点 identity reconciliation |
 | 静态分析 | 内部类型推断、export 输入/输出门禁、传递 effect/capability 闭包、已知高阶 callback、失败关闭未知 callback | effect polymorphism、增量分析、LSP |
 | 模块/包制品 | Bundle manifest、module/root SHA-256、依赖图、命名空间链接、package store、精确 lock、锁定 capability closure | 签名、远端 registry、离线镜像导入 |
-| 审查 | Rust 风格只读投影、definition ID、模块/span/type/effect nodes | 结构化编辑明确推迟到 v0.10 之后 |
+| 审查 | Rust 风格只读投影、definition ID、模块/span/type/effect nodes、VS Code 无脚本旁侧面板 | 结构化编辑明确推迟到 v0.10 之后 |
 | 运行时 | BigInt、闭包、递归、短路条件、有界集合、Result、enum/union Schema、校验成本、可替换 Rust `text@1` Backend、验证式字节码、跨解释器/VM 一致的语义 fuel、WASM handle ABI | 原生 WASM lowering、独立内存配额、可安全取消的进程级 deadline |
 | 业务服务 | route dispatch、response 校验、事务内存/文件 KV、固定时钟与日志、11 个场景 | 正式数据库 adapter、migration、连接池 |
 | 版本库 | SHA-256、不可变校验、有界恢复 journal、幂等重放、v2 event hash chain、原子写、跨进程锁、回滚 | 有密钥签名、透明日志、远端 artifact store、生产审批流 |
 | 运维快照 | 离线 service lock、逐文件 SHA-256 manifest、版本/KV 语义校验、拒绝覆盖恢复 | 加密、签名、异地复制、定期恢复演练 |
 | Provider | OpenAI Responses、DeepSeek Chat、HTTPS-only、拒绝 redirect、大小/超时、密钥零化 | 真实凭据 smoke gate、速率/费用治理 |
 | HTTP / rollout | Axum/Tokio、显式 header/body deadline、loopback-only、可选 Bearer、宿主 request ID、每请求固定 hash、脱敏 JSONL、隔离影子采样 | TLS、细粒度授权、进程沙箱、指标/trace/告警、canary、静态网页 |
-| 工具 | check/inspect/review、只读 formatter v1/CI check、有界全局/局部符号索引、LSP 诊断/hover/同文档 definition/references/formatting edit、平台专用 VS Code VSIX、Windows/Linux Extension Host 验收、Bundle、package pack/lock/verify/review/run/compile、bytecode/WASM compile/inspect/run、conformance、test/deploy/evolve service、version lifecycle、跨平台 CI、边界 fuzz、双构建与 keyless provenance | Tree-sitter、LSP 增量/rename/completion、跨文件导航、更多编辑器、MCP、结构化 AST diff、操作型 rollback CLI |
+| 工具 | check/inspect/review、只读 formatter v1/CI check、有界全局/局部符号索引、LSP 诊断/hover/同文档 definition/references/formatting edit/版本化 review、VS Code 无脚本审查面板、平台专用 VSIX、Windows/Linux Extension Host 验收、Bundle、package pack/lock/verify/review/run/compile、bytecode/WASM compile/inspect/run、conformance、test/deploy/evolve service、version lifecycle、跨平台 CI、边界 fuzz、双构建与 keyless provenance | Tree-sitter、LSP 增量/rename/completion、跨文件导航、更多编辑器、MCP、结构化 AST diff、操作型 rollback CLI |
 
 ## Crate 边界
 
@@ -69,7 +69,7 @@ Rust 实现不能为了方便静默改变：
 4. **v0.9**：内容寻址包管理、锁文件、Rust Library Backend；
 5. **v0.10**：有 fuel 计量的字节码 / WASM 编译器；
 6. **v0.11**：跨平台持续验证、fuzz、可复现发布与供应链证据；
-7. **v0.12**：Agent 工具协议、formatter、Tree-sitter、LSP 与 MCP；formatter v1、稳定节点路径、有界全局/局部符号索引、同文档 definition/references、VS Code 平台包与 Windows/Linux Extension Host 验收已经落地，其余仍在开发；
+7. **v0.12**：Agent 工具协议、formatter、Tree-sitter、LSP 与 MCP；formatter v1、稳定节点路径、有界全局/局部符号索引、同文档 definition/references、版本化只读审查面板、VS Code 平台包与 Windows/Linux Extension Host 验收已经落地，其余仍在开发；
 8. **v0.13+**：标准库扩展，以及受 capability、effect、fuel、取消和确定性约束的结构化并发。
 
 模块必须与 Bundle 根 hash、模块 hash、依赖闭包和 capability 清单一起交付；不能先引入按路径动态加载。包管理不能运行安装脚本。类型系统不能把 fuel、效果或 capability 从 AST 中藏起来。编译器输出仍须通过独立验证器，不能因为“已经编译”就跳过语言门禁。
@@ -162,6 +162,8 @@ schema! TaskCreate {
 3. machine-readable node 同屏携带 definition、模块、span、type 和 capability；
 4. `.yan` AST、suite 和宿主策略仍是唯一执行真相；
 5. 反向转换与结构化编辑明确推迟到 v0.10 之后。
+
+VS Code 通过版本化 `yanshu/reviewDocument` 把这份投影显示在无脚本旁侧面板中。面板没有文本编辑模型；它只消费当前打开快照，并保留 `.yan` 作为唯一可修改输入。
 
 ## 生产宿主路线
 

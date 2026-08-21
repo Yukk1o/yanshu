@@ -36,7 +36,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": true,
-      "description": "The extension only sends open .yan snapshots to the bounded language server and never executes guest source."
+      "description": "The extension only sends open .yan snapshots to the bounded language server, can display generated read-only review text, and never executes guest source."
     },
     "virtualWorkspaces": {
       "supported": true
@@ -51,7 +51,7 @@
     "typecheck": "tsc -p ./tsconfig.json --noEmit",
     "bundle": "node scripts/bundle.cjs",
     "compile": "npm run typecheck && npm run bundle",
-    "test": "node --test tests/server-command.test.cjs tests/manifest.test.cjs tests/test-environment.test.cjs",
+    "test": "node --test tests/server-command.test.cjs tests/review-protocol.test.cjs tests/review-html.test.cjs tests/manifest.test.cjs tests/test-environment.test.cjs",
     "test:e2e": "npm run compile && node scripts/test-e2e.cjs",
     "check": "npm run compile && npm test",
     "package": "npm run check && node scripts/package.cjs"
@@ -68,6 +68,30 @@
     "typescript": "5.9.3"
   },
   "contributes": {
+    "commands": [
+      {
+        "command": "yanshu.openRustReview",
+        "title": "打开 Rust 风格只读审查",
+        "category": "衍术 Yanshu",
+        "icon": "$(open-preview)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "yanshu.openRustReview",
+          "when": "editorLangId == yanshu",
+          "group": "navigation@100"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "yanshu.openRustReview",
+          "when": "editorLangId == yanshu",
+          "group": "navigation@100"
+        }
+      ]
+    },
     "languages": [
       {
         "id": "yanshu",

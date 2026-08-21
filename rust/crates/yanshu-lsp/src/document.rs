@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use serde_json::{Value, json};
-use yanshu_analysis::{AnalysisReport, analyze_program};
+use yanshu_analysis::{AnalysisReport, analyze_program, render_rust_review};
 use yanshu_diagnostic::{Diagnostic, Span, YanshuResult};
 use yanshu_format::{FormatOptions, format_source};
 use yanshu_syntax::{Program, ReaderLimits, expression_nodes, load_program_source, symbol_index};
@@ -11,11 +11,22 @@ const MAXIMUM_TOTAL_SOURCE_BYTES: usize = 16 * 1024 * 1024;
 const MAXIMUM_URI_BYTES: usize = 4 * 1024;
 const MAXIMUM_REFERENCE_LOCATIONS: usize = 1024;
 const MAXIMUM_LOCATION_JSON_OVERHEAD_BYTES: usize = 1024;
+pub(crate) const MAXIMUM_REVIEW_SOURCE_BYTES: usize = 512 * 1024;
+pub(crate) const MAXIMUM_REVIEW_TEXT_BYTES: usize = 4 * 1024 * 1024;
+pub(crate) const REVIEW_RENDERER: &str = "rust-readonly-v3";
+pub(crate) const REVIEW_LANGUAGE_ID: &str = "rust";
 
 // A JSON string byte can expand to a six-byte `\u00xx` escape. Keep the
 // complete worst-case Location[] below the protocol's outbound body limit.
 const _: () = assert!(
     MAXIMUM_REFERENCE_LOCATIONS * (MAXIMUM_URI_BYTES * 6 + MAXIMUM_LOCATION_JSON_OVERHEAD_BYTES)
+        < crate::protocol::MAXIMUM_LSP_MESSAGE_BYTES
+);
+
+// A serialized JSON string byte can expand to a six-byte escape. Keep the
+// complete review response below the outbound protocol body limit.
+const _: () = assert!(
+    MAXIMUM_REVIEW_TEXT_BYTES * 6 + MAXIMUM_LOCATION_JSON_OVERHEAD_BYTES
         < crate::protocol::MAXIMUM_LSP_MESSAGE_BYTES
 );
 
@@ -212,6 +223,65 @@ impl OpenDocument {
             ));
         }
         Ok(locations_for_sorted_spans(&self.uri, &self.source, &spans))
+    }
+
+    pub(crate) fn review(&self, expected_version: i64) -> YanshuResult<Value> {
+        self.review_with_limits(
+            expected_version,
+            MAXIMUM_REVIEW_SOURCE_BYTES,
+            MAXIMUM_REVIEW_TEXT_BYTES,
+        )
+    }
+
+    fn review_with_limits(
+        &self,
+        expected_version: i64,
+        maximum_source_bytes: usize,
+        maximum_text_bytes: usize,
+    ) -> YanshuResult<Value> {
+        if self.version != expected_version {
+            return Err(Diagnostic::new(
+                "LSP_REVIEW_VERSION",
+                "review preview requires the current open document version",
+                json!({ "expected": expected_version, "actual": self.version }),
+            ));
+        }
+        if self.source.len() > maximum_source_bytes {
+            return Err(Diagnostic::new(
+                "LSP_REVIEW_SOURCE_LIMIT",
+                "review preview source exceeds the configured byte limit",
+                json!({
+                    "actual": self.source.len(),
+                    "maximum": maximum_source_bytes,
+                }),
+            ));
+        }
+        let program = load_program_source(&self.source)?;
+        let analysis = analyze_program(&program)?;
+        let review = render_rust_review(&program, &analysis);
+        if review.renderer != REVIEW_RENDERER || review.editable {
+            return Err(Diagnostic::simple(
+                "LSP_REVIEW_CONTRACT",
+                "review renderer violated the read-only protocol contract",
+            ));
+        }
+        if review.text.len() > maximum_text_bytes {
+            return Err(Diagnostic::new(
+                "LSP_REVIEW_TEXT_LIMIT",
+                "review preview text exceeds the configured byte limit",
+                json!({
+                    "actual": review.text.len(),
+                    "maximum": maximum_text_bytes,
+                }),
+            ));
+        }
+        Ok(json!({
+            "sourceVersion": self.version,
+            "renderer": review.renderer,
+            "editable": review.editable,
+            "languageId": REVIEW_LANGUAGE_ID,
+            "text": review.text,
+        }))
     }
 
     pub(crate) fn formatting_edits(&self) -> YanshuResult<Vec<Value>> {
@@ -680,6 +750,43 @@ mod tests {
                 "maximum": super::MAXIMUM_REFERENCE_LOCATIONS,
             })
         );
+    }
+
+    #[test]
+    fn review_uses_the_versioned_snapshot_and_enforces_output_limits() {
+        let source = "(program (name preview) (version 4) (capabilities log) (signature use (fn (integer) integer)) (def use (fn (value) (do (log value) value))) (export use))";
+        let document = document(source);
+        let review = document
+            .review(1)
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(review["sourceVersion"], 1);
+        assert_eq!(review["renderer"], super::REVIEW_RENDERER);
+        assert_eq!(review["editable"], false);
+        assert_eq!(review["languageId"], super::REVIEW_LANGUAGE_ID);
+        assert!(
+            review["text"]
+                .as_str()
+                .is_some_and(|text| text.contains("READ ONLY") && text.contains("log!(value)"))
+        );
+        assert_eq!(document.source, source);
+
+        let stale = document
+            .review(0)
+            .err()
+            .unwrap_or_else(|| panic!("stale review version unexpectedly succeeded"));
+        assert_eq!(stale.code, "LSP_REVIEW_VERSION");
+
+        let oversized_source = document
+            .review_with_limits(1, source.len() - 1, usize::MAX)
+            .err()
+            .unwrap_or_else(|| panic!("oversized review source unexpectedly succeeded"));
+        assert_eq!(oversized_source.code, "LSP_REVIEW_SOURCE_LIMIT");
+
+        let oversized_text = document
+            .review_with_limits(1, usize::MAX, 1)
+            .err()
+            .unwrap_or_else(|| panic!("oversized review text unexpectedly succeeded"));
+        assert_eq!(oversized_text.code, "LSP_REVIEW_TEXT_LIMIT");
     }
 
     #[test]
