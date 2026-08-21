@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod document;
+mod hover;
 mod protocol;
 mod server;
 

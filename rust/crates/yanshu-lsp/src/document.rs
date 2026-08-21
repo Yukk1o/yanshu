@@ -4,7 +4,9 @@ use serde_json::{Value, json};
 use yanshu_analysis::{AnalysisReport, analyze_program, render_rust_review};
 use yanshu_diagnostic::{Diagnostic, Span, YanshuResult};
 use yanshu_format::{FormatOptions, format_source};
-use yanshu_syntax::{Program, ReaderLimits, expression_nodes, load_program_source, symbol_index};
+use yanshu_syntax::{Program, ReaderLimits, load_program_source, symbol_index};
+
+use crate::hover::hover_at;
 
 const MAXIMUM_OPEN_DOCUMENTS: usize = 32;
 const MAXIMUM_TOTAL_SOURCE_BYTES: usize = 16 * 1024 * 1024;
@@ -148,39 +150,11 @@ impl OpenDocument {
     pub(crate) fn hover(&self, line: u64, character: u64) -> Option<Value> {
         let offset = offset_from_lsp(&self.source, line, character)?;
         let program = load_program_source(&self.source).ok()?;
-        let analysis = analyze_for_tools(&program)?;
-        let definition = program
-            .definitions
-            .iter()
-            .find(|definition| contains_offset(definition.expression.span, offset))?;
-        let definition_analysis = analysis
-            .definitions
-            .iter()
-            .find(|candidate| candidate.name == definition.name)?;
-        let node = expression_nodes(&program)
-            .into_iter()
-            .filter(|node| contains_offset(node.span, offset))
-            .min_by_key(|node| node.span.end.offset.saturating_sub(node.span.start.offset));
-        let mut text = format!(
-            "{}\ntype: {}",
-            definition.name,
-            definition_analysis.inferred_type.display()
-        );
-        if !definition_analysis.capabilities.is_empty() {
-            text.push_str("\neffects: ");
-            text.push_str(&definition_analysis.capabilities.join(", "));
-        }
-        if let Some(node) = &node {
-            text.push_str("\nnode: ");
-            text.push_str(&node.id);
-        }
-        let range = node.map_or_else(
-            || span_range(&self.source, definition.expression.span),
-            |node| span_range(&self.source, node.span),
-        );
+        let analysis = analyze_for_tools(&program);
+        let hover = hover_at(&program, analysis.as_ref(), offset)?;
         Some(json!({
-            "contents": { "kind": "plaintext", "value": text },
-            "range": range,
+            "contents": { "kind": "plaintext", "value": hover.text },
+            "range": span_range(&self.source, hover.span),
         }))
     }
 
@@ -396,10 +370,6 @@ fn offset_from_lsp(source: &str, target_line: u64, target_character: u64) -> Opt
     (utf16 == target_character).then(|| line_start + line.len())
 }
 
-fn contains_offset(span: Span, offset: usize) -> bool {
-    span.start.offset <= offset && offset < span.end.offset
-}
-
 fn locations_for_sorted_spans(uri: &str, source: &str, spans: &[Span]) -> Option<Vec<Value>> {
     let mut cursor = PositionCursor::new(source);
     let mut locations = Vec::with_capacity(spans.len());
@@ -499,6 +469,46 @@ mod tests {
         assert_eq!(offset_from_lsp("a😀b", 0, 1), Some(1));
         assert_eq!(offset_from_lsp("a😀b", 0, 2), None);
         assert_eq!(offset_from_lsp("a😀b", 0, 3), Some(5));
+    }
+
+    #[test]
+    fn hover_returns_only_the_exact_utf16_token_range() {
+        let source = "(program\n  ; 😀 stays outside the token range\n  (name hover-range)\n  (version 4)\n  (signature run (fn (integer) integer))\n  (def run (fn (value)\n    (cond\n      ((> value 0) value)\n      (else 0))))\n  (export run))";
+        let document = document(source);
+        let offset = source
+            .find("cond\n")
+            .unwrap_or_else(|| panic!("cond token missing"));
+        let start = lsp_position(source, offset);
+        let end = lsp_position(source, offset + "cond".len());
+        let hover = document
+            .hover(
+                start["line"]
+                    .as_u64()
+                    .unwrap_or_else(|| panic!("hover line missing")),
+                start["character"]
+                    .as_u64()
+                    .unwrap_or_else(|| panic!("hover character missing")),
+            )
+            .unwrap_or_else(|| panic!("cond hover missing"));
+        assert_eq!(hover["range"]["start"], start);
+        assert_eq!(hover["range"]["end"], end);
+        assert!(
+            hover["contents"]["value"]
+                .as_str()
+                .is_some_and(|text| text.contains("short-circuit special form"))
+        );
+
+        assert_eq!(
+            document.hover(
+                end["line"]
+                    .as_u64()
+                    .unwrap_or_else(|| panic!("newline line missing")),
+                end["character"]
+                    .as_u64()
+                    .unwrap_or_else(|| panic!("newline character missing")),
+            ),
+            None
+        );
     }
 
     #[test]

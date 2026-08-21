@@ -116,7 +116,7 @@ cargo build --locked -p yanshu-cli
 .\target\debug\yanshu.exe inspect examples\discount\v2.yan
 ```
 
-VS Code 扩展源码位于 `editors/vscode`。它识别 `.yan`、提供基础高亮，并通过独立 `yanshu-lsp` 显示诊断、hover、全局/局部跳转、同文档引用、格式化和 Rust 风格只读审查面板；固定 VS Code 1.101.2 的隔离 Extension Host 测试会在 Windows/Linux CI 验证这些能力。生成携带当前平台 server 的本机 VSIX：
+VS Code 扩展源码位于 `editors/vscode`。它识别 `.yan`、提供基础高亮，并通过独立 `yanshu-lsp` 显示诊断、关键字/函数/绑定的精确 hover、全局/局部跳转、同文档引用、格式化和 Rust 风格只读审查面板；固定 VS Code 1.101.2 的隔离 Extension Host 测试会在 Windows/Linux CI 验证这些能力。生成携带当前平台 server 的本机 VSIX：
 
 ```ps1
 cargo build --locked --release -p yanshu-lsp
@@ -196,7 +196,7 @@ cargo run --locked -p yanshu-cli -- `
 rust/crates/
   yanshu-syntax       Reader、AST、Parser、语言版本门禁
   yanshu-format       注释保留、语义复核、幂等格式化
-  yanshu-lsp          有界 stdio、诊断、导航、只读格式化 edit
+  yanshu-lsp          有界 stdio、诊断、精确 hover、导航、只读格式化 edit
   yanshu-runtime      解释器、Schema、Value、模式匹配、字节码 VM
   yanshu-analysis     类型、效果、capability 闭包、审查投影
   yanshu-compiler     规范字节码、verifier、WASM ABI

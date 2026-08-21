@@ -1740,6 +1740,7 @@ dependencies = [
  "yanshu-analysis",
  "yanshu-diagnostic",
  "yanshu-format",
+ "yanshu-library",
  "yanshu-syntax",
 ]
 

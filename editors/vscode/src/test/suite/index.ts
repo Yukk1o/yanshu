@@ -44,6 +44,7 @@ async function verifyLanguageFeatures(uri: vscode.Uri, expectedFormatUri: vscode
   assert.equal(document.languageId, 'yanshu', '.yan file did not select the Yanshu language');
   await waitFor(() => vscode.languages.getDiagnostics(uri).length === 0);
   const sourceBeforeFormatting = document.getText();
+  const localDeclarationMarker = '(fn (value) (target value))';
 
   const callOffset = sourceBeforeFormatting.lastIndexOf('target value');
   assert.notEqual(callOffset, -1, 'definition fixture call is missing');
@@ -56,12 +57,38 @@ async function verifyLanguageFeatures(uri: vscode.Uri, expectedFormatUri: vscode
   ), 'hover request');
   assert.ok(hovers && hovers.length > 0, 'hover provider returned no result');
   const hoverText = hovers.flatMap((hover) => hover.contents).map(markedText).join('\n');
-  const normalizedHoverText = hoverText.replaceAll('&nbsp;', ' ').replaceAll('\\-', '-');
+  const normalizedHoverText = normalizePlaintextHover(hoverText);
   assert.match(
     normalizedHoverText,
     /node: expression-v1/u,
     `hover omitted the stable expression node: ${JSON.stringify(hoverText)}`,
   );
+  assert.match(
+    normalizedHoverText,
+    /kind: function definition/u,
+    `hover did not classify the selected user function: ${JSON.stringify(hoverText)}`,
+  );
+  assert.match(
+    normalizedHoverText,
+    /type: fn\(Int\) -> Int/u,
+    `hover omitted the selected user function type: ${JSON.stringify(hoverText)}`,
+  );
+
+  const functionFormOffset = sourceBeforeFormatting.lastIndexOf(localDeclarationMarker) + 1;
+  assert.ok(functionFormOffset > 0, 'function form fixture is missing');
+  const functionFormHovers = await withTimeout(vscode.commands.executeCommand<vscode.Hover[]>(
+    'vscode.executeHoverProvider',
+    uri,
+    document.positionAt(functionFormOffset),
+  ), 'keyword hover request');
+  assert.ok(functionFormHovers && functionFormHovers.length > 0, 'keyword hover returned no result');
+  const functionFormText = functionFormHovers
+    .flatMap((hover) => hover.contents)
+    .map(markedText)
+    .join('\n');
+  const normalizedFunctionFormText = normalizePlaintextHover(functionFormText);
+  assert.match(normalizedFunctionFormText, /kind: function special form/u);
+  assert.match(normalizedFunctionFormText, /syntax: \(fn \(PARAMETER\.\.\.\) BODY\)/u);
 
   const definitions = await withTimeout(vscode.commands.executeCommand<Array<vscode.Location | vscode.LocationLink>>(
     'vscode.executeDefinitionProvider',
@@ -96,7 +123,6 @@ async function verifyLanguageFeatures(uri: vscode.Uri, expectedFormatUri: vscode
   );
 
   const localReferenceOffset = callOffset + 'target '.length;
-  const localDeclarationMarker = '(fn (value) (target value))';
   const localDeclarationOffset = sourceBeforeFormatting.lastIndexOf(localDeclarationMarker)
     + '(fn ('.length;
   assert.ok(
@@ -243,6 +269,16 @@ function markedText(value: vscode.MarkdownString | vscode.MarkedString): string 
     return value;
   }
   return value.value;
+}
+
+function normalizePlaintextHover(value: string): string {
+  return value
+    .replaceAll('&nbsp;', ' ')
+    .replaceAll('\\(', '(')
+    .replaceAll('\\)', ')')
+    .replaceAll('\\-', '-')
+    .replaceAll('\\>', '>')
+    .replaceAll('\\.', '.');
 }
 
 function definitionTargetUri(definition: vscode.Location | vscode.LocationLink): vscode.Uri {
