@@ -31,7 +31,7 @@ $env:YANSHU_PROVIDER = "codex-cli"
 
 cargo run --locked -p yanshu-cli -- `
   evolve-service `
-  .runtime\tasks-rust\code `
+  .runtime\tasks\code `
   examples\tasks\scenarios.json `
   --task .\task.md
 ```

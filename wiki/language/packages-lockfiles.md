@@ -77,4 +77,4 @@ cargo run --locked -p yanshu-cli -- package-run `
 
 包只组织和寻址源码，不获得 capability。依赖仍要经过 Parser、Bundle 链接规则、类型/效果分析、fuel 与宿主注入；包管理没有网络解析、安装 hook、动态加载、`eval` 或 FFI。
 
-完整契约见 [v0.9 规格](/source/docs/spec-v0.9.md.txt)，实现见 [yanshu-package store](/source/rust/crates/yanshu-package/src/store.rs.txt)和[格式解析](/source/rust/crates/yanshu-package/src/parse.rs.txt)。
+完整契约见 [v0.9 规格](/source/docs/specs/v0.9.md.txt)，实现见 [yanshu-package store](/source/rust/crates/yanshu-package/src/store.rs.txt)和[格式解析](/source/rust/crates/yanshu-package/src/parse.rs.txt)。

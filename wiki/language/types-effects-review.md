@@ -110,4 +110,4 @@ fn typed_policy__decide(amount: Int) -> TypedPolicyDecision {
 
 “视图 + 结构化编辑”已明确推迟到 v0.10 之后。当前不会为了省一次 LLM 调用而提前建立不可靠的双向转换。
 
-完整契约见 [v0.8 规格](/source/docs/spec-v0.8.md.txt)，实现见 [类型推断](/source/rust/crates/yanshu-analysis/src/infer.rs.txt)、[效果分析](/source/rust/crates/yanshu-analysis/src/effects.rs.txt)与[只读 renderer](/source/rust/crates/yanshu-analysis/src/review.rs.txt)。
+完整契约见 [v0.8 规格](/source/docs/specs/v0.8.md.txt)，实现见 [类型推断](/source/rust/crates/yanshu-analysis/src/infer.rs.txt)、[效果分析](/source/rust/crates/yanshu-analysis/src/effects.rs.txt)与[只读 renderer](/source/rust/crates/yanshu-analysis/src/review.rs.txt)。

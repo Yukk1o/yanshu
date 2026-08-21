@@ -297,7 +297,7 @@ Schema 名称不是普通函数；route handler 必须同时有 `def` 和 `expor
 
 ## 当前不支持
 
-当前没有宏、通用异常捕获、可变变量、并发、递归 Schema、浮点数、日期类型或任意宿主调用。预期业务失败通过显式 Result 表达，不能捕获 fuel、能力或宿主诊断。以 [v0.8 语言规格](/source/docs/spec-v0.8.md.txt) 和 [Rust Parser](/source/rust/crates/yanshu-syntax/src/parser.rs.txt) 为准，不要因为语法外观相似就假设其它 form 可用。
+当前没有宏、通用异常捕获、可变变量、并发、递归 Schema、浮点数、日期类型或任意宿主调用。预期业务失败通过显式 Result 表达，不能捕获 fuel、能力或宿主诊断。以 [v0.8 语言规格](/source/docs/specs/v0.8.md.txt) 和 [Rust Parser](/source/rust/crates/yanshu-syntax/src/parser.rs.txt) 为准，不要因为语法外观相似就假设其它 form 可用。
 
 ::: warning Int 必须保持任意精度
 当前 `Int` 语义允许超过 64 位，Rust 实现使用 `num_bigint::BigInt`。除非未来作为版本化语言变更正式引入范围限制，否则不能静默收窄到 `i64`。

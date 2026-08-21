@@ -10,7 +10,7 @@
 $env:YANSHU_PROVIDER = "codex-cli"       # 或 claude-code-cli / opencode-cli
 cargo run --locked -p yanshu-cli -- `
   evolve-service `
-  .runtime\tasks-rust\code `
+  .runtime\tasks\code `
   examples\tasks\scenarios.json `
   --task <task.md>
 ```
@@ -60,7 +60,7 @@ Yanshu 是“程序即数据”的受限通用语言内核。AI 可以生成候�
 - `rust/crates/yanshu-cli`：面向人类和代理的稳定 JSON CLI。
 - `conformance/v1` 至 `conformance/v4`：跨版本可执行语言契约。
 - `examples/`：任务、费用审批、typed Bundle 与 package 场景。
-- `docs/spec-v0.6.md` 至 `docs/spec-v0.10.md`：各里程碑的规范。
+- `docs/specs/v0.6.md` 至 `docs/specs/v0.11.md`：各里程碑的当前规范。
 - `.github/workflows/release.yml` 与 `scripts/*release*.mjs`：版本绑定、双构建、确定性归档、SBOM、校验和与来源证明。
 - `wiki/`：面向使用者的语言 Wiki；`wiki/public/source/` 由同步脚本生成，禁止手改。
 
@@ -112,7 +112,7 @@ Yanshu 是“程序即数据”的受限通用语言内核。AI 可以生成候�
 7. 不记录密钥、认证头、原始 provider 配置或未脱敏业务数据。仓库中禁止真实 token。
 8. 不编辑不属于当前任务的用户改动，不用生成文件覆盖手写源码。
 
-发布供应链也属于信任边界：只允许与 workspace 版本一致、位于 `main` 的注解式标签触发发布；pull request 和手动演练没有发布权限。不要手工替换 Release 资产、把 checksum 当作签名、加入长期私钥，或放宽双构建、SBOM、manifest 与 provenance 闭包。完整契约见 `docs/release-supply-chain.md`。
+发布供应链也属于信任边界：只允许与 workspace 版本一致、位于 `main` 的注解式标签触发发布；pull request 和手动演练没有发布权限。不要手工替换 Release 资产、把 checksum 当作签名、加入长期私钥，或放宽双构建、SBOM、manifest 与 provenance 闭包。完整契约见 `docs/engineering/release-supply-chain.md`。
 
 ## 5. 给代理使用的稳定命令
 
@@ -133,7 +133,7 @@ cargo run --locked -p yanshu-cli -- conformance conformance\v3\manifest.json
 cargo run --locked -p yanshu-cli -- conformance conformance\v4\manifest.json
 ```
 
-编译与执行命令见 `docs/spec-v0.10.md` 和 `wiki/reference/cli.md`。CLI 默认输出稳定 JSON；需要人类审查时才使用 `--text`。不要解析 Cargo 的显示文本代替 CLI JSON。
+编译与执行命令见 `docs/specs/v0.10.md` 和 `wiki/reference/cli.md`。CLI 默认输出稳定 JSON；需要人类审查时才使用 `--text`。不要解析 Cargo 的显示文本代替 CLI JSON。
 
 ## 6. 完成前门禁
 
@@ -148,6 +148,7 @@ cargo deny check
 cargo check --locked --manifest-path fuzz/Cargo.toml --bins
 node --test scripts/release.test.mjs
 node scripts/release-metadata.mjs
+node scripts/check-doc-links.mjs
 ```
 
 再确认第一方源码没有 `unsafe`，并在 `wiki/` 运行：

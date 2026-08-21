@@ -18,7 +18,7 @@ main
 
 旧 `develop` 只保留为历史，不再是当前集成分支。这样 PR、branch policy 与 release provenance 只有一个可信根。
 
-真实规则：[docs/git-workflow.md](/source/docs/git-workflow.md.txt)。
+真实规则：[docs/engineering/git-workflow.md](/source/docs/engineering/git-workflow.md.txt)。
 
 ## 当前历史表达了什么
 

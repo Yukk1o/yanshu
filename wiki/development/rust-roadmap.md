@@ -42,7 +42,7 @@ yanshu-store + yanshu-service ─► yanshu-ops
 
 实际依赖以 [Cargo.toml](/source/Cargo.toml.txt) 为准；图表达责任方向，不承诺稳定公共 API。
 
-所有第一方 crate 都继承 `unsafe_code = "forbid"` 并在 crate root 再次 `#![forbid(unsafe_code)]`。这不代表第三方依赖没有内部 unsafe；供应链边界见[依赖审计](/source/docs/rust-dependency-audit.md.txt)。
+所有第一方 crate 都继承 `unsafe_code = "forbid"` 并在 crate root 再次 `#![forbid(unsafe_code)]`。这不代表第三方依赖没有内部 unsafe；供应链边界见[依赖审计](/source/docs/engineering/rust-dependency-audit.md.txt)。
 
 ## 语言语义的硬约束
 

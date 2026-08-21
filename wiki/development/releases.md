@@ -68,4 +68,4 @@ node --test scripts/release.test.mjs
 node scripts/release-metadata.mjs
 ```
 
-完整威胁模型与 Windows 本地双构建命令见[发布供应链契约](/source/docs/release-supply-chain.md.txt)，实际自动化见[release workflow](/source/.github/workflows/release.yml.txt)。
+完整威胁模型与 Windows 本地双构建命令见[发布供应链契约](/source/docs/engineering/release-supply-chain.md.txt)，实际自动化见[release workflow](/source/.github/workflows/release.yml.txt)。

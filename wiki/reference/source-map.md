@@ -117,7 +117,7 @@ Go/Rust 读者最值得先看的类型是 `Program`、`ExpressionKind`、`Schema
 
 `evolve_service_with_provider` 是最短的控制流入口：读 active → 测当前版本 → 请求候选 → 解析候选 → 测完整 suite → 注册 → 可选晋升。
 
-运维快照不包含 observations；它校验版本源码、metadata、active、事件 sequence/hash chain 和可选 KV v1 文档，并拒绝执行快照中夹带的 pending journal。恢复始终拒绝覆盖既有 code/data 目标。VersionStore 的崩溃恢复协议见[设计文档](/source/docs/version-store-recovery.md.txt)。
+运维快照不包含 observations；它校验版本源码、metadata、active、事件 sequence/hash chain 和可选 KV v1 文档，并拒绝执行快照中夹带的 pending journal。恢复始终拒绝覆盖既有 code/data 目标。VersionStore 的崩溃恢复协议见[设计文档](/source/docs/engineering/version-store-recovery.md.txt)。
 
 ## Rust 请求安全链
 
@@ -148,8 +148,8 @@ v0.9 的 `text@1` contract、类型和 fuel 模型在 [library/contract.rs](/sou
 | [Cargo.toml](/source/Cargo.toml.txt) | workspace 成员、Rust 1.97、依赖版本、`unsafe_code = forbid` |
 | [Cargo.lock](/source/Cargo.lock.txt) | 可复现依赖锁 |
 | [deny.toml](/source/deny.toml.txt) | advisory、license、source 与 duplicate 策略 |
-| [rust-safety-policy.md](/source/docs/rust-safety-policy.md.txt) | 第一方 unsafe 与依赖审计边界 |
-| [rust-dependency-audit.md](/source/docs/rust-dependency-audit.md.txt) | 第三方依赖 unsafe 清单与复核记录 |
+| [rust-safety-policy.md](/source/docs/engineering/rust-safety-policy.md.txt) | 第一方 unsafe 与依赖审计边界 |
+| [rust-dependency-audit.md](/source/docs/engineering/rust-dependency-audit.md.txt) | 第三方依赖 unsafe 清单与复核记录 |
 | [CI workflow](/source/.github/workflows/ci.yml.txt) | Windows/Linux Rust、依赖、conformance、WASM 与 Wiki 门禁 |
 | [Fuzz workflow](/source/.github/workflows/fuzz.yml.txt) | 定时/按需的不可信输入 libFuzzer 预算 |
 | [Release workflow](/source/.github/workflows/release.yml.txt) | 标签身份、双构建、SBOM、checksum、keyless provenance 与发布权限 |
@@ -157,10 +157,10 @@ v0.9 的 `text@1` contract、类型和 fuel 模型在 [library/contract.rs](/sou
 | [发布组装器](/source/scripts/assemble-release.mjs.txt) | 两个平台、SBOM、构建记录、manifest 与 SHA-256 闭包 |
 | [发布验证器](/source/scripts/verify-release.mjs.txt) | 下载目录的 checksum、大小和 manifest 覆盖校验 |
 | [仓库边界检查](/source/scripts/check-repository-boundaries.ps1.txt) | 第一方 safe Rust、Action SHA 与已跟踪凭据模式 |
-| [本地 Rust 总门禁](/source/scripts/check-rust.ps1.txt) | 组合源码边界、fmt、workspace test、Clippy、fuzz 与发布工具检查 |
+| [本地总门禁](/source/scripts/check.ps1.txt) | 组合源码边界、fmt、workspace test、Clippy、fuzz、发布工具与文档链接检查 |
 | [Reader/Parser fuzz](/source/fuzz/fuzz_targets/reader_parser.rs.txt) | UTF-8 source 到 Reader/Parser 的崩溃入口 |
 | [portable value fuzz](/source/fuzz/fuzz_targets/portable_value.rs.txt) | 任意 JSON 到有界 guest value 的转换入口 |
 | [artifact fuzz](/source/fuzz/fuzz_targets/artifact_loaders.rs.txt) | bytecode/WASM artifact loader 的任意字节入口 |
 | [structured boundary fuzz](/source/fuzz/fuzz_targets/boundary_inputs.rs.txt) | Bundle/package 文档与 HTTP normalization 的不可信输入入口 |
 
-v0.11 的 CI/fuzz 威胁模型、时间/内存预算和本地命令见[持续验证规格](/source/docs/spec-v0.11.md.txt)，历史审计项与回归证据见[审计收口矩阵](/source/docs/v0.11-audit-closure.md.txt)；发布身份与真实性边界见[可验证发布](/development/releases)。
+v0.11 的 CI/fuzz 威胁模型、时间/内存预算和本地命令见[持续验证规格](/source/docs/specs/v0.11.md.txt)，历史审计项与回归证据见[审计收口矩阵](/source/docs/specs/v0.11-audit-closure.md.txt)；发布身份与真实性边界见[可验证发布](/development/releases)。
