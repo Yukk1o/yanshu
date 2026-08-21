@@ -122,7 +122,7 @@ cargo build --locked -p yanshu-cli
 cargo run --locked -p yanshu-cli -- `
   test-service examples\tasks\service.yan examples\tasks\scenarios.json
 
-.\scripts\serve-tasks-rust.ps1
+.\scripts\serve-tasks.ps1
 ```
 
 服务默认只监听 `127.0.0.1:8081`。这是本地验证入口，不是生产部署方案。
@@ -163,7 +163,7 @@ cargo run --locked -p yanshu-cli -- package-compile `
 - `.yan`、密封 manifest 与 lock 是规范输入；生成的审查视图永远只读。
 - 内容哈希绑定规范语义与制品，失败候选不能获得活动版本资格。
 
-当前仍缺少独立进程级生产沙箱、正式权限系统、TLS 终止、成熟数据库适配、LSP、独立安全审计及长期兼容承诺。完整政策见 [SECURITY.md](SECURITY.md) 与 [Rust 安全策略](docs/rust-safety-policy.md)。
+当前仍缺少独立进程级生产沙箱、正式权限系统、TLS 终止、成熟数据库适配、LSP、独立安全审计及长期兼容承诺。完整政策见 [SECURITY.md](SECURITY.md) 与 [Rust 安全策略](docs/engineering/rust-safety-policy.md)。
 
 ## 让 Codex / Claude Code / OpenCode 编写候选
 
@@ -174,7 +174,7 @@ $env:YANSHU_PROVIDER = "codex-cli" # 也可使用 claude-code-cli / opencode-cli
 
 cargo run --locked -p yanshu-cli -- `
   evolve-service `
-  .runtime\tasks-rust\code `
+  .runtime\tasks\code `
   examples\tasks\scenarios.json `
   --task .\TASK.md
 ```
@@ -217,7 +217,7 @@ node scripts/verify-release.mjs <下载目录>
 gh attestation verify <下载的资产> --repo Yukk1o/yanshu
 ```
 
-当前承诺是同源码、同 runner 的双构建一致；托管 runner 与系统 linker 尚未 hermetic 固定，因此不夸大为“任意机器必然产生同一 hash”。完整边界见 [发布供应链说明](docs/release-supply-chain.md)。
+当前承诺是同源码、同 runner 的双构建一致；托管 runner 与系统 linker 尚未 hermetic 固定，因此不夸大为“任意机器必然产生同一 hash”。完整边界见 [发布供应链说明](docs/engineering/release-supply-chain.md)。
 
 ## 参与开发
 
@@ -234,6 +234,7 @@ cargo deny check
 cargo check --locked --manifest-path fuzz/Cargo.toml --bins
 node --test scripts/release.test.mjs
 node scripts/release-metadata.mjs
+node scripts/check-doc-links.mjs
 
 Push-Location wiki
 npm run build

@@ -60,7 +60,7 @@ cargo run --quiet --locked -p yanshu-cli -- `
 ## 4. 启动活动版本 API
 
 ```powershell
-.\scripts\serve-tasks-rust.ps1
+.\scripts\serve-tasks.ps1
 ```
 
 脚本会先运行完整场景，只有全部通过才注册并晋升版本；随后在 `127.0.0.1:8081` 启动 JSON API。另开 PowerShell：
@@ -69,7 +69,7 @@ cargo run --quiet --locked -p yanshu-cli -- `
 Invoke-RestMethod http://127.0.0.1:8081/tasks
 ```
 
-当前入口提供 JSON API，不包含静态网页。按 `Ctrl+C` 停止服务；任务数据与代码版本分别位于 `.runtime/tasks-rust/store.json` 和 `.runtime/tasks-rust/code`。
+当前入口提供 JSON API，不包含静态网页。按 `Ctrl+C` 停止服务；任务数据与代码版本分别位于 `.runtime/tasks/store.json` 和 `.runtime/tasks/code`。
 
 ## 5. 验证 Bearer 认证
 
@@ -79,7 +79,7 @@ server 始终拒绝非 loopback 地址。要启用本地单 token 认证，终�
 $secret = Read-Host "Local Bearer token" -AsSecureString
 $env:YANSHU_HTTP_BEARER_TOKEN = `
   [Net.NetworkCredential]::new("", $secret).Password
-.\scripts\serve-tasks-rust.ps1
+.\scripts\serve-tasks.ps1
 ```
 
 环境变量不会跨 PowerShell 进程共享，所以终端 2 必须再次输入**同一个** token：
@@ -103,7 +103,7 @@ $response.Headers["X-Request-Id"]
 每个已识别请求会追加一条 JSONL：
 
 ```powershell
-Get-Content .runtime\tasks-rust\store.json.observations.jsonl
+Get-Content .runtime\tasks\store.json.observations.jsonl
 ```
 
 记录只包含 schema version、时间、宿主 request ID、method、status、duration、handler、固定到该请求的源码 hash 和 error code。它不记录 path、query、headers、body、凭据或内部诊断。
@@ -131,7 +131,7 @@ cargo run --quiet --locked -p yanshu-cli -- `
   deploy-service `
   examples\tasks\service.yan `
   examples\tasks\scenarios.json `
-  .runtime\tasks-rust\code
+  .runtime\tasks\code
 ```
 
 AI 候选应先执行不带 `--promote` 的 `evolve-service`，让候选保持 staged；详见 [AI 演化生命周期](/evolution/lifecycle)。
@@ -145,8 +145,8 @@ AI 候选应先执行不带 `--promote` 的 `evolve-service`，让候选保持 s
 ### 8081 端口被占用
 
 ```powershell
-$env:YANSHU_RUST_HTTP_BIND = "127.0.0.1:9001"
-.\scripts\serve-tasks-rust.ps1
+$env:YANSHU_HTTP_BIND = "127.0.0.1:9001"
+.\scripts\serve-tasks.ps1
 ```
 
 ### 服务启动前退出

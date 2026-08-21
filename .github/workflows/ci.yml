@@ -145,6 +145,9 @@ jobs:
         working-directory: wiki
         run: npm audit --audit-level=high
 
+      - name: Check repository documentation links
+        run: node scripts/check-doc-links.mjs
+
       - name: Build Wiki
         working-directory: wiki
         run: npm run build

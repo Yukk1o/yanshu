@@ -38,4 +38,4 @@ The tag-only release job is the sole publisher. Do not upload replacement
 binaries by hand, weaken the annotated-tag/main/version checks, add a persistent
 signing secret, or describe checksums alone as proof of authenticity. The full
 artifact and provenance contract is in
-[docs/release-supply-chain.md](docs/release-supply-chain.md).
+[docs/engineering/release-supply-chain.md](docs/engineering/release-supply-chain.md).

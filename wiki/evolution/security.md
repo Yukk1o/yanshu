@@ -2,7 +2,7 @@
 
 Yanshu 假设 `.yan` 源码、LLM 候选、HTTP 输入和模型说明都不可信。可信部分是语言前端、解释器预算、能力 dispatcher、测试 runner、版本库和晋升策略。
 
-v0.11 开始，仓库还会在每次 pull request 上重复执行 Windows/Linux Rust 门禁、依赖策略、v1-v4 conformance、WASM ABI 和 Wiki 构建，并定时 fuzz Reader/Parser、portable value、artifact loader 与 Bundle/package/HTTP 边界。CI 只能提供回归证据，不能替代独立审计或证明没有未知缺陷；具体契约见 [v0.11 规格](/source/docs/spec-v0.11.md.txt)。
+v0.11 开始，仓库还会在每次 pull request 上重复执行 Windows/Linux Rust 门禁、依赖策略、v1-v4 conformance、WASM ABI 和 Wiki 构建，并定时 fuzz Reader/Parser、portable value、artifact loader 与 Bundle/package/HTTP 边界。CI 只能提供回归证据，不能替代独立审计或证明没有未知缺陷；具体契约见 [v0.11 规格](/source/docs/specs/v0.11.md.txt)。
 
 ## 信任边界
 
@@ -95,7 +95,7 @@ manifest 逐文件记录 SHA-256 和大小，验证还会检查版本事件 sequ
 
 配置候选 hash 与采样比例后，宿主使用自己生成的 request ID 做确定性分桶。被采样请求在活动版本提交前抓取 KV 快照，活动请求照常提交和返回；候选随后在后台只操作隔离内存。候选缺失、被篡改、执行失败或影子容量满都不能替换主响应。
 
-`<data-store>.shadow.jsonl` 只持久化活动/候选版本、状态、handler、错误码和差异类别。请求与响应内容、header/KV 值以及内存中用于判等的摘要都不会落盘。当前 guest 没有外部 I/O capability；未来新增外部副作用能力时，必须先提供专用 shadow adapter。详见[影子运行说明](/source/docs/shadow-rollout.md.txt)。
+`<data-store>.shadow.jsonl` 只持久化活动/候选版本、状态、handler、错误码和差异类别。请求与响应内容、header/KV 值以及内存中用于判等的摘要都不会落盘。当前 guest 没有外部 I/O capability；未来新增外部副作用能力时，必须先提供专用 shadow adapter。详见[影子运行说明](/source/docs/operations/shadow-rollout.md.txt)。
 
 ## 当前威胁与状态
 

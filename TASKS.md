@@ -51,7 +51,7 @@
 - [x] Add a contract-owned function set, type boundary, and fuel estimator.
 - [x] Add exact-version backend registration with strict implementation matching.
 - [x] Normalize and bound backend results and redact unexpected backend failures.
-- [x] Ship and test a `text@1` Racket reference backend.
+- [x] Ship and test a versioned `text@1` reference backend.
 - [x] Thread backend selection through pure, service, and HTTP execution paths.
 - [x] Teach live providers the library declaration and comment policy.
 - [x] Verify the complete repository and document the v0.4 checkpoint.
@@ -59,11 +59,11 @@
 ## Change: rust-host-v0.5
 
 - [x] Freeze a host-neutral v1 conformance manifest and portable value codec.
-- [x] Make the Racket oracle execute the manifest through the public CLI.
+- [x] Freeze v1 behavior in a host-neutral manifest exercised through the public CLI.
 - [x] Establish a Rust workspace whose first-party crates forbid unsafe code.
 - [x] Implement Rust diagnostics, Reader, source spans, AST, and program parser.
 - [x] Implement the bounded Rust evaluator and `text@1` Library Backend.
-- [x] Run Racket and Rust against the same canonical fixtures with zero differences.
+- [x] Prove the safe-Rust replacement against the frozen canonical fixtures.
 - [x] Migrate Schema, capability traits, transactional memory KV, and service scenarios.
 - [x] Migrate compatible persisted KV with synced same-directory replacement.
 - [x] Migrate the compatible content-addressed version store and rollback lifecycle.

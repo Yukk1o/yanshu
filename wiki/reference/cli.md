@@ -154,7 +154,7 @@ cargo run --quiet --locked -p yanshu-cli -- `
   deploy-service `
   examples\tasks\service.yan `
   examples\tasks\scenarios.json `
-  .runtime\tasks-rust\code
+  .runtime\tasks\code
 ```
 
 格式：
@@ -170,7 +170,7 @@ deploy-service <program.yan> <scenarios.json> <code-store>
 ```powershell
 cargo run --quiet --locked -p yanshu-cli -- `
   evolve-service `
-  .runtime\tasks-rust\code `
+  .runtime\tasks\code `
   examples\tasks\scenarios.json
 ```
 
@@ -216,8 +216,8 @@ version-conformance <initial.yan> <candidate.yan>
 ```powershell
 cargo run --quiet --locked -p yanshu-cli -- `
   backup-service `
-  .runtime\tasks-rust\code `
-  .runtime\tasks-rust\store.json `
+  .runtime\tasks\code `
+  .runtime\tasks\store.json `
   .backups\tasks-2026-08-18
 ```
 
@@ -248,7 +248,7 @@ restore-service <snapshot-dir> <code-store> <data-store.json>
 
 `backup-service` 先完成 VersionStore pending journal，再在离线 service lock 和版本库锁内创建 schema v1 manifest，对每个 payload 文件记录相对路径、大小和 SHA-256。`verify-backup` 还检查源码哈希、metadata、active、事件 sequence/hash chain、晋升报告与 KV v1 语义，并拒绝而不执行快照中的 journal；路径穿越、符号链接、未知/重复/超限文件和 hash/size 不一致都会失败。运行中的 server 持有 `<data-store>.service.lock`，维护命令会返回 `SERVICE_MAINTENANCE_LOCKED`。
 
-观测 JSONL 不属于业务恢复点，不进入快照。恢复后应先重新运行完整业务场景，再在新的 loopback 端口验证；详细边界见[备份与恢复说明](/source/docs/backup-restore.md.txt)。
+观测 JSONL 不属于业务恢复点，不进入快照。恢复后应先重新运行完整业务场景，再在新的 loopback 端口验证；详细边界见[备份与恢复说明](/source/docs/operations/backup-restore.md.txt)。
 
 ## 启动 HTTP server
 
@@ -256,9 +256,9 @@ restore-service <snapshot-dir> <code-store> <data-store.json>
 
 ```powershell
 cargo run --quiet --locked -p yanshu-server -- `
-  .runtime\tasks-rust\code `
+  .runtime\tasks\code `
   127.0.0.1:8081 `
-  .runtime\tasks-rust\store.json
+  .runtime\tasks\store.json
 ```
 
 格式：
@@ -267,7 +267,7 @@ cargo run --quiet --locked -p yanshu-server -- `
 yanshu-server <code-store> <loopback-bind-address> <data-store.json>
 ```
 
-也可以使用 [serve-tasks-rust.ps1](/source/scripts/serve-tasks-rust.ps1.txt)，它会先验证并部署任务服务。
+也可以使用 [serve-tasks.ps1](/source/scripts/serve-tasks.ps1.txt)，它会先验证并部署任务服务。
 
 ### Server 控制项
 
@@ -285,7 +285,7 @@ yanshu-server <code-store> <loopback-bind-address> <data-store.json>
 
 启动 JSON 会给出 `authenticationRequired`、observation 路径、`shadowEnabled`、固定候选与影子观测路径。普通观测字段是 `schemaVersion/timestampMs/requestId/method/status/durationMs/handler/version/errorCode`；不记录 path、query、headers、body、凭据或内部诊断详情。
 
-影子模式必须同时设置 `VERSION` 与 `PERCENT`。候选使用活动请求提交前的 KV 快照，但只在隔离内存执行；结果追加到 `<data-store>.shadow.jsonl`，不会改变真实 KV 或用户响应。记录只含版本、状态、handler、错误码和差异类别，不含内容值或内容指纹。配置与边界见[影子运行说明](/source/docs/shadow-rollout.md.txt)。
+影子模式必须同时设置 `VERSION` 与 `PERCENT`。候选使用活动请求提交前的 KV 快照，但只在隔离内存执行；结果追加到 `<data-store>.shadow.jsonl`，不会改变真实 KV 或用户响应。记录只含版本、状态、handler、错误码和差异类别，不含内容值或内容指纹。配置与边界见[影子运行说明](/source/docs/operations/shadow-rollout.md.txt)。
 
 Bearer 只解决本地单 token 认证，不能替代 TLS、用户身份、角色授权或可信反向代理。
 
