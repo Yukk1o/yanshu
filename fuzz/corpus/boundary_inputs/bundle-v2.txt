@@ -1,0 +1,1 @@
+A{"formatVersion":2,"languageVersion":4,"entry":"app","modules":[{"name":"app","path":"app.yan","sha256":"0000000000000000000000000000000000000000000000000000000000000000"}],"capabilityClosure":[]}

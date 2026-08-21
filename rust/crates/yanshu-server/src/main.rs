@@ -47,10 +47,11 @@ fn run(arguments: Vec<String>) -> YanshuResult<()> {
     let observation_path = format!("{data_store}.observations.jsonl");
     let observations: Arc<dyn ObservationSink> =
         Arc::new(JsonlObservationSink::open(&observation_path)?);
+    let http_config = HttpConfig::default();
     let router = build_active_router_with_runtime_controls(
         code_store,
         data_store,
-        HttpConfig::default(),
+        http_config.clone(),
         authentication,
         Some(observations),
         shadow_controls,
@@ -98,7 +99,7 @@ fn run(arguments: Vec<String>) -> YanshuResult<()> {
                 "server startup output could not be flushed",
             )
         })?;
-        serve_with_shutdown(listener, router, async {
+        serve_with_shutdown(listener, router, &http_config, async {
             let _ignored = signal::ctrl_c().await;
         })
         .await

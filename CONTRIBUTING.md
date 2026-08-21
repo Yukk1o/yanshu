@@ -21,7 +21,7 @@ Before editing, read [docs/ai-agent-guide.md](docs/ai-agent-guide.md) in full. I
 5. Run targeted tests, then the release gates documented in the agent guide.
 6. Explain security, fuel, compatibility, and generated-artifact consequences in the pull request.
 
-Run `./scripts/check-repository-boundaries.ps1` for every Rust or workflow change. Changes to Reader, Parser, portable values, bytecode, or WASM loaders must also compile the independent fuzz workspace with `cargo check --locked --manifest-path fuzz/Cargo.toml --bins`; new crash artifacts must become minimized regression tests before the fix is considered complete.
+Run `./scripts/check-repository-boundaries.ps1` for every Rust or workflow change. Changes to Reader, Parser, portable values, Bundle/package inputs, HTTP normalization, bytecode, or WASM loaders must also compile the independent fuzz workspace with `cargo check --locked --manifest-path fuzz/Cargo.toml --bins`; new crash artifacts must become minimized regression tests before the fix is considered complete.
 
 Machine-readable diagnostic codes are compatibility surfaces. Improve messages when useful, but do not replace stable structure with prose that only a language model can interpret.
 

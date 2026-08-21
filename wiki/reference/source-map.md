@@ -118,12 +118,14 @@ Go/Rust 读者最值得先看的类型是 `Program`、`ExpressionKind`、`Schema
 按一个 HTTP 请求的真实顺序阅读：
 
 1. [server/main.rs](/source/rust/crates/yanshu-server/src/main.rs.txt)：读取参数与可选 token，拒绝非 loopback bind；
-2. [http/lib.rs](/source/rust/crates/yanshu-http/src/lib.rs.txt)：Bearer 摘要与常量时间比较，生成宿主 request ID；
-3. 同一文件中的 `LoadedProgram` 路径：读取 active hash、校验内容并固定 Program；
-4. header 投影：过滤 `authorization`、`cookie`、`proxy-authorization`、`x-api-key`、`x-request-id`；
-5. [service/lib.rs](/source/rust/crates/yanshu-service/src/lib.rs.txt)：匹配 route、执行事务 handler；
-6. 回到 `http/lib.rs`：响应加入 `X-Request-Id`，观测写入固定版本 hash。
-7. [http/shadow.rs](/source/rust/crates/yanshu-http/src/shadow.rs.txt)：有界后台候选读取请求前快照，比较后丢弃副作用。
+2. [http/transport.rs](/source/rust/crates/yanshu-http/src/transport.rs.txt)：HTTP/1 连接、header deadline 与 graceful shutdown；
+3. [http/request.rs](/source/rust/crates/yanshu-http/src/request.rs.txt)：target/header/body 上限、敏感 header 过滤、path/query 解码；
+4. [http/auth.rs](/source/rust/crates/yanshu-http/src/auth.rs.txt) 与 [loader.rs](/source/rust/crates/yanshu-http/src/loader.rs.txt)：Bearer 摘要校验与 active hash 固定；
+5. [http/router.rs](/source/rust/crates/yanshu-http/src/router.rs.txt) 与 [dispatch.rs](/source/rust/crates/yanshu-http/src/dispatch.rs.txt)：并发准入、宿主 request ID 与执行编排；
+6. [service/lib.rs](/source/rust/crates/yanshu-service/src/lib.rs.txt)：匹配 route、执行事务 handler；
+7. [http/response.rs](/source/rust/crates/yanshu-http/src/response.rs.txt)：响应大小和 guest framing/authentication header 拒绝；
+8. 回到 `dispatch.rs` 加入 `X-Request-Id`；[http/observation.rs](/source/rust/crates/yanshu-http/src/observation.rs.txt) 将白名单观测字段同步落盘；
+9. [http/shadow.rs](/source/rust/crates/yanshu-http/src/shadow.rs.txt)：有界后台候选读取请求前快照，比较后丢弃副作用。
 
 观测字段白名单是 `schemaVersion/timestampMs/requestId/method/status/durationMs/handler/version/errorCode`。测试使用特殊秘密值确认 path、query、header、body 和内部诊断不会进入 JSONL。
 
@@ -153,5 +155,6 @@ v0.9 的 `text@1` contract、类型和 fuel 模型在 [library/contract.rs](/sou
 | [Reader/Parser fuzz](/source/fuzz/fuzz_targets/reader_parser.rs.txt) | UTF-8 source 到 Reader/Parser 的崩溃入口 |
 | [portable value fuzz](/source/fuzz/fuzz_targets/portable_value.rs.txt) | 任意 JSON 到有界 guest value 的转换入口 |
 | [artifact fuzz](/source/fuzz/fuzz_targets/artifact_loaders.rs.txt) | bytecode/WASM artifact loader 的任意字节入口 |
+| [structured boundary fuzz](/source/fuzz/fuzz_targets/boundary_inputs.rs.txt) | Bundle/package 文档与 HTTP normalization 的不可信输入入口 |
 
-v0.11 的 CI/fuzz 威胁模型、时间/内存预算和本地命令见[持续验证规格](/source/docs/spec-v0.11.md.txt)；发布身份与真实性边界见[可验证发布](/development/releases)。
+v0.11 的 CI/fuzz 威胁模型、时间/内存预算和本地命令见[持续验证规格](/source/docs/spec-v0.11.md.txt)，历史审计项与回归证据见[审计收口矩阵](/source/docs/v0.11-audit-closure.md.txt)；发布身份与真实性边界见[可验证发布](/development/releases)。

@@ -55,6 +55,7 @@ Yanshu 是“程序即数据”的受限通用语言内核。AI 可以生成候�
 - `rust/crates/yanshu-compiler`：规范字节码、verifier、artifact 和 WASM handle ABI。
 - `rust/crates/yanshu-bundle`、`yanshu-package`：密封模块链接、内容寻址包与锁文件。
 - `rust/crates/yanshu-library`：有版本、有契约、有计费规则的 Rust Library Backend。
+- `rust/crates/yanshu-http`：按 transport/request/auth/loader/router/dispatch/response/observation/shadow 划分的宿主 HTTP 信任边界；`lib.rs` 只导出公共 API。
 - `rust/crates/yanshu-cli`：面向人类和代理的稳定 JSON CLI。
 - `conformance/v1` 至 `conformance/v4`：跨版本可执行语言契约。
 - `examples/`：任务、费用审批、typed Bundle 与 package 场景。

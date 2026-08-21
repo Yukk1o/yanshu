@@ -2,7 +2,7 @@
 
 Yanshu 假设 `.yan` 源码、LLM 候选、HTTP 输入和模型说明都不可信。可信部分是语言前端、解释器预算、能力 dispatcher、测试 runner、版本库和晋升策略。
 
-v0.11 开始，仓库还会在每次 pull request 上重复执行 Windows/Linux Rust 门禁、依赖策略、v1-v4 conformance、WASM ABI 和 Wiki 构建，并定时 fuzz Reader/Parser、portable value 与 artifact loader。CI 只能提供回归证据，不能替代独立审计或证明没有未知缺陷；具体契约见 [v0.11 规格](/source/docs/spec-v0.11.md.txt)。
+v0.11 开始，仓库还会在每次 pull request 上重复执行 Windows/Linux Rust 门禁、依赖策略、v1-v4 conformance、WASM ABI 和 Wiki 构建，并定时 fuzz Reader/Parser、portable value、artifact loader 与 Bundle/package/HTTP 边界。CI 只能提供回归证据，不能替代独立审计或证明没有未知缺陷；具体契约见 [v0.11 规格](/source/docs/spec-v0.11.md.txt)。
 
 ## 信任边界
 
@@ -65,6 +65,7 @@ Codex、Claude Code 与 OpenCode Agent Backend 不继承名称包含 key/token/s
 - 由宿主生成 request ID，不信任客户端 `x-request-id`；
 - 不把认证、cookie、credential/secret token 与宿主 request ID 传给 guest；
 - 拒绝 guest 设置 `content-length`、`transfer-encoding`、`connection`、`upgrade`、认证和 cookie 等宿主专属响应头；
+- TCP 层对未完成的 HTTP/1 request header 使用显式读取期限，body 另有独立期限；
 - 每个请求读取并固定一次 active hash；
 - 写入不含 path、query、headers、body 和诊断详情的有界 JSONL 观测。
 - 可把候选放入有并发上限的影子执行；候选只读取请求前 KV 快照，全部写入与响应都会丢弃。

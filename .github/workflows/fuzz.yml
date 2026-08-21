@@ -11,6 +11,9 @@ on:
       - "rust/crates/yanshu-syntax/**"
       - "rust/crates/yanshu-runtime/**"
       - "rust/crates/yanshu-compiler/**"
+      - "rust/crates/yanshu-bundle/**"
+      - "rust/crates/yanshu-package/**"
+      - "rust/crates/yanshu-http/**"
 
 permissions:
   contents: read
@@ -54,6 +57,7 @@ jobs:
           cargo fuzz build reader_parser
           cargo fuzz build portable_value
           cargo fuzz build artifact_loaders
+          cargo fuzz build boundary_inputs
 
       - name: Fuzz Reader and Parser
         run: cargo fuzz run reader_parser -- -max_total_time="$FUZZ_SECONDS" -max_len=1048576 -rss_limit_mb=2048
@@ -63,6 +67,9 @@ jobs:
 
       - name: Fuzz artifact loaders
         run: cargo fuzz run artifact_loaders -- -max_total_time="$FUZZ_SECONDS" -max_len=1048576 -rss_limit_mb=2048
+
+      - name: Fuzz Bundle, package, and HTTP boundaries
+        run: cargo fuzz run boundary_inputs -- -max_total_time="$FUZZ_SECONDS" -max_len=1048576 -rss_limit_mb=2048
 
       - name: Upload crash artifacts
         if: failure()
