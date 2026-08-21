@@ -1,5 +1,5 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum FormContext {
+pub(crate) enum FormContext {
     Expression,
     TopLevel,
     Type,
@@ -7,36 +7,46 @@ pub(super) enum FormContext {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct FormHelp {
-    pub(super) name: &'static str,
-    pub(super) kind: &'static str,
-    pub(super) minimum_version: u8,
-    pub(super) syntax: &'static str,
-    pub(super) summary: &'static str,
+pub(crate) struct FormHelp {
+    pub(crate) name: &'static str,
+    pub(crate) kind: &'static str,
+    pub(crate) minimum_version: u8,
+    pub(crate) syntax: &'static str,
+    pub(crate) summary: &'static str,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct PrimitiveHelp {
-    pub(super) name: &'static str,
-    pub(super) minimum_version: u8,
-    pub(super) signature: &'static str,
-    pub(super) summary: &'static str,
-    pub(super) effects: &'static str,
-    pub(super) requirement: Option<&'static str>,
-    pub(super) metering: Option<&'static str>,
+pub(crate) struct PrimitiveHelp {
+    pub(crate) name: &'static str,
+    pub(crate) minimum_version: u8,
+    pub(crate) signature: &'static str,
+    pub(crate) summary: &'static str,
+    pub(crate) effects: &'static str,
+    pub(crate) requirement: Option<&'static str>,
+    pub(crate) metering: Option<&'static str>,
 }
 
-pub(super) fn form_help(context: FormContext, name: &str) -> Option<FormHelp> {
-    let catalog = match context {
+pub(crate) fn form_entries(context: FormContext) -> &'static [FormHelp] {
+    match context {
         FormContext::Expression => EXPRESSION_FORMS,
         FormContext::TopLevel => TOP_LEVEL_FORMS,
         FormContext::Type => TYPE_FORMS,
         FormContext::Schema => SCHEMA_FORMS,
-    };
-    catalog.iter().copied().find(|entry| entry.name == name)
+    }
 }
 
-pub(super) fn primitive_help(name: &str) -> Option<PrimitiveHelp> {
+pub(crate) fn form_help(context: FormContext, name: &str) -> Option<FormHelp> {
+    form_entries(context)
+        .iter()
+        .copied()
+        .find(|entry| entry.name == name)
+}
+
+pub(crate) fn primitive_entries() -> &'static [PrimitiveHelp] {
+    PRIMITIVES
+}
+
+pub(crate) fn primitive_help(name: &str) -> Option<PrimitiveHelp> {
     PRIMITIVES.iter().copied().find(|entry| entry.name == name)
 }
 

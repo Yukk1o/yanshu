@@ -51,7 +51,7 @@ Yanshu 是“程序即数据”的受限通用语言内核。AI 可以生成候�
 
 - `rust/crates/yanshu-syntax`：Reader、AST、版本门禁、Parser、稳定节点路径和有界全局/局部符号索引。
 - `rust/crates/yanshu-format`：保留注释、验证语义不变且幂等的 formatter。
-- `rust/crates/yanshu-lsp`：有界 stdio LSP、文档快照、精确 token hover、导航、格式化 edit 与版本化只读审查请求。
+- `rust/crates/yanshu-lsp`：有界 stdio LSP、文档快照、精确 token hover、作用域感知补全、导航、格式化 edit 与版本化只读审查请求。
 - `editors/vscode`：`.yan` 语言贡献、无脚本只读审查面板、受信 server 选择、环境脱敏和平台专用 VSIX 打包。
 - `rust/crates/yanshu-runtime`：解释器、portable value、Schema、pattern 和字节码 VM。
 - `rust/crates/yanshu-analysis`：静态类型、效果、capability 闭包与只读审查投影。
@@ -170,4 +170,4 @@ npm run build
 
 现在同时支持两条路径：代理进入真实仓库参与语言实现；以及 `evolve-service` 在一次性候选目录中调用 Codex/Claude Code/OpenCode 编写一个 `.yan` 候选。后者默认只登记，不晋升，且不会把 agent 的退出状态或 notes 当成通过证据。
 
-当前 formatter v1 已提供只读候选输出、CI check 和不依赖 source offset 的表达式节点路径；`yanshu-syntax` 已提供全局 `def`、参数、顺序 `let`、pattern binding 和嵌套遮蔽的有界符号索引；最小 `yanshu-lsp` 已提供 full sync、诊断、关键字/原语/Library/用户绑定的精确 plaintext hover、同文件全局/局部 definition、references、只读 formatting edit 和版本化 `yanshu/reviewDocument`；VS Code 扩展已提供 `.yan` 注册、基础 TextMate 高亮、无脚本只读审查面板、平台专用 VSIX，以及隔离的 Windows/Linux Extension Host 验收。尚未提供 Tree-sitter grammar、其它编辑器安装包、MCP server、LSP 局部增量/rename/completion 或审查视图的结构化回写；这些不能用不可靠的文本反向转换冒充。
+当前 formatter v1 已提供只读候选输出、CI check 和不依赖 source offset 的表达式节点路径；`yanshu-syntax` 已提供全局 `def`、参数、顺序 `let`、pattern binding 和嵌套遮蔽的有界符号索引；最小 `yanshu-lsp` 已提供 full sync、诊断、关键字/原语/Library/用户绑定的精确 plaintext hover、作用域/版本/capability 感知 completion、同文件全局/局部 definition、references、只读 formatting edit 和版本化 `yanshu/reviewDocument`；VS Code 扩展已提供 `.yan` 注册、基础 TextMate 高亮、无脚本只读审查面板、平台专用 VSIX，以及隔离的 Windows/Linux Extension Host 验收。尚未提供 Tree-sitter grammar、其它编辑器安装包、MCP server、LSP 局部增量/rename 或审查视图的结构化回写；这些不能用不可靠的文本反向转换冒充。

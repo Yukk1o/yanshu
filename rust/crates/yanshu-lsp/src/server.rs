@@ -105,6 +105,7 @@ impl LanguageServer {
             ("textDocument/didChange", None) => self.did_change(params),
             ("textDocument/didClose", None) => self.did_close(params),
             ("textDocument/hover", Some(id)) => self.hover(id, params),
+            ("textDocument/completion", Some(id)) => self.completion(id, params),
             ("textDocument/definition", Some(id)) => self.definition(id, params),
             ("textDocument/references", Some(id)) => self.references(id, params),
             ("textDocument/formatting", Some(id)) => self.formatting(id, params),
@@ -139,6 +140,7 @@ impl LanguageServer {
                     "positionEncoding": "utf-16",
                     "textDocumentSync": { "openClose": true, "change": 1 },
                     "hoverProvider": true,
+                    "completionProvider": { "resolveProvider": false },
                     "definitionProvider": true,
                     "referencesProvider": true,
                     "documentFormattingProvider": true,
@@ -253,6 +255,19 @@ impl LanguageServer {
                     .and_then(|document| document.hover(line, character))
                     .unwrap_or(Value::Null),
             )],
+            Err(diagnostic) => vec![invalid_params_response(id, &diagnostic)],
+        }
+    }
+
+    fn completion(&self, id: Value, params: &Value) -> Vec<Value> {
+        let result = (|| {
+            let (uri, line, character) = text_position(params)?;
+            self.documents
+                .get(uri)
+                .map_or(Ok(None), |document| document.completion(line, character))
+        })();
+        match result {
+            Ok(completion) => vec![success_response(id, completion.unwrap_or(Value::Null))],
             Err(diagnostic) => vec![invalid_params_response(id, &diagnostic)],
         }
     }
@@ -458,6 +473,10 @@ mod tests {
             true
         );
         assert_eq!(
+            initialized["result"]["capabilities"]["completionProvider"]["resolveProvider"],
+            false
+        );
+        assert_eq!(
             initialized["result"]["capabilities"]["experimental"]["yanshuReviewDocument"]["renderer"],
             "rust-readonly-v3"
         );
@@ -562,6 +581,32 @@ mod tests {
                 .as_str()
                 .is_some_and(|value| value.contains("node: expression-v1"))
         );
+
+        let completion_position = json!({ "line": 0, "character": character.saturating_add(3) });
+        let completion = server.handle_message(&json!({
+            "jsonrpc": "2.0", "id": 8, "method": "textDocument/completion",
+            "params": {
+                "textDocument": { "uri": "file:///tools.yan" },
+                "position": completion_position
+            }
+        }));
+        assert_eq!(completion[0]["result"]["isIncomplete"], false);
+        let target = completion[0]["result"]["items"]
+            .as_array()
+            .and_then(|items| items.iter().find(|item| item["label"] == "target"))
+            .unwrap_or_else(|| panic!("target completion missing"));
+        assert_eq!(target["kind"], 3);
+        assert!(
+            target["detail"]
+                .as_str()
+                .is_some_and(|detail| detail.contains("fn(Int) -> Int"))
+        );
+        assert_eq!(target["textEdit"]["range"]["start"]["character"], character);
+        assert_eq!(
+            target["textEdit"]["range"]["end"]["character"],
+            character.saturating_add("target".len())
+        );
+        assert_eq!(target["textEdit"]["newText"], "target");
 
         let review = server.handle_message(&json!({
             "jsonrpc": "2.0", "id": 6, "method": "yanshu/reviewDocument",

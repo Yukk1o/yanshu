@@ -29,6 +29,7 @@ VS Code 用户可以直接使用[平台专用扩展](/development/vscode)，不�
 | document sync | open/close + full change；version 必须递增 |
 | diagnostics | Parser 错误；language v4 还包含类型与 effect/capability 错误 |
 | hover | 精确 token 的 form 语法、primitive/Library 合约、用户函数类型/effects、局部 binding 与稳定节点路径 |
+| completion | 当前作用域可见的 form、binding、primitive、构造器、Schema、声明 Library operation 与类型；精确替换当前 token |
 | definition | 跳到同文件全局 `def`，或参数、顺序 `let`、pattern binding 的精确声明 |
 | references | 查找同文件全局/局部变量引用，遵守 `includeDeclaration` 与词法遮蔽 |
 | formatting | 返回 canonical full-document `TextEdit[]`；server 不写文件 |
@@ -48,6 +49,14 @@ hover 不是按单词表搜索源码。bounded Reader 只定位光标下一个 s
 
 提示使用 plaintext，最多 8 KiB，不包含 HTML、命令链接、源码值、URI 或宿主自由文本。special form 显示语法、最低 language version 与短路/作用域语义；core primitive 显示类型、effect/capability 和适用的 fuel 规则；`text@1` 一类 Library operation 的参数、返回类型和 fuel 公式直接读取可信 `LibraryContract`；用户函数显示推断/声明类型、传递 capability effect 与适用的 `expression-v1` 节点路径。返回 range 只覆盖被命中的 UTF-16 token，而不是整个 definition。
 
+## Completion 怎样保持可执行
+
+completion 不是把字典中的所有名字都塞给编辑器。bounded Reader 先判断光标属于顶层、表达式、类型还是 Schema；正式 Program 可用时，符号索引再按参数、顺序 `let`、match arm 和嵌套遮蔽计算当前位置可见 binding。局部同名 binding 优先于 primitive，注释、字符串和 quote data 不提供候选。
+
+form 和 core primitive 复用 hover 的版本化目录。primitive 不高于当前 language version；`log`、`now-ms` 与 `kv-*` 还要求程序已声明对应 capability。Library 候选只来自程序声明的精确版本和 Rust 端可信 `LibraryContract`，不会猜一个未导入的 crate 或包。Reader 尚能理解结构、但完整 Program 因正在编辑而未通过 Parser 时，只提供可证明上下文正确的 form 候选。
+
+返回的是标准 `CompletionList`，`isIncomplete:false`；每项只携带 label、plaintext 文档、稳定排序和当前 symbol 的精确 UTF-16 `TextEdit`。没有 snippet、command、自动 import、文件读取或跨文档 edit。单次最多 128 项、候选文本合计最多 256 KiB；超限返回 `LSP_COMPLETION_LIMIT`，不截断成一个看似完整的列表。
+
 ## 有界协议
 
 - JSON-RPC body 最多 32 MiB；
@@ -56,6 +65,7 @@ hover 不是按单词表搜索源码。bounded Reader 只定位光标下一个 s
 - 最多 32 个打开文档，总源码最多 16 MiB；
 - URI 最多 4 KiB；
 - hover plaintext 最多 8 KiB，六倍 JSON 转义上界仍小于消息限制；
+- completion 最多 128 项、候选文本合计最多 256 KiB，超限失败关闭；
 - 单次 references 最多 1,024 个 Location，超限返回 `LSP_REFERENCE_LIMIT`，不静默截断；
 - review 输入最多 512 KiB、投影文本最多 4 MiB，版本和 renderer/read-only 契约必须精确匹配；
 - 只接受 ASCII header 和 UTF-8 JSON body。
@@ -73,8 +83,8 @@ definition 与 references 不使用文本搜索。正式 AST 决定全局 `def`�
 ## 当前限制
 
 - 没有局部增量同步；
-- 没有 completion、rename、semantic tokens、code action；
+- 没有 rename、semantic tokens、code action；
 - 没有 Tree-sitter grammar、Neovim 安装包或 macOS/Arm Extension Host 平台验收；
 - 没有跨 Bundle/package 的多文件链接导航。
 
-实现入口：[符号索引](/source/rust/crates/yanshu-syntax/src/symbol.rs.txt)、[Hover 解析](/source/rust/crates/yanshu-lsp/src/hover/mod.rs.txt)、[Hover 目录](/source/rust/crates/yanshu-lsp/src/hover/catalog.rs.txt)、[协议 framing](/source/rust/crates/yanshu-lsp/src/protocol.rs.txt)、[文档与导航](/source/rust/crates/yanshu-lsp/src/document.rs.txt)、[server 生命周期](/source/rust/crates/yanshu-lsp/src/server.rs.txt)。完整契约见 [v0.12 规格](/source/docs/specs/v0.12.md.txt)。
+实现入口：[符号索引](/source/rust/crates/yanshu-syntax/src/symbol.rs.txt)、[Completion 候选](/source/rust/crates/yanshu-lsp/src/completion/mod.rs.txt)、[Completion 上下文](/source/rust/crates/yanshu-lsp/src/completion/context.rs.txt)、[Hover 解析](/source/rust/crates/yanshu-lsp/src/hover/mod.rs.txt)、[Hover 目录](/source/rust/crates/yanshu-lsp/src/hover/catalog.rs.txt)、[协议 framing](/source/rust/crates/yanshu-lsp/src/protocol.rs.txt)、[文档与导航](/source/rust/crates/yanshu-lsp/src/document.rs.txt)、[server 生命周期](/source/rust/crates/yanshu-lsp/src/server.rs.txt)。完整契约见 [v0.12 规格](/source/docs/specs/v0.12.md.txt)。

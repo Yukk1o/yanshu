@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod completion;
 mod document;
 mod hover;
 mod protocol;

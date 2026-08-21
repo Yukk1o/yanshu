@@ -1,4 +1,4 @@
-mod catalog;
+pub(crate) mod catalog;
 mod token;
 
 use catalog::{FormContext, FormHelp, PrimitiveHelp, form_help, primitive_help};

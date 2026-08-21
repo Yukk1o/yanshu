@@ -116,7 +116,7 @@ cargo build --locked -p yanshu-cli
 .\target\debug\yanshu.exe inspect examples\discount\v2.yan
 ```
 
-VS Code 扩展源码位于 `editors/vscode`。它识别 `.yan`、提供基础高亮，并通过独立 `yanshu-lsp` 显示诊断、关键字/函数/绑定的精确 hover、全局/局部跳转、同文档引用、格式化和 Rust 风格只读审查面板；固定 VS Code 1.101.2 的隔离 Extension Host 测试会在 Windows/Linux CI 验证这些能力。生成携带当前平台 server 的本机 VSIX：
+VS Code 扩展源码位于 `editors/vscode`。它识别 `.yan`、提供基础高亮，并通过独立 `yanshu-lsp` 显示诊断、关键字/函数/绑定的精确 hover、作用域感知补全、全局/局部跳转、同文档引用、格式化和 Rust 风格只读审查面板；固定 VS Code 1.101.2 的隔离 Extension Host 测试会在 Windows/Linux CI 验证这些能力。生成携带当前平台 server 的本机 VSIX：
 
 ```ps1
 cargo build --locked --release -p yanshu-lsp
@@ -196,7 +196,7 @@ cargo run --locked -p yanshu-cli -- `
 rust/crates/
   yanshu-syntax       Reader、AST、Parser、语言版本门禁
   yanshu-format       注释保留、语义复核、幂等格式化
-  yanshu-lsp          有界 stdio、诊断、精确 hover、导航、只读格式化 edit
+  yanshu-lsp          有界 stdio、诊断、hover、补全、导航、只读格式化 edit
   yanshu-runtime      解释器、Schema、Value、模式匹配、字节码 VM
   yanshu-analysis     类型、效果、capability 闭包、审查投影
   yanshu-compiler     规范字节码、verifier、WASM ABI
@@ -216,7 +216,7 @@ wiki/                 面向使用者的中文语言 Wiki
 
 当前发布里程碑是 **v0.10**，语言版本是 **v4**；**v0.11 持续验证与安全加固正在开发中**。它已经是一个可执行、可分析、可编译的语言内核，但还不是 Rust/C++ 式系统语言，也不是可承诺生产稳定性的通用平台。
 
-formatter v1、稳定表达式节点路径、有界全局/局部符号索引、同文档 definition/references、Rust 风格只读审查预览、平台专用 VS Code VSIX 与 Windows/Linux Extension Host 验收已进入 v0.12 开发分支；接下来的工具优先级是作用域感知 completion、防捕获 rename、Tree-sitter、更广编辑器集成和只读 MCP。更广的标准库与有界结构化并发只会在 capability、fuel、取消和确定性语义明确后加入。路线图是方向，不是兼容性承诺。
+formatter v1、稳定表达式节点路径、有界全局/局部符号索引、作用域感知 completion、同文档 definition/references、Rust 风格只读审查预览、平台专用 VS Code VSIX 与 Windows/Linux Extension Host 验收已进入 v0.12 开发分支；接下来的工具优先级是防捕获 rename、Tree-sitter、更广编辑器集成和只读 MCP。更广的标准库与有界结构化并发只会在 capability、fuel、取消和确定性语义明确后加入。路线图是方向，不是兼容性承诺。
 
 ## 可验证发布
 

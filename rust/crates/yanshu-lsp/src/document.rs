@@ -6,6 +6,7 @@ use yanshu_diagnostic::{Diagnostic, Span, YanshuResult};
 use yanshu_format::{FormatOptions, format_source};
 use yanshu_syntax::{Program, ReaderLimits, load_program_source, symbol_index};
 
+use crate::completion::completion_at;
 use crate::hover::hover_at;
 
 const MAXIMUM_OPEN_DOCUMENTS: usize = 32;
@@ -156,6 +157,25 @@ impl OpenDocument {
             "contents": { "kind": "plaintext", "value": hover.text },
             "range": span_range(&self.source, hover.span),
         }))
+    }
+
+    pub(crate) fn completion(&self, line: u64, character: u64) -> YanshuResult<Option<Value>> {
+        let Some(offset) = offset_from_lsp(&self.source, line, character) else {
+            return Ok(None);
+        };
+        let program = load_program_source(&self.source).ok();
+        let analysis = program.as_ref().and_then(analyze_for_tools);
+        let Some(completion) =
+            completion_at(&self.source, program.as_ref(), analysis.as_ref(), offset)?
+        else {
+            return Ok(None);
+        };
+        let range = byte_range(
+            &self.source,
+            completion.replace_start,
+            completion.replace_end,
+        );
+        Ok(Some(completion.into_lsp(range)))
     }
 
     pub(crate) fn definition(&self, line: u64, character: u64) -> Option<Value> {
@@ -327,6 +347,13 @@ fn span_range(source: &str, span: Span) -> Value {
     json!({
         "start": lsp_position(source, span.start.offset),
         "end": lsp_position(source, span.end.offset),
+    })
+}
+
+fn byte_range(source: &str, start: usize, end: usize) -> Value {
+    json!({
+        "start": lsp_position(source, start),
+        "end": lsp_position(source, end),
     })
 }
 
