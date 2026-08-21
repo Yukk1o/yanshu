@@ -165,6 +165,8 @@ Schema 的变化就是 API 输入面变化，应当像 Go/Rust DTO 变化一样�
 ## 当前已有的审查工具
 
 - `check` / `inspect`：输出 Parser 看到的完整 program AST；
+- `review` / `review-bundle --text`：生成 `rust-readonly-v3` 单向语义投影；
+- VS Code **打开 Rust 风格只读审查**：从当前打开快照显示无脚本旁侧面板；
 - JSON test report：输出每个失败的 name、reason、expected、actual；
 - content-addressed source：保留父版本和候选完整源码；
 - metadata / events：记录 parent、provider、报告、promote 和 rollback；
@@ -172,39 +174,26 @@ Schema 的变化就是 API 输入面变化，应当像 Go/Rust DTO 变化一样�
 
 CLI 用法见 [CLI 参考](/reference/cli)。
 
-## 路线建议：Rust 风格只读审查视图
+## Rust 风格只读审查视图
 
-::: warning 尚未实现
-下面是推荐路线，不是当前已经存在的功能。当前 `inspect` 输出结构化 JSON AST，但不会生成 Rust 风格代码，也没有专用审查 UI。
-:::
-
-为了让不懂 Lisp 的人更安全地审查，未来 Rust 宿主可以从同一份已验证 AST **生成只读等价视图**：
+为了让不懂 Lisp 的人更安全地审查，Rust 分析器会从同一份已验证 AST **生成单向语义视图**：
 
 ```rust
-// Generated review view — read only, not executable source.
-route!(POST, "/tasks", create_task);
+// Generated semantic review — READ ONLY.
+// This is not Rust source and cannot be executed.
+// semantic Int = arbitrary-precision integer (never i32/i64).
 
-schema! TaskCreate {
-    required id: String[1..=64],
-    required title: String[1..=120],
-    optional completed: Bool = false,
-}
-
-fn create_task(request: Request) -> Response {
-    let body = validate(TaskCreate, request.body)?;
-    if kv.get("task/" + body.id).is_some() {
-        return api_error(409, "TASK_EXISTS", "task id already exists");
-    }
-    // ...
+fn audit(value: Int) -> Int {
+    { log!(value); value }
 }
 ```
 
-这个视图必须满足：
+当前视图满足：
 
 1. 从 AST 单向生成，用户不能编辑它再反向执行；
-2. 每个节点可追踪回原 `.yan` 源码位置和 AST ID；
-3. 明确标注简化或无法等价显示的节点；
-4. 同屏展示 route/schema/capability/错误码的结构化 diff；
+2. definition 节点携带原 `.yan` source span、类型和 capability；
+3. 显式标注任意精度 `Int`、truthiness 与 `log!` 一类效果调用；
+4. VS Code 面板无 `TextDocument`、无脚本、无执行或保存入口；
 5. 仍以 `.yan` AST、测试和宿主策略作为执行真相。
 
-它的价值是降低审查门槛，不是创建第二门可执行语言。路线位置见 [Rust 宿主与生态路线](/development/rust-roadmap)。
+当前还没有 route/schema/错误码的结构化差异视图，也没有从投影回写 AST 的编辑协议。它的价值是降低审查门槛，不是创建第二门可执行语言。路线位置见 [Rust 宿主与生态路线](/development/rust-roadmap)。

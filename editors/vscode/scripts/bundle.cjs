@@ -39,6 +39,28 @@ async function main() {
     logLevel: 'warning',
   });
   await build({
+    entryPoints: [path.join(extensionRoot, 'src', 'review-protocol.ts')],
+    outfile: path.join(outputRoot, 'review-protocol.js'),
+    bundle: true,
+    format: 'cjs',
+    platform: 'node',
+    target: 'node22',
+    sourcemap: 'external',
+    sourcesContent: false,
+    logLevel: 'warning',
+  });
+  await build({
+    entryPoints: [path.join(extensionRoot, 'src', 'review-html.ts')],
+    outfile: path.join(outputRoot, 'review-html.js'),
+    bundle: true,
+    format: 'cjs',
+    platform: 'node',
+    target: 'node22',
+    sourcemap: 'external',
+    sourcesContent: false,
+    logLevel: 'warning',
+  });
+  await build({
     entryPoints: [path.join(extensionRoot, 'src', 'test', 'suite', 'index.ts')],
     outfile: path.join(outputRoot, 'test', 'suite', 'index.js'),
     bundle: true,

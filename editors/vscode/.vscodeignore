@@ -7,6 +7,10 @@ package-lock.json
 node_modules/**
 dist/**
 out/test/**
+out/review-protocol.js
+out/review-protocol.js.map
+out/review-html.js
+out/review-html.js.map
 *.vsix
 server/**/*.pdb
 server/**/*.d
