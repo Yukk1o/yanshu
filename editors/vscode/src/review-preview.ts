@@ -98,7 +98,7 @@ class ReviewPreviewController implements vscode.Disposable {
       }
       this.panels.delete(sourceKey);
     });
-    panel.webview.html = renderReviewLoadingHtml(sourceLabel, source.version);
+    panel.webview.html = renderReviewLoadingHtml(sourceLabel);
     await this.refresh(state, source);
   }
 
@@ -156,7 +156,6 @@ class ReviewPreviewController implements vscode.Disposable {
       }
       state.panel.webview.html = renderReviewErrorHtml(
         displayName(state.sourceUri),
-        sourceVersion,
       );
     }
   }

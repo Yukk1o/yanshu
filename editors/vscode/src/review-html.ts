@@ -8,28 +8,25 @@ export function renderReviewHtml(
 ): string {
   return renderShell(
     sourceLabel,
-    review.sourceVersion,
     `<pre aria-label="Rust 风格只读审查代码"><code>${escapeHtml(review.text)}</code></pre>`,
   );
 }
 
-export function renderReviewLoadingHtml(sourceLabel: string, sourceVersion: number): string {
+export function renderReviewLoadingHtml(sourceLabel: string): string {
   return renderShell(
     sourceLabel,
-    sourceVersion,
     '<div class="status" role="status">正在生成语义投影…</div>',
   );
 }
 
-export function renderReviewErrorHtml(sourceLabel: string, sourceVersion: number): string {
+export function renderReviewErrorHtml(sourceLabel: string): string {
   return renderShell(
     sourceLabel,
-    sourceVersion,
     '<div class="status error" role="alert">无法生成当前快照。请检查源文件诊断后重试。</div>',
   );
 }
 
-function renderShell(sourceLabel: string, sourceVersion: number, content: string): string {
+function renderShell(sourceLabel: string, content: string): string {
   const safeLabel = escapeHtml(sourceLabel);
   return `<!doctype html>
 <html lang="zh-CN">
@@ -66,45 +63,6 @@ function renderShell(sourceLabel: string, sourceVersion: number, content: string
     main {
       width: 100%;
       padding: 0.75rem;
-    }
-
-    header {
-      display: flex;
-      flex-direction: column;
-      gap: 0.35rem;
-      margin-bottom: 0.75rem;
-    }
-
-    .heading,
-    .meta {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 0.4rem;
-      min-width: 0;
-    }
-
-    h1 {
-      margin: 0;
-      overflow-wrap: anywhere;
-      font-size: 1rem;
-      font-weight: 600;
-    }
-
-    .readonly {
-      color: var(--vscode-descriptionForeground, #9d9d9d);
-      font-size: 0.75rem;
-      font-weight: 600;
-      letter-spacing: 0.04em;
-    }
-
-    .meta {
-      color: var(--vscode-descriptionForeground, #9d9d9d);
-      font-size: 0.85rem;
-    }
-
-    .separator {
-      color: var(--vscode-descriptionForeground, #9d9d9d);
     }
 
     pre,
@@ -144,29 +102,11 @@ function renderShell(sourceLabel: string, sourceVersion: number, content: string
         padding: 1rem;
       }
 
-      header {
-        flex-direction: row;
-        align-items: baseline;
-        justify-content: space-between;
-      }
     }
   </style>
 </head>
 <body>
   <main>
-    <header>
-      <div class="heading">
-        <h1>${safeLabel}</h1>
-        <span class="readonly">READ ONLY</span>
-      </div>
-      <div class="meta">
-        <span>Rust 风格只读审查</span>
-        <span class="separator" aria-hidden="true">·</span>
-        <span>snapshot ${sourceVersion}</span>
-        <span class="separator" aria-hidden="true">·</span>
-        <span>生成视图，不可执行或回写</span>
-      </div>
-    </header>
     ${content}
   </main>
 </body>

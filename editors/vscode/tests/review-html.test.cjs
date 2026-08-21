@@ -14,7 +14,7 @@ const review = {
   renderer: 'rust-readonly-v3',
   editable: false,
   languageId: 'rust',
-  text: '// Generated semantic review — READ ONLY.\n<script>alert("never")</script>\n',
+  text: '// Generated semantic review — READ ONLY.\n// This is not Rust source and cannot be executed.\n// 不可执行。\n<script>alert("never")</script>\n',
 };
 
 test('review panel is scriptless, escaped, and visibly read only', () => {
@@ -32,13 +32,14 @@ test('review panel is scriptless, escaped, and visibly read only', () => {
   assert.doesNotMatch(html, /contenteditable/iu);
 });
 
-test('review panel uses a fluid mobile-first audit layout', () => {
+test('review panel uses a compact mobile-first code layout', () => {
   const html = renderReviewHtml(review, 'policy.yan');
   assert.match(html, /width: 100%/u);
   assert.match(html, /overflow: auto/u);
   assert.match(html, /@media \(min-width: 48rem\)/u);
   assert.match(html, /font-size: 1rem/u);
-  assert.match(html, /snapshot 9/u);
-  assert.match(renderReviewLoadingHtml('policy.yan', 9), /正在生成语义投影/u);
-  assert.match(renderReviewErrorHtml('policy.yan', 9), /无法生成当前快照/u);
+  assert.doesNotMatch(html, /<header/iu);
+  assert.doesNotMatch(html, /snapshot 9/u);
+  assert.match(renderReviewLoadingHtml('policy.yan'), /正在生成语义投影/u);
+  assert.match(renderReviewErrorHtml('policy.yan'), /无法生成当前快照/u);
 });
