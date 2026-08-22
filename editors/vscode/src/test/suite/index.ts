@@ -142,6 +142,73 @@ async function verifyLanguageFeatures(uri: vscode.Uri, expectedFormatUri: vscode
   assert.match(normalizedFunctionFormText, /kind: function special form/u);
   assert.match(normalizedFunctionFormText, /syntax: \(fn \(PARAMETER\.\.\.\) BODY\)/u);
 
+  const semanticLegend = await withTimeout(
+    vscode.commands.executeCommand<vscode.SemanticTokensLegend>(
+      'vscode.provideDocumentSemanticTokensLegend',
+      uri,
+    ),
+    'semantic token legend request',
+  );
+  const semanticTokens = await withTimeout(
+    vscode.commands.executeCommand<vscode.SemanticTokens>(
+      'vscode.provideDocumentSemanticTokens',
+      uri,
+    ),
+    'semantic token request',
+  );
+  assert.ok(semanticLegend, 'semantic token provider returned no legend');
+  assert.ok(semanticTokens, 'semantic token provider returned no tokens');
+  const decodedSemanticTokens = decodeSemanticTokens(document, semanticLegend, semanticTokens);
+  const semanticLocalDeclarationOffset = sourceBeforeFormatting.lastIndexOf(localDeclarationMarker)
+    + '(fn ('.length;
+  assert.ok(
+    semanticLocalDeclarationOffset >= '(fn ('.length,
+    'semantic token parameter declaration fixture is missing',
+  );
+  assertSemanticToken(
+    document,
+    decodedSemanticTokens,
+    document.positionAt(functionFormOffset),
+    'fn',
+    'keyword',
+    [],
+  );
+  assertSemanticToken(
+    document,
+    decodedSemanticTokens,
+    callPosition,
+    'target',
+    'function',
+    ['readonly'],
+  );
+  assertSemanticToken(
+    document,
+    decodedSemanticTokens,
+    document.positionAt(semanticLocalDeclarationOffset),
+    'value',
+    'parameter',
+    ['declaration', 'readonly'],
+  );
+  assertSemanticToken(
+    document,
+    decodedSemanticTokens,
+    document.positionAt(parameterOffset),
+    'value',
+    'parameter',
+    ['readonly'],
+  );
+  const signatureTypeOffset = sourceBeforeFormatting.indexOf('(fn (integer) integer)')
+    + '(fn ('.length;
+  assert.ok(signatureTypeOffset >= '(fn ('.length, 'signature type fixture is missing');
+  assertSemanticToken(
+    document,
+    decodedSemanticTokens,
+    document.positionAt(signatureTypeOffset),
+    'integer',
+    'type',
+    ['readonly'],
+  );
+
   const definitions = await withTimeout(vscode.commands.executeCommand<Array<vscode.Location | vscode.LocationLink>>(
     'vscode.executeDefinitionProvider',
     uri,
@@ -376,6 +443,72 @@ function definitionTargetRange(definition: vscode.Location | vscode.LocationLink
 
 function completionLabel(item: vscode.CompletionItem): string {
   return typeof item.label === 'string' ? item.label : item.label.label;
+}
+
+interface DecodedSemanticToken {
+  range: vscode.Range;
+  type: string;
+  modifiers: string[];
+}
+
+function decodeSemanticTokens(
+  document: vscode.TextDocument,
+  legend: vscode.SemanticTokensLegend,
+  tokens: vscode.SemanticTokens,
+): DecodedSemanticToken[] {
+  assert.equal(tokens.data.length % 5, 0, 'semantic token data is not a sequence of five integers');
+  const decoded: DecodedSemanticToken[] = [];
+  let line = 0;
+  let start = 0;
+  for (let index = 0; index < tokens.data.length; index += 5) {
+    const deltaLine = semanticInteger(tokens.data, index);
+    const deltaStart = semanticInteger(tokens.data, index + 1);
+    const length = semanticInteger(tokens.data, index + 2);
+    const tokenType = semanticInteger(tokens.data, index + 3);
+    const modifierBits = semanticInteger(tokens.data, index + 4);
+    line += deltaLine;
+    start = deltaLine === 0 ? start + deltaStart : deltaStart;
+    assert.ok(line < document.lineCount, 'semantic token line is outside the document');
+    assert.ok(length > 0, 'semantic token length must be positive');
+    const type = legend.tokenTypes[tokenType];
+    assert.ok(type, `semantic token type index is outside the legend: ${tokenType}`);
+    const modifiers = legend.tokenModifiers.filter(
+      (_modifier, modifierIndex) => (modifierBits & (2 ** modifierIndex)) !== 0,
+    );
+    decoded.push({
+      range: new vscode.Range(line, start, line, start + length),
+      type,
+      modifiers,
+    });
+  }
+  return decoded;
+}
+
+function semanticInteger(data: Uint32Array, index: number): number {
+  const value = data[index];
+  if (value === undefined) {
+    throw new Error(`semantic token integer is missing at index ${index}`);
+  }
+  return value;
+}
+
+function assertSemanticToken(
+  document: vscode.TextDocument,
+  tokens: readonly DecodedSemanticToken[],
+  position: vscode.Position,
+  expectedText: string,
+  expectedType: string,
+  expectedModifiers: readonly string[],
+): void {
+  const token = tokens.find((candidate) => candidate.range.start.isEqual(position));
+  assert.ok(token, `semantic token is missing at ${position.line}:${position.character}`);
+  assert.equal(document.getText(token.range), expectedText, 'semantic token selected the wrong text');
+  assert.equal(token.type, expectedType, `semantic token has the wrong type for ${expectedText}`);
+  assert.deepEqual(
+    [...token.modifiers].sort(),
+    [...expectedModifiers].sort(),
+    `semantic token has the wrong modifiers for ${expectedText}`,
+  );
 }
 
 function assertCompletionEdit(

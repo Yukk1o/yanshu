@@ -3,7 +3,7 @@
 这是实验性的 `.yan` 语言扩展。它提供：
 
 - `.yan` 文件识别、括号与行注释配置；
-- 与当前语言表层语法一致的基础 TextMate 高亮；
+- 与当前语言表层语法一致的基础 TextMate 高亮，以及 AST/符号索引驱动的全文 semantic tokens；
 - 通过独立 safe-Rust `yanshu-lsp` 提供诊断、关键字/函数/绑定的精确 hover、作用域感知补全、同文件全局/局部跳转、引用与防捕获重命名、全文格式化，以及 Rust 风格只读审查面板。
 
 最低支持 VS Code 1.101；该版本开始使用 Node 22 extension host，与当前 language client 和 bundle 目标一致。
@@ -57,7 +57,7 @@ Set-Location editors\vscode
 npm run test:e2e
 ```
 
-测试使用临时扩展副本和独立 user-data/extensions 目录，验证激活、`.yan` 识别、诊断、用户函数类型/节点 hover、关键字语法 hover、全局函数/局部参数补全及精确替换范围、同文件全局/局部跳转与引用、局部绑定重命名、格式化 edit，以及审查命令打开无可编辑文本模型的独立 Webview Panel。下载阶段可以使用宿主代理；测试实例启动前会移除代理和凭据形状的环境变量。下载缓存只存放在忽略的 `.vscode-test/`。若要使用当前机器上的独立 VS Code 安装，可用绝对路径设置 `YANSHU_VSCODE_EXECUTABLE`；该安装正在运行或更新时应使用默认下载副本。
+测试使用临时扩展副本和独立 user-data/extensions 目录，验证激活、`.yan` 识别、诊断、用户函数类型/节点 hover、关键字语法 hover、全局函数/局部参数补全及精确替换范围、关键词/类型/函数/参数 semantic tokens、同文件全局/局部跳转与引用、局部绑定重命名、格式化 edit，以及审查命令打开无可编辑文本模型的独立 Webview Panel。下载阶段可以使用宿主代理；测试实例启动前会移除代理和凭据形状的环境变量。下载缓存只存放在忽略的 `.vscode-test/`。若要使用当前机器上的独立 VS Code 安装，可用绝对路径设置 `YANSHU_VSCODE_EXECUTABLE`；该安装正在运行或更新时应使用默认下载副本。
 
 CI 在 Windows x64 和 Linux x64（Xvfb）上运行同一套测试并生成对应 VSIX。测试 bundle 位于 `out/test/`，明确排除在 VSIX 之外。
 
@@ -72,6 +72,6 @@ CI 在 Windows x64 和 Linux x64（Xvfb）上运行同一套测试并生成对�
 - formatting 只返回 `TextEdit[]`；是否应用由 VS Code 和用户决定。
 - rename 只返回绑定当前文档版本的同文件 `WorkspaceEdit`；捕获、解析变化或符号图变化会被 server 拒绝，是否应用仍由 VS Code 和用户决定。
 - review panel 只消费打开快照；不读取 URI 文件、不创建 `.rs`、不暴露编辑模型或执行入口。
-- 当前没有 Tree-sitter 或 semantic tokens；completion、references 与 rename 仅限当前打开文档。
+- 当前没有 Tree-sitter 或 semantic token range/delta；completion、references 与 rename 仅限当前打开文档。
 
 项目主页：[Yanshu Wiki](https://yukk1o.github.io/yanshu/) · [GitHub](https://github.com/Yukk1o/yanshu)

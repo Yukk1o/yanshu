@@ -5,6 +5,7 @@ mod document;
 mod hover;
 mod protocol;
 mod rename;
+mod semantic_tokens;
 mod server;
 
 use std::io::{BufRead, Write};

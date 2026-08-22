@@ -30,6 +30,7 @@ VS Code 用户可以直接使用[平台专用扩展](/development/vscode)，不�
 | diagnostics | Parser 错误；language v4 还包含类型与 effect/capability 错误 |
 | hover | 精确 token 的 form 语法、primitive/Library 合约、用户函数类型/effects、局部 binding 与稳定节点路径 |
 | completion | 当前作用域可见的 form、binding、primitive、构造器、Schema、声明 Library operation 与类型；精确替换当前 token |
+| semantic tokens | 全文 UTF-16 语义分类；区分关键词、类型、函数、参数、局部 binding、构造器、字段、namespace 与内建运算符 |
 | definition | 跳到同文件全局 `def`，或参数、顺序 `let`、pattern binding 的精确声明 |
 | references | 查找同文件全局/局部变量引用，遵守 `includeDeclaration` 与词法遮蔽 |
 | prepareRename / rename | 只重命名同文件已解析 binding；版本化 edit 在返回前通过候选 Parser 与完整符号图复核 |
@@ -58,6 +59,12 @@ form 和 core primitive 复用 hover 的版本化目录。primitive 不高于当
 
 返回的是标准 `CompletionList`，`isIncomplete:false`；每项只携带 label、plaintext 文档、稳定排序和当前 symbol 的精确 UTF-16 `TextEdit`。没有 snippet、command、自动 import、文件读取或跨文档 edit。单次最多 128 项、候选文本合计最多 256 KiB；超限返回 `LSP_COMPLETION_LIMIT`，不截断成一个看似完整的列表。
 
+## Semantic tokens 怎样避免假高亮
+
+server 只声明 `textDocument/semanticTokens/full`，不声明 range、delta 或 `resultId`。顶层、类型、Schema 和 data 声明按正式 Parser 已接受的 Reader 结构分类；表达式关键词必须与 AST expression span 对齐；全局 `def`、参数、顺序 `let` 和 pattern binding 必须由 `SymbolIndex` 解析。局部 binding 的分类优先于 primitive/Library，因此参数名叫 `log` 时仍是 parameter，不会伪装成默认库函数。
+
+字符串、注释和 quote data 不返回 semantic token，由 TextMate 负责这些基础词法颜色。其余结果按源码排序、去重并检查互不重叠，再用一次向前扫描编码成标准 UTF-16 五元组。单次最多 10,000 项；解析失败返回 `null`，span、顺序或 UTF-16 编码不一致返回稳定 `LSP_SEMANTIC_TOKEN_*` diagnostic，不会回退到正则搜索。semantic tokens 仅用于显示，不参与 `.yan`、Bundle、类型/effect、fuel 或内容哈希。
+
 ## 有界协议
 
 - JSON-RPC body 最多 32 MiB；
@@ -67,6 +74,7 @@ form 和 core primitive 复用 hover 的版本化目录。primitive 不高于当
 - URI 最多 4 KiB；
 - hover plaintext 最多 8 KiB，六倍 JSON 转义上界仍小于消息限制；
 - completion 最多 128 项、候选文本合计最多 256 KiB，超限失败关闭；
+- semantic tokens 最多 10,000 项，每项固定五个 `u32`；最坏 JSON 大小在编译期证明小于消息限制；
 - 单次 references 最多 1,024 个 Location，超限返回 `LSP_REFERENCE_LIMIT`，不静默截断；
 - 单次 rename 最多 1,024 个 edit、replacement 文本合计最多 4 MiB，候选源码仍受 4 MiB Reader 上限；响应最坏 JSON 转义在编译期证明小于消息限制；
 - review 输入最多 512 KiB、投影文本最多 4 MiB，版本和 renderer/read-only 契约必须精确匹配；
@@ -93,8 +101,8 @@ definition 与 references 不使用文本搜索。正式 AST 决定全局 `def`�
 ## 当前限制
 
 - 没有局部增量同步；
-- 没有 semantic tokens、code action；
+- 没有 semantic token range/delta、code action；
 - 没有 Tree-sitter grammar、Neovim 安装包或 macOS/Arm Extension Host 平台验收；
 - 没有跨 Bundle/package 的多文件链接导航。
 
-实现入口：[符号索引](/source/rust/crates/yanshu-syntax/src/symbol.rs.txt)、[Completion 候选](/source/rust/crates/yanshu-lsp/src/completion/mod.rs.txt)、[Completion 上下文](/source/rust/crates/yanshu-lsp/src/completion/context.rs.txt)、[Hover 解析](/source/rust/crates/yanshu-lsp/src/hover/mod.rs.txt)、[Hover 目录](/source/rust/crates/yanshu-lsp/src/hover/catalog.rs.txt)、[Rename 复核](/source/rust/crates/yanshu-lsp/src/rename.rs.txt)、[协议 framing](/source/rust/crates/yanshu-lsp/src/protocol.rs.txt)、[文档与导航](/source/rust/crates/yanshu-lsp/src/document.rs.txt)、[server 生命周期](/source/rust/crates/yanshu-lsp/src/server.rs.txt)。完整契约见 [v0.12 规格](/source/docs/specs/v0.12.md.txt)。
+实现入口：[符号索引](/source/rust/crates/yanshu-syntax/src/symbol.rs.txt)、[Completion 候选](/source/rust/crates/yanshu-lsp/src/completion/mod.rs.txt)、[Completion 上下文](/source/rust/crates/yanshu-lsp/src/completion/context.rs.txt)、[Hover 解析](/source/rust/crates/yanshu-lsp/src/hover/mod.rs.txt)、[Hover 目录](/source/rust/crates/yanshu-lsp/src/hover/catalog.rs.txt)、[Semantic token 分类](/source/rust/crates/yanshu-lsp/src/semantic_tokens/classify.rs.txt)、[UTF-16 编码](/source/rust/crates/yanshu-lsp/src/semantic_tokens/encode.rs.txt)、[Rename 复核](/source/rust/crates/yanshu-lsp/src/rename.rs.txt)、[协议 framing](/source/rust/crates/yanshu-lsp/src/protocol.rs.txt)、[文档与导航](/source/rust/crates/yanshu-lsp/src/document.rs.txt)、[server 生命周期](/source/rust/crates/yanshu-lsp/src/server.rs.txt)。完整契约见 [v0.12 规格](/source/docs/specs/v0.12.md.txt)。

@@ -11,6 +11,7 @@ use crate::hover::hover_at;
 use crate::rename::{
     MAXIMUM_RENAME_EDITS, MAXIMUM_RENAME_TEXT_BYTES, prepare_rename_at, rename_at,
 };
+use crate::semantic_tokens::semantic_tokens;
 
 const MAXIMUM_OPEN_DOCUMENTS: usize = 32;
 const MAXIMUM_TOTAL_SOURCE_BYTES: usize = 16 * 1024 * 1024;
@@ -240,6 +241,14 @@ impl OpenDocument {
             "range": span_range(&self.source, prepared.span),
             "placeholder": prepared.placeholder,
         }))
+    }
+
+    pub(crate) fn semantic_tokens(&self) -> YanshuResult<Option<Value>> {
+        let Ok(program) = load_program_source(&self.source) else {
+            return Ok(None);
+        };
+        let data = semantic_tokens(&program)?;
+        Ok(Some(json!({ "data": data })))
     }
 
     pub(crate) fn rename(&self, line: u64, character: u64, new_name: &str) -> YanshuResult<Value> {

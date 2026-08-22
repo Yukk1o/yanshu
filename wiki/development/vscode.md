@@ -1,6 +1,6 @@
 # VS Code 扩展
 
-`editors/vscode` 是 `.yan` 的首个编辑器安装包。它按 VS Code 官方 language client 架构启动独立 `yanshu-lsp`，提供文件识别、基础 TextMate 高亮、诊断、关键字/函数/绑定的精确 hover、作用域感知补全、同文件全局/局部跳转、引用与防捕获重命名、全文格式化，以及旁侧 Rust 风格只读审查面板。
+`editors/vscode` 是 `.yan` 的首个编辑器安装包。它按 VS Code 官方 language client 架构启动独立 `yanshu-lsp`，提供文件识别、TextMate 基础词法颜色、AST/符号索引驱动的语义高亮、诊断、关键字/函数/绑定的精确 hover、作用域感知补全、同文件全局/局部跳转、引用与防捕获重命名、全文格式化，以及旁侧 Rust 风格只读审查面板。
 
 最低支持 VS Code 1.101；官方从该版本把 Node extension host 升级到 Node 22，与当前 client 和 bundle target 一致。
 
@@ -50,6 +50,7 @@ npm run test:e2e
 - 用户函数 hover 的类型与稳定 expression node；
 - `fn` 等关键字 hover 的语法和版本说明；
 - 全局函数与局部参数 completion 的类型、作用域及精确 token 替换范围；
+- `fn`、类型、全局函数和局部参数的 semantic token 类型与 modifier；
 - 同文档全局与局部 parameter definition；
 - 同文档全局与局部 parameter references；
 - 同文档局部 parameter rename 只返回正确 `WorkspaceEdit`，不直接修改文档；
@@ -78,7 +79,7 @@ npm run test:e2e
 
 ## 扩展边界
 
-- `.yan` 是规范源码，TextMate token 颜色不参与语言语义；
+- `.yan` 是规范源码，TextMate 与 LSP semantic token 颜色都不参与语言语义；
 - extension client 只同步编辑器已打开的快照；Rust server 不按 URI 读取磁盘；
 - server 子进程不会继承名称含 key/token/secret/password/credential/auth 的环境变量；
 - extension client bundle 为单个 CommonJS 入口，VSIX 不携带开发依赖或散落的 `node_modules`；
@@ -92,7 +93,7 @@ npm run test:e2e
 
 ## 仍未实现
 
-- Tree-sitter 与 semantic tokens；
+- Tree-sitter 与 semantic token range/delta；
 - 跨 Bundle/package 的多文件 references；
 - 自动生成 Windows/Linux/macOS 与 x64/Arm 全矩阵 VSIX 的发布工作流；
 - Neovim、Zed、JetBrains 等安装包。
