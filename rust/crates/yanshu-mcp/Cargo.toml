@@ -1,0 +1,21 @@
+[package]
+name = "yanshu-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "yanshu-mcp"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+yanshu-analysis = { path = "../yanshu-analysis", version = "=0.10.0" }
+yanshu-diagnostic = { path = "../yanshu-diagnostic", version = "=0.10.0" }
+yanshu-format = { path = "../yanshu-format", version = "=0.10.0" }
+yanshu-syntax = { path = "../yanshu-syntax", version = "=0.10.0" }
+serde_json.workspace = true

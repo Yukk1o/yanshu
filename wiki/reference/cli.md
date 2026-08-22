@@ -10,6 +10,14 @@ cargo run --quiet --locked -p yanshu-lsp
 
 它的 stdout 只用于 LSP `Content-Length` framing；不要把普通日志写入或混入这个流。能力和编辑器边界见[最小 LSP Server](/development/lsp)。
 
+Agent 工具协议由另一个独立 stdio binary 提供，也不是 `yanshu` 子命令：
+
+```powershell
+cargo run --quiet --locked -p yanshu-mcp
+```
+
+它的 stdout 只包含 newline-delimited MCP JSON-RPC。server 只接收完整源码文本并提供 inspect/format/review，不读取路径或写回文件；配置见 [Codex / Claude Code / OpenCode MCP](/development/mcp)。
+
 下面写出完整 `cargo run`，便于直接复制。命令分发见 [yanshu-cli main.rs](/source/rust/crates/yanshu-cli/src/main.rs.txt)。
 
 ## `format`

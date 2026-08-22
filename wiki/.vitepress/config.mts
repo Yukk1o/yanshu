@@ -66,6 +66,7 @@ export default defineConfig({
           { text: '最小 LSP Server', link: '/development/lsp' },
           { text: 'Tree-sitter 展示语法', link: '/development/tree-sitter' },
           { text: 'VS Code 扩展', link: '/development/vscode' },
+          { text: 'Codex / Claude / OpenCode MCP', link: '/development/mcp' },
           { text: '源码地图', link: '/reference/source-map' },
           { text: 'AI Agent Backend', link: '/development/ai-agents' },
           { text: 'Rust 宿主与生态路线', link: '/development/rust-roadmap' },

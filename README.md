@@ -133,6 +133,15 @@ npm ci
 npm run check
 ```
 
+Codex、Claude Code 与 OpenCode 还可以通过独立的只读 MCP server 调用正式 inspect、formatter 和 Rust 风格审查链路。server 只接收源码文本，不读写工作区、不执行 guest，也不访问网络：
+
+```ps1
+cargo build --locked --release -p yanshu-mcp
+codex mcp add yanshu -- E:\learn\yanshu\target\release\yanshu-mcp.exe
+```
+
+三种 Agent 的完整配置见 [MCP 使用页](wiki/development/mcp.md)。
+
 运行真实任务服务及 11 个有状态场景：
 
 ```ps1
@@ -156,7 +165,7 @@ cargo run --locked -p yanshu-cli -- `
 |受限执行 |调用深度、值边界、Reader 边界与显式 fuel 计量 |
 |编译路径 |规范字节码、verifier、解释器/VM 差分与 WASM handle ABI |
 |宿主生态 |安全 Rust Library Backend；guest 不能直接调用 crates.io 或 FFI |
-|AI 开发 |DeepSeek/OpenAI-compatible HTTP，以及 Codex、Claude Code、OpenCode CLI 后端 |
+|AI 开发 |DeepSeek/OpenAI-compatible HTTP、Codex/Claude Code/OpenCode CLI 后端，以及只读 MCP 语言工具 |
 |编辑器工具 |有界 LSP、VS Code 平台包、Tree-sitter grammar 与标准查询 |
 |生命周期 |候选注册、测试门禁、显式晋升、影子执行、审计事件与哈希回滚 |
 
@@ -199,6 +208,8 @@ cargo run --locked -p yanshu-cli -- `
 
 代理只编辑一次性目录中的 `candidate.yan`，看不到真实活动指针、生产 capability 或可信测试文件。代理退出成功不等于候选通过；Parser、测试、fuel、内容哈希和人工晋升仍是最终证据。
 
+已经在真实仓库中工作的 Agent 可以使用另一条只读路径：[`yanshu-mcp`](wiki/development/mcp.md) 接收当前完整源码文本并返回 inspection、格式化候选或审查投影。它没有文件、网络、执行和写回权限，不能替代 Agent 自己的编辑动作或候选门禁。
+
 ## 仓库地图
 
 ```text
@@ -206,6 +217,7 @@ rust/crates/
   yanshu-syntax       Reader、AST、Parser、语言版本门禁
   yanshu-format       注释保留、语义复核、幂等格式化
   yanshu-lsp          有界 stdio、诊断、hover、补全、语义高亮、导航、防捕获 rename、只读格式化 edit
+  yanshu-mcp          Codex、Claude Code、OpenCode 的有界只读语言工具
   yanshu-runtime      解释器、Schema、Value、模式匹配、字节码 VM
   yanshu-analysis     类型、效果、capability 闭包、审查投影
   yanshu-compiler     规范字节码、verifier、WASM ABI
@@ -226,7 +238,7 @@ wiki/                 面向使用者的中文语言 Wiki
 
 当前发布里程碑是 **v0.10**，语言版本是 **v4**；**v0.11 持续验证与安全加固正在开发中**。它已经是一个可执行、可分析、可编译的语言内核，但还不是 Rust/C++ 式系统语言，也不是可承诺生产稳定性的通用平台。
 
-formatter v1、稳定表达式节点路径、有界全局/局部符号索引、作用域感知 completion、全文 semantic tokens、同文档 definition/references、防捕获 rename、Rust 风格只读审查预览、平台专用 VS Code VSIX、Windows/Linux Extension Host 验收，以及带 corpus/查询/权威 Parser 差分门禁的 Tree-sitter grammar 已进入 v0.12 开发分支；接下来的工具优先级是更多编辑器安装包、semantic token range/delta 和只读 MCP。更广的标准库与有界结构化并发只会在 capability、fuel、取消和确定性语义明确后加入。路线图是方向，不是兼容性承诺。
+formatter v1、稳定表达式节点路径、有界全局/局部符号索引、作用域感知 completion、全文 semantic tokens、同文档 definition/references、防捕获 rename、Rust 风格只读审查预览、平台专用 VS Code VSIX、Windows/Linux Extension Host 验收、带 corpus/查询/权威 Parser 差分门禁的 Tree-sitter grammar，以及兼容新旧协议的只读 MCP 已进入 v0.12 开发分支；接下来的工具优先级是更多编辑器安装包、semantic token range/delta 和结构化 AST diff。更广的标准库与有界结构化并发只会在 capability、fuel、取消和确定性语义明确后加入。路线图是方向，不是兼容性承诺。
 
 ## 可验证发布
 
