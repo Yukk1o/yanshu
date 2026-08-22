@@ -102,7 +102,7 @@ definition 与 references 不使用文本搜索。正式 AST 决定全局 `def`�
 
 - 没有局部增量同步；
 - 没有 semantic token range/delta、code action；
-- 没有 Tree-sitter grammar、Neovim 安装包或 macOS/Arm Extension Host 平台验收；
+- Tree-sitter grammar 已有独立显示层，但还没有 Neovim/Zed 安装包或 macOS/Arm Extension Host 平台验收；
 - 没有跨 Bundle/package 的多文件链接导航。
 
 实现入口：[符号索引](/source/rust/crates/yanshu-syntax/src/symbol.rs.txt)、[Completion 候选](/source/rust/crates/yanshu-lsp/src/completion/mod.rs.txt)、[Completion 上下文](/source/rust/crates/yanshu-lsp/src/completion/context.rs.txt)、[Hover 解析](/source/rust/crates/yanshu-lsp/src/hover/mod.rs.txt)、[Hover 目录](/source/rust/crates/yanshu-lsp/src/hover/catalog.rs.txt)、[Semantic token 分类](/source/rust/crates/yanshu-lsp/src/semantic_tokens/classify.rs.txt)、[UTF-16 编码](/source/rust/crates/yanshu-lsp/src/semantic_tokens/encode.rs.txt)、[Rename 复核](/source/rust/crates/yanshu-lsp/src/rename.rs.txt)、[协议 framing](/source/rust/crates/yanshu-lsp/src/protocol.rs.txt)、[文档与导航](/source/rust/crates/yanshu-lsp/src/document.rs.txt)、[server 生命周期](/source/rust/crates/yanshu-lsp/src/server.rs.txt)。完整契约见 [v0.12 规格](/source/docs/specs/v0.12.md.txt)。

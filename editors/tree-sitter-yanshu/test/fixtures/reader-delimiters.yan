@@ -1,0 +1,14 @@
+[program
+  {name reader-delimiters}
+  [version +1]
+  (capabilities)
+
+  {def echo
+    [fn {value}
+      value]}
+
+  [def constants
+    {fn ()
+      [list #true #false "line\nquote: \"" 'symbol '(a [b] {c})]}]
+
+  {export echo constants}]

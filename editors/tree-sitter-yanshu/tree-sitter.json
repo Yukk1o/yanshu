@@ -1,0 +1,32 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/config.schema.json",
+  "grammars": [
+    {
+      "name": "yanshu",
+      "camelcase": "Yanshu",
+      "title": "Yanshu",
+      "scope": "source.yanshu",
+      "file-types": [
+        "yan"
+      ],
+      "injection-regex": "^yanshu$",
+      "class-name": "TreeSitterYanshu",
+      "highlights": "queries/highlights.scm",
+      "locals": "queries/locals.scm",
+      "tags": "queries/tags.scm"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT OR Apache-2.0",
+    "description": "Display-only incremental syntax trees for Yanshu source",
+    "authors": [
+      {
+        "name": "Yanshu contributors"
+      }
+    ],
+    "links": {
+      "repository": "https://github.com/Yukk1o/yanshu"
+    }
+  }
+}

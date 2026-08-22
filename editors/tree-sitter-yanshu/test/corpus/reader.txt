@@ -1,0 +1,49 @@
+==================
+Reader delimiters, literals, and quote
+==================
+
+[program
+  {name reader}
+  [version +1]
+  (capabilities)
+  {def values
+    [fn ()
+      {list -3 #true #false "escaped\ntext" 'name '(a [b] {c})}]}
+  [export values]]
+
+---
+
+(source_file
+  (program
+    (name_form
+      (symbol))
+    (version_form
+      (integer))
+    (capabilities_form)
+    (definition_form
+      (symbol)
+      (function_expression
+        (parameter_list)
+        (call_expression
+          (variable
+            (symbol))
+          (literal
+            (integer))
+          (literal
+            (boolean))
+          (literal
+            (boolean))
+          (literal
+            (string
+              (escape_sequence)))
+          (quote_expression
+            (symbol))
+          (quote_expression
+            (datum_list
+              (symbol)
+              (datum_list
+                (symbol))
+              (datum_list
+                (symbol)))))))
+    (export_form
+      (symbol))))

@@ -1,0 +1,120 @@
+==================
+Typed declarations
+==================
+
+(program
+  (name typed)
+  (version 4)
+  (capabilities log)
+  (libraries (text 1))
+  (imports policy)
+  (schema request
+    (object
+      (required "id" (string 1 64))
+      (optional "count" (integer 0 10) 0)))
+  (data decision
+    (approved (amount integer))
+    (rejected (reason string)))
+  (export-types decision)
+  (signature decide (fn ((list integer) (result integer string)) decision))
+  (def decide
+    (fn (values checked)
+      (if (ok? checked)
+          (approved (sum values))
+          (rejected "invalid"))))
+  (export decide approved rejected))
+
+---
+
+(source_file
+  (program
+    (name_form
+      (symbol))
+    (version_form
+      (integer))
+    (capabilities_form
+      (symbol))
+    (libraries_form
+      (library_requirement
+        (symbol)
+        (integer)))
+    (imports_form
+      (symbol))
+    (schema_form
+      (symbol)
+      (object_schema
+        (schema_field
+          (required_schema_field
+            (string)
+            (string_schema
+              (schema_string_keyword)
+              (integer)
+              (integer))))
+        (schema_field
+          (optional_schema_field
+            (string)
+            (integer_schema
+              (schema_integer_keyword)
+              (integer)
+              (integer))
+            (literal
+              (integer))))))
+    (data_form
+      (symbol)
+      (data_variant
+        (symbol)
+        (typed_data_field
+          (symbol)
+          (type_name
+            (symbol))))
+      (data_variant
+        (symbol)
+        (typed_data_field
+          (symbol)
+          (type_name
+            (symbol)))))
+    (export_types_form
+      (symbol))
+    (signature_form
+      (symbol)
+      (function_type
+        (type_parameter_list
+          (list_type
+            (type_name
+              (symbol)))
+          (result_type
+            (type_name
+              (symbol))
+            (type_name
+              (symbol))))
+        (type_name
+          (symbol))))
+    (definition_form
+      (symbol)
+      (function_expression
+        (parameter_list
+          (symbol)
+          (symbol))
+        (if_expression
+          (call_expression
+            (variable
+              (symbol))
+            (variable
+              (symbol)))
+          (call_expression
+            (variable
+              (symbol))
+            (call_expression
+              (variable
+                (symbol))
+              (variable
+                (symbol))))
+          (call_expression
+            (variable
+              (symbol))
+            (literal
+              (string))))))
+    (export_form
+      (symbol)
+      (symbol)
+      (symbol))))

@@ -53,6 +53,7 @@ Yanshu 是“程序即数据”的受限通用语言内核。AI 可以生成候�
 - `rust/crates/yanshu-format`：保留注释、验证语义不变且幂等的 formatter。
 - `rust/crates/yanshu-lsp`：有界 stdio LSP、文档快照、精确 token hover、作用域感知补全、全文 semantic tokens、导航、防捕获 rename、格式化 edit 与版本化只读审查请求。
 - `editors/vscode`：`.yan` 语言贡献、无脚本只读审查面板、受信 server 选择、环境脱敏和平台专用 VSIX 打包。
+- `editors/tree-sitter-yanshu`：只读、容错的增量 CST、标准查询、corpus 与正式 Reader/Parser 差分语料；不得作为语言验证器或 Rust 侧执行依赖。
 - `rust/crates/yanshu-runtime`：解释器、portable value、Schema、pattern 和字节码 VM。
 - `rust/crates/yanshu-analysis`：静态类型、效果、capability 闭包与只读审查投影。
 - `rust/crates/yanshu-compiler`：规范字节码、verifier、artifact 和 WASM handle ABI。
@@ -164,10 +165,12 @@ npm run build
 
 若改动 `editors/vscode`，还必须在该目录运行 `npm ci`、`npm run check` 和官方 registry 的 `npm audit`。生成本机 VSIX 前先在仓库根目录运行 `cargo build --locked --release -p yanshu-lsp`，再运行 `npm run package`；产物必须只包含当前平台 server、bundle 后 client、语言贡献、主/第三方许可证和对应 manifest。
 
+若改动 `editors/tree-sitter-yanshu`、Reader 词法、Parser form、Schema、类型或 pattern 语法，还必须在 Tree-sitter 包目录运行 `npm ci`、官方 registry 的 `npm audit --audit-level=high` 与 `npm run check`。生成的 `parser.c`、`grammar.json`、`node-types.json` 和 vendored headers 必须与锁定 CLI 一致；禁止加入需要 `unsafe` 的第一方 Rust binding，也不能把容错 CST 用于执行、内容哈希、capability 分析或源码回写。
+
 若变更影响解释执行、编译执行、类型/效果或版本语义，还必须运行相应 conformance，并证明解释器与 VM 对结果、错误和 fuel 边界一致。测试通过不代表可以降低规格中的安全红线。
 
 ## 7. 当前支持边界
 
 现在同时支持两条路径：代理进入真实仓库参与语言实现；以及 `evolve-service` 在一次性候选目录中调用 Codex/Claude Code/OpenCode 编写一个 `.yan` 候选。后者默认只登记，不晋升，且不会把 agent 的退出状态或 notes 当成通过证据。
 
-当前 formatter v1 已提供只读候选输出、CI check 和不依赖 source offset 的表达式节点路径；`yanshu-syntax` 已提供全局 `def`、参数、顺序 `let`、pattern binding 和嵌套遮蔽的有界符号索引；最小 `yanshu-lsp` 已提供 full sync、诊断、关键字/原语/Library/用户绑定的精确 plaintext hover、作用域/版本/capability 感知 completion、同文件全局/局部 definition、references、防捕获 rename、全文 semantic tokens、只读 formatting edit 和版本化 `yanshu/reviewDocument`；VS Code 扩展已提供 `.yan` 注册、TextMate + 语义高亮、无脚本只读审查面板、平台专用 VSIX，以及隔离的 Windows/Linux Extension Host 验收。尚未提供 Tree-sitter grammar、其它编辑器安装包、MCP server、LSP 局部增量或审查视图的结构化回写；这些不能用不可靠的文本反向转换冒充。
+当前 formatter v1 已提供只读候选输出、CI check 和不依赖 source offset 的表达式节点路径；`yanshu-syntax` 已提供全局 `def`、参数、顺序 `let`、pattern binding 和嵌套遮蔽的有界符号索引；最小 `yanshu-lsp` 已提供 full sync、诊断、关键字/原语/Library/用户绑定的精确 plaintext hover、作用域/版本/capability 感知 completion、同文件全局/局部 definition、references、防捕获 rename、全文 semantic tokens、只读 formatting edit 和版本化 `yanshu/reviewDocument`；VS Code 扩展已提供 `.yan` 注册、TextMate + 语义高亮、无脚本只读审查面板、平台专用 VSIX，以及隔离的 Windows/Linux Extension Host 验收；Tree-sitter 包已提供容错增量 CST、标准查询和与正式 Reader/Parser 共用有效源码集的门禁。尚未提供其它编辑器安装包、MCP server、LSP 局部增量或审查视图的结构化回写；这些不能用容错 CST 或不可靠的文本反向转换冒充。
