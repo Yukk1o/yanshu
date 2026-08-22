@@ -77,6 +77,7 @@ const publishedFiles = [
   'scripts/wasm-smoke.mjs',
   'scripts/assemble-release.mjs',
   'scripts/build-release.mjs',
+  'scripts/normalize-extension-sbom.mjs',
   'scripts/normalize-sbom.mjs',
   'scripts/release-lib.mjs',
   'scripts/release-metadata.mjs',

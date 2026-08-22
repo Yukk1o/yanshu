@@ -28,6 +28,20 @@
 
 该设置是 machine scope，工作区不能用仓库内配置替换 server。扩展不运行 `cargo`，不执行工作区脚本，也不会把相对路径解析到当前项目。
 
+## 从 GitHub Release 安装
+
+包含 release schema v3 的新稳定标签会发布 `yanshu-vscode-VERSION-win32-x64.vsix` 与 `yanshu-vscode-VERSION-linux-x64.vsix`。历史 Release 不会被补写，本项目当前也未发布到 VS Code Marketplace。
+
+先下载同一 Release 的完整资产集，在仓库 checkout 中验证内容闭包和 GitHub provenance，再安装与你平台相符的文件：
+
+```powershell
+node scripts/verify-release.mjs <下载目录>
+gh attestation verify <下载目录>\yanshu-vscode-VERSION-win32-x64.vsix --repo Yukk1o/yanshu
+code --install-extension <下载目录>\yanshu-vscode-VERSION-win32-x64.vsix
+```
+
+只核对 VSIX 自身的 SHA-256 不足以证明发布者身份；`verify-release.mjs` 需要完整资产集，并拒绝少包、多包或 manifest/SBOM 关系不闭合的目录。
+
 ## 从源码生成本机 VSIX
 
 在仓库根目录构建 release server：
@@ -72,6 +86,6 @@ CI 在 Windows x64 和 Linux x64（Xvfb）上运行同一套测试并生成对�
 - formatting 只返回 `TextEdit[]`；是否应用由 VS Code 和用户决定。
 - rename 只返回绑定当前文档版本的同文件 `WorkspaceEdit`；捕获、解析变化或符号图变化会被 server 拒绝，是否应用仍由 VS Code 和用户决定。
 - review panel 只消费打开快照；不读取 URI 文件、不创建 `.rs`、不暴露编辑模型或执行入口。
-- 当前没有 Tree-sitter 或 semantic token range/delta；completion、references 与 rename 仅限当前打开文档。
+- 本扩展当前不嵌入 Tree-sitter，也没有 semantic token range/delta；completion、references 与 rename 仅限当前打开文档。仓库中的独立 Tree-sitter grammar 只是其它编辑器可消费的容错显示层。
 
 项目主页：[Yanshu Wiki](https://yukk1o.github.io/yanshu/) · [GitHub](https://github.com/Yukk1o/yanshu)

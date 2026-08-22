@@ -2,10 +2,15 @@ import { lstat, readFile, readdir } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
 import {
+  RELEASE_EXTENSION,
   RELEASE_PROGRAMS,
   RELEASE_SCHEMA_VERSION,
+  RELEASE_SBOM_COMPONENTS,
+  RELEASE_TARGETS,
   parseChecksums,
   requireGitCommit,
+  releaseSbomRootReference,
+  releaseVsixName,
   requireSha256,
   requireSourceEpoch,
   requireStableVersion,
@@ -61,7 +66,7 @@ if (
 const sourceCommit = requireGitCommit(manifest.source?.commit)
 requireSourceEpoch(manifest.source?.sourceDateEpoch)
 const expectedSboms = new Map(
-  RELEASE_PROGRAMS.map((program) => [
+  RELEASE_SBOM_COMPONENTS.map((program) => [
     program.key,
     {
       file: `yanshu-v${version}-${program.key}.cdx.json`,
@@ -97,8 +102,13 @@ for (const sbomRecord of manifest.sboms) {
   const releaseProgramProperties = properties.filter(
     (property) => property.name === 'yanshu:release-program'
   )
-  const expectedRootReference =
-    `urn:yanshu:crate:${sbomRecord.package}:${version}:${sourceCommit}`
+  const bundledProgramProperties = properties.filter(
+    (property) => property.name === 'yanshu:bundled-program'
+  )
+  const component = RELEASE_SBOM_COMPONENTS.find(
+    (candidate) => candidate.key === sbomRecord.program
+  )
+  const expectedRootReference = releaseSbomRootReference(component, version, sourceCommit)
   if (
     sbom.bomFormat !== 'CycloneDX' ||
     sbom.specVersion !== '1.5' ||
@@ -107,12 +117,34 @@ for (const sbomRecord of manifest.sboms) {
     sourceCommitProperties.length !== 1 ||
     sourceCommitProperties[0].value !== sourceCommit ||
     releaseProgramProperties.length !== 1 ||
-    releaseProgramProperties[0].value !== sbomRecord.program
+    releaseProgramProperties[0].value !== sbomRecord.program ||
+    (component === RELEASE_EXTENSION &&
+      (bundledProgramProperties.length !== 1 || bundledProgramProperties[0].value !== 'lsp')) ||
+    (component !== RELEASE_EXTENSION && bundledProgramProperties.length !== 0)
   ) {
     throw new Error(`release SBOM does not describe ${sbomRecord.program}`)
   }
 }
 const manifestAssets = new Map(manifest.assets?.map((asset) => [asset.name, asset]) ?? [])
+const expectedAssets = new Map()
+for (const [target, configuration] of Object.entries(RELEASE_TARGETS)) {
+  const stem = `yanshu-v${version}-${target}`
+  expectedAssets.set(`${stem}.zip`, { kind: 'archive', target })
+  expectedAssets.set(`${stem}.build.json`, { kind: 'build-record', target })
+  expectedAssets.set(releaseVsixName(version, configuration), { kind: 'extension', target })
+}
+for (const sbom of expectedSboms.values()) {
+  expectedAssets.set(sbom.file, { kind: 'sbom', target: null })
+}
+if (
+  manifestAssets.size !== expectedAssets.size ||
+  [...expectedAssets].some(([name, expected]) => {
+    const actual = manifestAssets.get(name)
+    return actual?.kind !== expected.kind || actual.target !== expected.target
+  })
+) {
+  throw new Error('release manifest asset set is invalid')
+}
 for (const asset of manifestAssets.values()) {
   requireSha256(asset.sha256, `${asset.name} manifest digest`)
   if (checksums.get(asset.name) !== asset.sha256) {

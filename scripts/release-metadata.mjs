@@ -50,8 +50,10 @@ const metadata = {
   tag: tag ?? null,
   sourceCommit,
   sourceDateEpoch,
+  extensionPackage: workspace.extensionPackage,
   rustVersion: workspace.rustVersion,
   rustToolchain: releaseRustToolchain(workspace.rustVersion),
+  vsceVersion: workspace.vsceVersion,
   firstPartyCrates: workspace.crateCount
 }
 const document = canonicalJson(metadata)

@@ -125,6 +125,8 @@ npm ci
 npm run package
 ```
 
+包含 v0.12 发布闭环的新稳定标签还会在 GitHub Release 提供 `win32-x64` 与 `linux-x64` VSIX；历史 Release 不会被补写。下载完整资产集并验证 manifest、checksum 与 GitHub provenance 后再安装，具体见[扩展说明](editors/vscode/README.md)。
+
 `editors/tree-sitter-yanshu` 还提供面向 Neovim、Zed 等生态的增量语法树和标准 highlight/locals/folds/tags 查询。它是容错的只读显示层，不验证语言版本、类型、效果或 capability，也不参与执行和内容哈希：
 
 ```ps1
@@ -242,7 +244,7 @@ formatter v1、稳定表达式节点路径、有界全局/局部符号索引、�
 
 ## 可验证发布
 
-v0.11 发布链为 Windows x86-64 与 Linux x86-64 的 `yanshu` CLI 和只读 `yanshu-mcp` 分别执行两次独立 target-dir 构建、真实 smoke 和逐字节比对，再把两个可执行文件放入同一确定性 ZIP，并生成每平台构建记录、两份 CycloneDX 1.5 SBOM、release manifest 与 `SHA256SUMS`。标签还必须是位于 `main`、与 workspace 版本完全一致的注解式标签。
+v0.11 建立了 CLI/MCP 证据链；当前 v0.12 发布链又纳入 `yanshu-lsp` 和平台 VSIX。Windows x86-64 与 Linux x86-64 job 会在两个独立 target-dir 构建三个 Rust 程序、执行各自真实 smoke 并逐字节比对，再用两份独立 LSP 逐次打包并比较 VSIX。确定性 ZIP、每平台构建记录、CLI/MCP/LSP/扩展四份 CycloneDX 1.5 SBOM、release manifest 与 `SHA256SUMS` 共同形成 schema v3 内容闭包。标签还必须是位于 `main`、与 workspace 版本完全一致的注解式标签。
 
 发布资产由 GitHub OIDC 生成 keyless provenance，不在仓库保存签名私钥。下载后应同时检查内容闭包与来源证明：
 

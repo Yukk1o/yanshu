@@ -66,7 +66,7 @@ Yanshu 是“程序即数据”的受限通用语言内核。AI 可以生成候�
 - `conformance/v1` 至 `conformance/v4`：跨版本可执行语言契约。
 - `examples/`：任务、费用审批、typed Bundle 与 package 场景。
 - `docs/specs/v0.6.md` 至 `docs/specs/v0.12.md`：各里程碑的当前规范。
-- `.github/workflows/release.yml` 与 `scripts/*release*.mjs`：CLI/MCP 版本绑定、双构建、确定性归档、双 SBOM、校验和与来源证明。
+- `.github/workflows/release.yml` 与 `scripts/*release*.mjs`：CLI/MCP/LSP 与平台 VSIX 的版本绑定、双构建、确定性归档、四份 SBOM、校验和与来源证明。
 - `wiki/`：面向使用者的语言 Wiki；`wiki/public/source/` 由同步脚本生成，禁止手改。
 
 ## 3. 阅读和编写 `.yan`
