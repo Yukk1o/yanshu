@@ -125,6 +125,14 @@ npm ci
 npm run package
 ```
 
+`editors/tree-sitter-yanshu` 还提供面向 Neovim、Zed 等生态的增量语法树和标准 highlight/locals/folds/tags 查询。它是容错的只读显示层，不验证语言版本、类型、效果或 capability，也不参与执行和内容哈希：
+
+```ps1
+Set-Location editors\tree-sitter-yanshu
+npm ci
+npm run check
+```
+
 运行真实任务服务及 11 个有状态场景：
 
 ```ps1
@@ -149,6 +157,7 @@ cargo run --locked -p yanshu-cli -- `
 |编译路径 |规范字节码、verifier、解释器/VM 差分与 WASM handle ABI |
 |宿主生态 |安全 Rust Library Backend；guest 不能直接调用 crates.io 或 FFI |
 |AI 开发 |DeepSeek/OpenAI-compatible HTTP，以及 Codex、Claude Code、OpenCode CLI 后端 |
+|编辑器工具 |有界 LSP、VS Code 平台包、Tree-sitter grammar 与标准查询 |
 |生命周期 |候选注册、测试门禁、显式晋升、影子执行、审计事件与哈希回滚 |
 
 编译一个锁定的费用审批 package：
@@ -207,6 +216,7 @@ rust/crates/
 
 conformance/v1..v4    跨版本可执行语言契约
 editors/vscode/       .yan 语言贡献、LSP client 与平台 VSIX 打包
+editors/tree-sitter-yanshu/  容错增量 CST、标准查询与差分语料门禁
 examples/             费用审批、任务服务、Bundle 与 package
 docs/                 规范、安全和运维设计
 wiki/                 面向使用者的中文语言 Wiki
@@ -216,7 +226,7 @@ wiki/                 面向使用者的中文语言 Wiki
 
 当前发布里程碑是 **v0.10**，语言版本是 **v4**；**v0.11 持续验证与安全加固正在开发中**。它已经是一个可执行、可分析、可编译的语言内核，但还不是 Rust/C++ 式系统语言，也不是可承诺生产稳定性的通用平台。
 
-formatter v1、稳定表达式节点路径、有界全局/局部符号索引、作用域感知 completion、全文 semantic tokens、同文档 definition/references、防捕获 rename、Rust 风格只读审查预览、平台专用 VS Code VSIX 与 Windows/Linux Extension Host 验收已进入 v0.12 开发分支；接下来的工具优先级是 Tree-sitter、semantic token range/delta、更广编辑器集成和只读 MCP。更广的标准库与有界结构化并发只会在 capability、fuel、取消和确定性语义明确后加入。路线图是方向，不是兼容性承诺。
+formatter v1、稳定表达式节点路径、有界全局/局部符号索引、作用域感知 completion、全文 semantic tokens、同文档 definition/references、防捕获 rename、Rust 风格只读审查预览、平台专用 VS Code VSIX、Windows/Linux Extension Host 验收，以及带 corpus/查询/权威 Parser 差分门禁的 Tree-sitter grammar 已进入 v0.12 开发分支；接下来的工具优先级是更多编辑器安装包、semantic token range/delta 和只读 MCP。更广的标准库与有界结构化并发只会在 capability、fuel、取消和确定性语义明确后加入。路线图是方向，不是兼容性承诺。
 
 ## 可验证发布
 
@@ -247,6 +257,12 @@ cargo check --locked --manifest-path fuzz/Cargo.toml --bins
 node --test scripts/release.test.mjs
 node scripts/release-metadata.mjs
 node scripts/check-doc-links.mjs
+
+Push-Location editors\tree-sitter-yanshu
+npm ci
+npm audit --registry=https://registry.npmjs.org --audit-level=high
+npm run check
+Pop-Location
 
 Push-Location wiki
 npm run build

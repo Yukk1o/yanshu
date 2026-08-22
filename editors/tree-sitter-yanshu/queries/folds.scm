@@ -1,0 +1,10 @@
+(program) @fold
+(data_form) @fold
+(schema_form) @fold
+(definition_form) @fold
+(function_expression) @fold
+(let_expression) @fold
+(cond_expression) @fold
+(match_expression) @fold
+(do_expression) @fold
+(datum_list) @fold

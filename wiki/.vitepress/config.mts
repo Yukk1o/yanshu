@@ -64,6 +64,7 @@ export default defineConfig({
           { text: 'CLI 参考', link: '/reference/cli' },
           { text: 'Formatter 与稳定节点 ID', link: '/development/formatter' },
           { text: '最小 LSP Server', link: '/development/lsp' },
+          { text: 'Tree-sitter 展示语法', link: '/development/tree-sitter' },
           { text: 'VS Code 扩展', link: '/development/vscode' },
           { text: '源码地图', link: '/reference/source-map' },
           { text: 'AI Agent Backend', link: '/development/ai-agents' },

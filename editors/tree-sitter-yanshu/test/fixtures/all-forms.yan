@@ -1,0 +1,53 @@
+(program
+  (name tree-sitter-all)
+  (version 4)
+  (capabilities log kv clock)
+  (libraries (text 1))
+  (imports external)
+
+  (schema action
+    (enum "approve" "reject" 1 #t))
+  (schema identity
+    (union integer string boolean))
+  (schema request
+    (object
+      (required "id" (string 1 64))
+      (optional "count" (integer 0 100) 0)
+      (optional "tags" (list string 0 10) ())))
+
+  (data decision
+    (approved (amount integer))
+    (review (amount integer) (reason string))
+    (rejected (reason string)))
+  (export-types decision)
+
+  (signature decide (fn (integer) decision))
+  (def decide
+    (fn (amount)
+      (cond
+        ((and (>= amount 0) (< amount 1000))
+          (approved amount))
+        ((or (= amount 1000) (> amount 1000))
+          (do
+            (log amount)
+            (review amount (number->string amount))))
+        (else
+          (rejected "negative")))))
+
+  (signature handle (fn (map) map))
+  (def handle
+    (fn (request)
+      (let ((candidate (get request "amount"))
+            (decision (decide candidate)))
+        (match decision
+          ((approved value)
+            (map "status" "approved" "amount" value))
+          ((review value reason)
+            (map "status" "review" "amount" value "reason" reason))
+          ((rejected reason)
+            (map "status" "rejected" "reason" reason))
+          (_
+            (map "status" "invalid"))))))
+
+  (route PoSt "/expenses/:id" handle)
+  (export decide handle approved review rejected))

@@ -1,0 +1,34 @@
+{
+  "name": "tree-sitter-yanshu",
+  "version": "0.1.0",
+  "description": "Display-only Tree-sitter grammar for the Yanshu language",
+  "license": "MIT OR Apache-2.0",
+  "private": true,
+  "type": "commonjs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Yukk1o/yanshu.git",
+    "directory": "editors/tree-sitter-yanshu"
+  },
+  "files": [
+    "grammar.js",
+    "queries",
+    "src/grammar.json",
+    "src/node-types.json",
+    "src/parser.c",
+    "src/tree_sitter",
+    "tree-sitter.json"
+  ],
+  "scripts": {
+    "generate": "tree-sitter generate",
+    "check:generated": "npm run generate && git diff --exit-code -- src/grammar.json src/node-types.json src/parser.c src/tree_sitter",
+    "test:corpus": "tree-sitter test",
+    "test:queries": "node scripts/check-queries.mjs",
+    "test:sources": "node scripts/check-valid-sources.mjs",
+    "test": "npm run test:corpus && npm run test:queries && npm run test:sources",
+    "check": "npm run check:generated && npm test"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "0.26.12"
+  }
+}

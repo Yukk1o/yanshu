@@ -93,7 +93,7 @@ npm run test:e2e
 
 ## 仍未实现
 
-- Tree-sitter 与 semantic token range/delta；
+- Tree-sitter grammar 的 VS Code 消费适配与 semantic token range/delta；
 - 跨 Bundle/package 的多文件 references；
 - 自动生成 Windows/Linux/macOS 与 x64/Arm 全矩阵 VSIX 的发布工作流；
 - Neovim、Zed、JetBrains 等安装包。

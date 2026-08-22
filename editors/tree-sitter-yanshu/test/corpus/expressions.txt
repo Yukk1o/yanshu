@@ -1,0 +1,134 @@
+==================
+Conditions, bindings, and match
+==================
+
+(program
+  (name expressions)
+  (version 3)
+  (capabilities log)
+  (data outcome
+    (accepted value)
+    (denied reason))
+  (def decide
+    (fn (amount)
+      (let ((positive (and (> amount 0) (< amount 1000)))
+            (decision
+              (cond
+                (positive (accepted amount))
+                ((or (= amount 0) (< amount 0)) (denied "non-positive"))
+                (else (denied "too large")))))
+        (match decision
+          ((accepted value) (do (log value) value))
+          ((denied reason) reason)
+          (_ "invalid")))))
+  (export decide))
+
+---
+
+(source_file
+  (program
+    (name_form
+      (symbol))
+    (version_form
+      (integer))
+    (capabilities_form
+      (symbol))
+    (data_form
+      (symbol)
+      (data_variant
+        (symbol)
+        (symbol))
+      (data_variant
+        (symbol)
+        (symbol)))
+    (definition_form
+      (symbol)
+      (function_expression
+        (parameter_list
+          (symbol))
+        (let_expression
+          (let_binding_list
+            (let_binding
+              (symbol)
+              (and_expression
+                (call_expression
+                  (variable
+                    (symbol))
+                  (variable
+                    (symbol))
+                  (literal
+                    (integer)))
+                (call_expression
+                  (variable
+                    (symbol))
+                  (variable
+                    (symbol))
+                  (literal
+                    (integer)))))
+            (let_binding
+              (symbol)
+              (cond_expression
+                (cond_clause
+                  (variable
+                    (symbol))
+                  (call_expression
+                    (variable
+                      (symbol))
+                    (variable
+                      (symbol))))
+                (cond_clause
+                  (or_expression
+                    (call_expression
+                      (variable
+                        (symbol))
+                      (variable
+                        (symbol))
+                      (literal
+                        (integer)))
+                    (call_expression
+                      (variable
+                        (symbol))
+                      (variable
+                        (symbol))
+                      (literal
+                        (integer))))
+                  (call_expression
+                    (variable
+                      (symbol))
+                    (literal
+                      (string))))
+                (cond_else_clause
+                  (call_expression
+                    (variable
+                      (symbol))
+                    (literal
+                      (string)))))))
+          (match_expression
+            (variable
+              (symbol))
+            (match_arm
+              (variant_pattern
+                (symbol)
+                (binding_pattern
+                  (symbol)))
+              (do_expression
+                (call_expression
+                  (variable
+                    (symbol))
+                  (variable
+                    (symbol)))
+                (variable
+                  (symbol))))
+            (match_arm
+              (variant_pattern
+                (symbol)
+                (binding_pattern
+                  (symbol)))
+              (variable
+                (symbol)))
+            (match_default_arm
+              (wildcard_pattern)
+              (literal
+                (string)))))))
+    (export_form
+      (symbol))))

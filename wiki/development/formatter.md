@@ -64,7 +64,7 @@ ID 使用 definition 名和 AST 角色，不使用行号、列号或 byte offset
 
 - 没有原地覆盖或 `--write`；
 - 没有从 Rust 风格审查视图反向生成 `.yan`；
-- 最小 LSP 与 VS Code 平台包已能返回 formatting edit，但没有 Tree-sitter、MCP 或其它编辑器安装包；
+- 最小 LSP 与 VS Code 平台包已能返回 formatting edit，Tree-sitter 已提供只读增量 CST；仍没有 MCP 或其它编辑器安装包；
 - 没有多文件 Bundle/package 批量格式化。
 
 完整工程契约见 [v0.12 规格](/source/docs/specs/v0.12.md.txt)。公共 API 在 [yanshu-format](/source/rust/crates/yanshu-format/src/lib.rs.txt)，注释树与排版分别在 [cst.rs](/source/rust/crates/yanshu-format/src/cst.rs.txt) 和 [render.rs](/source/rust/crates/yanshu-format/src/render.rs.txt)，节点定位在 [node_id.rs](/source/rust/crates/yanshu-syntax/src/node_id.rs.txt)。
