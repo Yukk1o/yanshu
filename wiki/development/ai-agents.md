@@ -80,4 +80,4 @@ $env:YANSHU_AGENT_TIMEOUT_SECONDS = "900"
 
 根目录另外提供 `AGENTS.md` 与 `CLAUDE.md`，它们共同引用 [`docs/ai-agent-guide.md`](/source/docs/ai-agent-guide.md.txt)。这是让 agent 修改语言实现时读取的项目契约，与上面的“一次性候选编写后端”互补，但不是同一件事。
 
-当前已有 `.yan` LSP、平台专用 VS Code 扩展和只读 Tree-sitter grammar，支持诊断、hover、全文 semantic tokens、同文档 definition/references、防捕获 rename、格式化 edit、无脚本 Rust 风格只读审查面板，以及增量 CST/标准查询；还没有其它编辑器安装包、MCP server、semantic token range/delta 或审查视图结构化回写。Tree-sitter 只是显示层，不能替代正式 Parser 或 Agent 候选门禁。
+当前已有 `.yan` LSP、平台专用 VS Code 扩展、只读 Tree-sitter grammar 和 [`yanshu-mcp`](/development/mcp)，支持诊断、hover、全文 semantic tokens、同文档 definition/references、防捕获 rename、格式化 edit、无脚本 Rust 风格只读审查面板、增量 CST/标准查询，以及给 Codex、Claude Code、OpenCode 调用的 inspect/format/review。还没有其它编辑器安装包、semantic token range/delta 或审查视图结构化回写。Tree-sitter 与 MCP 都不能替代正式 Parser 或 Agent 候选门禁；MCP 也不会替 Agent 写文件。

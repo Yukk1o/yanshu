@@ -12,13 +12,14 @@
 6. [yanshu-syntax Reader](/source/rust/crates/yanshu-syntax/src/reader.rs.txt) 与 [Parser](/source/rust/crates/yanshu-syntax/src/parser.rs.txt)：源码怎样成为 AST；
 7. [yanshu-format](/source/rust/crates/yanshu-format/src/lib.rs.txt)：保留注释、复核语义和幂等性的规范布局；
 8. [yanshu-lsp](/source/rust/crates/yanshu-lsp/src/lib.rs.txt)：编辑器怎样复用诊断、导航和 formatter；
-9. [yanshu-runtime](/source/rust/crates/yanshu-runtime/src/lib.rs.txt)：解释器、primitive 与 Library Backend；
-10. [yanshu-service](/source/rust/crates/yanshu-service/src/lib.rs.txt)：route、capability 和事务；
-11. [yanshu-store](/source/rust/crates/yanshu-store/src/lib.rs.txt)：候选、恢复 journal、active 与事件完整性；
-12. [yanshu-provider](/source/rust/crates/yanshu-provider/src/lib.rs.txt)：LLM 只能怎样提出候选；
-13. [yanshu-http](/source/rust/crates/yanshu-http/src/lib.rs.txt)：请求身份、版本固定与观测；
-14. [yanshu-rollout](/source/rust/crates/yanshu-rollout/src/lib.rs.txt)：隔离影子采样、比较与观测；
-15. [yanshu-ops](/source/rust/crates/yanshu-ops/src/lib.rs.txt)：服务锁、备份校验与恢复。
+9. [yanshu-mcp](/source/rust/crates/yanshu-mcp/src/lib.rs.txt)：Agent 怎样只读调用 inspect、format 与 review；
+10. [yanshu-runtime](/source/rust/crates/yanshu-runtime/src/lib.rs.txt)：解释器、primitive 与 Library Backend；
+11. [yanshu-service](/source/rust/crates/yanshu-service/src/lib.rs.txt)：route、capability 和事务；
+12. [yanshu-store](/source/rust/crates/yanshu-store/src/lib.rs.txt)：候选、恢复 journal、active 与事件完整性；
+13. [yanshu-provider](/source/rust/crates/yanshu-provider/src/lib.rs.txt)：LLM 只能怎样提出候选；
+14. [yanshu-http](/source/rust/crates/yanshu-http/src/lib.rs.txt)：请求身份、版本固定与观测；
+15. [yanshu-rollout](/source/rust/crates/yanshu-rollout/src/lib.rs.txt)：隔离影子采样、比较与观测；
+16. [yanshu-ops](/source/rust/crates/yanshu-ops/src/lib.rs.txt)：服务锁、备份校验与恢复。
 
 ## 语言前端
 
@@ -43,6 +44,9 @@
 | [lsp/semantic_tokens/encode.rs](/source/rust/crates/yanshu-lsp/src/semantic_tokens/encode.rs.txt) | 排序后单次向前扫描的 UTF-16 相对五元组编码 |
 | [lsp/rename.rs](/source/rust/crates/yanshu-lsp/src/rename.rs.txt) | 同文件绑定重命名、候选重解析、完整符号图复核与 edit/字节上限 |
 | [lsp/server.rs](/source/rust/crates/yanshu-lsp/src/server.rs.txt) | initialize/shutdown/exit、full sync、标准与 experimental method dispatch |
+| [mcp/protocol.rs](/source/rust/crates/yanshu-mcp/src/protocol.rs.txt) | newline-delimited JSON-RPC、输入/输出字节上限与 recoverable/fatal framing |
+| [mcp/server.rs](/source/rust/crates/yanshu-mcp/src/server.rs.txt) | 2026 discovery、legacy initialize、工具分派、结构化错误和响应上界 |
+| [mcp/tools.rs](/source/rust/crates/yanshu-mcp/src/tools.rs.txt) | 512 KiB 源码入口、正式 inspect/format/review 与只读 schema |
 | [VS Code extension.ts](/source/editors/vscode/src/extension.ts.txt) | language client、快照 selector 与 LSP 生命周期 |
 | [VS Code server-command.ts](/source/editors/vscode/src/server-command.ts.txt) | machine/bundled/PATH 选择、平台映射与子进程环境脱敏 |
 | [VS Code grammar](/source/editors/vscode/syntaxes/yanshu.tmLanguage.json.txt) | 不参与语义的基础 TextMate token 显示 |

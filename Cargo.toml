@@ -5,6 +5,7 @@ members = [
   "rust/crates/yanshu-syntax",
   "rust/crates/yanshu-format",
   "rust/crates/yanshu-lsp",
+  "rust/crates/yanshu-mcp",
   "rust/crates/yanshu-runtime",
   "rust/crates/yanshu-analysis",
   "rust/crates/yanshu-compiler",
