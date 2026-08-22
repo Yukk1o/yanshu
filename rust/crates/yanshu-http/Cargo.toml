@@ -10,12 +10,12 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-yanshu-diagnostic = { path = "../yanshu-diagnostic", version = "=0.10.0" }
-yanshu-runtime = { path = "../yanshu-runtime", version = "=0.10.0" }
-yanshu-rollout = { path = "../yanshu-rollout", version = "=0.10.0" }
-yanshu-service = { path = "../yanshu-service", version = "=0.10.0" }
-yanshu-store = { path = "../yanshu-store", version = "=0.10.0" }
-yanshu-syntax = { path = "../yanshu-syntax", version = "=0.10.0" }
+yanshu-diagnostic = { path = "../yanshu-diagnostic", version = "=0.12.0" }
+yanshu-runtime = { path = "../yanshu-runtime", version = "=0.12.0" }
+yanshu-rollout = { path = "../yanshu-rollout", version = "=0.12.0" }
+yanshu-service = { path = "../yanshu-service", version = "=0.12.0" }
+yanshu-store = { path = "../yanshu-store", version = "=0.12.0" }
+yanshu-syntax = { path = "../yanshu-syntax", version = "=0.12.0" }
 axum.workspace = true
 getrandom.workspace = true
 hyper.workspace = true

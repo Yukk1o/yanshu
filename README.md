@@ -7,7 +7,7 @@
 *Programs are data. Evolution leaves a trace.*
 
 ![status](https://img.shields.io/badge/status-experimental-f59e0b?style=flat-square)
-![release](https://img.shields.io/badge/release-v0.10-6d5dfc?style=flat-square)
+![release](https://img.shields.io/badge/release-v0.12-6d5dfc?style=flat-square)
 ![language](https://img.shields.io/badge/language-v4-22c55e?style=flat-square)
 ![implementation](https://img.shields.io/badge/implementation-safe_Rust-b7410e?style=flat-square&logo=rust)
 ![license](https://img.shields.io/badge/license-MIT_OR_Apache--2.0-2563eb?style=flat-square)
@@ -238,9 +238,9 @@ wiki/                 面向使用者的中文语言 Wiki
 
 ## 项目状态
 
-当前发布里程碑是 **v0.10**，语言版本是 **v4**；**v0.11 持续验证与安全加固正在开发中**。它已经是一个可执行、可分析、可编译的语言内核，但还不是 Rust/C++ 式系统语言，也不是可承诺生产稳定性的通用平台。
+当前发布里程碑是 **v0.12**，语言版本是 **v4**。它已经是一个可执行、可分析、可编译，并带持续验证、Agent/LSP/MCP 与可验证安装包的语言内核，但还不是 Rust/C++ 式系统语言，也不是可承诺生产稳定性的通用平台。
 
-formatter v1、稳定表达式节点路径、有界全局/局部符号索引、作用域感知 completion、全文 semantic tokens、同文档 definition/references、防捕获 rename、Rust 风格只读审查预览、平台专用 VS Code VSIX、Windows/Linux Extension Host 验收、带 corpus/查询/权威 Parser 差分门禁的 Tree-sitter grammar，以及兼容新旧协议的只读 MCP 已进入 v0.12 开发分支；接下来的工具优先级是更多编辑器安装包、semantic token range/delta 和结构化 AST diff。更广的标准库与有界结构化并发只会在 capability、fuel、取消和确定性语义明确后加入。路线图是方向，不是兼容性承诺。
+v0.12 包含 formatter v1、稳定表达式节点路径、有界全局/局部符号索引、作用域感知 completion、全文 semantic tokens、同文档 definition/references、防捕获 rename、Rust 风格只读审查预览、平台专用 VS Code VSIX、Windows/Linux Extension Host 验收、带 corpus/查询/权威 Parser 差分门禁的 Tree-sitter grammar，以及兼容新旧协议的只读 MCP。接下来的工具优先级是更多编辑器安装包、semantic token range/delta 和结构化 AST diff；更广的标准库与有界结构化并发属于 v0.13+，并且只会在 capability、fuel、取消和确定性语义明确后加入。路线图是方向，不是兼容性承诺。
 
 ## 可验证发布
 
