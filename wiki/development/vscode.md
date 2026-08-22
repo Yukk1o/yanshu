@@ -1,6 +1,6 @@
 # VS Code 扩展
 
-`editors/vscode` 是 `.yan` 的首个编辑器安装包。它按 VS Code 官方 language client 架构启动独立 `yanshu-lsp`，提供文件识别、基础 TextMate 高亮、诊断、关键字/函数/绑定的精确 hover、作用域感知补全、同文件全局/局部跳转与引用、全文格式化，以及旁侧 Rust 风格只读审查面板。
+`editors/vscode` 是 `.yan` 的首个编辑器安装包。它按 VS Code 官方 language client 架构启动独立 `yanshu-lsp`，提供文件识别、基础 TextMate 高亮、诊断、关键字/函数/绑定的精确 hover、作用域感知补全、同文件全局/局部跳转、引用与防捕获重命名、全文格式化，以及旁侧 Rust 风格只读审查面板。
 
 最低支持 VS Code 1.101；官方从该版本把 Node extension host 升级到 Node 22，与当前 client 和 bundle target 一致。
 
@@ -52,7 +52,8 @@ npm run test:e2e
 - 全局函数与局部参数 completion 的类型、作用域及精确 token 替换范围；
 - 同文档全局与局部 parameter definition；
 - 同文档全局与局部 parameter references；
-- formatter 只返回 edit、不直接修改文档。
+- 同文档局部 parameter rename 只返回正确 `WorkspaceEdit`，不直接修改文档；
+- formatter 只返回 edit、不直接修改文档；
 - 审查命令打开独立 Webview，且没有 `yanshu-review` 可编辑文档。
 
 下载测试编辑器时可以沿用宿主代理；Extension Host 启动前会移除代理、过滤凭据形状的环境变量，并关闭更新与遥测。测试编辑器下载缓存位于忽略的 `.vscode-test/`；测试 bundle 明确排除在 VSIX 之外。CI 在 Windows 与 Linux/Xvfb 上执行同一验收。
@@ -83,6 +84,7 @@ npm run test:e2e
 - extension client bundle 为单个 CommonJS 入口，VSIX 不携带开发依赖或散落的 `node_modules`；
 - 打包器从生产依赖闭包生成排序、有界的第三方许可证正文，缺失或超限时拒绝；
 - formatting 仅返回 `TextEdit[]`，由 VS Code 和用户决定是否应用；
+- rename 仅返回绑定当前快照版本的同文件 `WorkspaceEdit`；捕获或符号解析变化由 server 拒绝；
 - review 只消费打开快照并生成无脚本展示面板，不创建 `.rs` 或可编辑虚拟文档；
 - 平台包只接受不超过 128 MiB 的非 symlink release binary，并记录 SHA-256 和字节数；
 - npm 依赖精确固定，官方 registry 审计当前为 0 known vulnerabilities。
@@ -91,7 +93,6 @@ npm run test:e2e
 ## 仍未实现
 
 - Tree-sitter 与 semantic tokens；
-- 防捕获 rename；
 - 跨 Bundle/package 的多文件 references；
 - 自动生成 Windows/Linux/macOS 与 x64/Arm 全矩阵 VSIX 的发布工作流；
 - Neovim、Zed、JetBrains 等安装包。

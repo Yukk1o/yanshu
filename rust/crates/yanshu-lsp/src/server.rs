@@ -108,6 +108,8 @@ impl LanguageServer {
             ("textDocument/completion", Some(id)) => self.completion(id, params),
             ("textDocument/definition", Some(id)) => self.definition(id, params),
             ("textDocument/references", Some(id)) => self.references(id, params),
+            ("textDocument/prepareRename", Some(id)) => self.prepare_rename(id, params),
+            ("textDocument/rename", Some(id)) => self.rename(id, params),
             ("textDocument/formatting", Some(id)) => self.formatting(id, params),
             ("yanshu/reviewDocument", Some(id)) => self.review(id, params),
             (_, Some(id)) => vec![error_response(
@@ -143,6 +145,7 @@ impl LanguageServer {
                     "completionProvider": { "resolveProvider": false },
                     "definitionProvider": true,
                     "referencesProvider": true,
+                    "renameProvider": { "prepareProvider": true },
                     "documentFormattingProvider": true,
                     "experimental": {
                         "yanshuReviewDocument": {
@@ -301,6 +304,34 @@ impl LanguageServer {
         })();
         match result {
             Ok(references) => vec![success_response(id, references)],
+            Err(diagnostic) => vec![invalid_params_response(id, &diagnostic)],
+        }
+    }
+
+    fn prepare_rename(&self, id: Value, params: &Value) -> Vec<Value> {
+        match text_position(params) {
+            Ok((uri, line, character)) => vec![success_response(
+                id,
+                self.documents
+                    .get(uri)
+                    .and_then(|document| document.prepare_rename(line, character))
+                    .unwrap_or(Value::Null),
+            )],
+            Err(diagnostic) => vec![invalid_params_response(id, &diagnostic)],
+        }
+    }
+
+    fn rename(&self, id: Value, params: &Value) -> Vec<Value> {
+        let result = (|| {
+            let (uri, line, character) = text_position(params)?;
+            let new_name = string_field(params, "newName")?;
+            let document = self.documents.get(uri).ok_or_else(|| {
+                Diagnostic::simple("LSP_DOCUMENT_UNKNOWN", "rename requires an open document")
+            })?;
+            document.rename(line, character, new_name)
+        })();
+        match result {
+            Ok(edit) => vec![success_response(id, edit)],
             Err(diagnostic) => vec![invalid_params_response(id, &diagnostic)],
         }
     }
@@ -473,6 +504,10 @@ mod tests {
             true
         );
         assert_eq!(
+            initialized["result"]["capabilities"]["renameProvider"]["prepareProvider"],
+            true
+        );
+        assert_eq!(
             initialized["result"]["capabilities"]["completionProvider"]["resolveProvider"],
             false
         );
@@ -642,5 +677,68 @@ mod tests {
             }
         }));
         assert_eq!(formatting[0]["result"].as_array().map(Vec::len), Some(1));
+    }
+
+    #[test]
+    fn prepare_rename_and_rename_return_versioned_edits_and_stable_conflicts() {
+        let source = "(program (name rename) (version 1) (def use (fn (outer) (let ((value outer)) (list value outer)))) (export use))";
+        let mut server = LanguageServer::new();
+        initialize(&mut server);
+        let _opened = server.handle_message(&json!({
+            "jsonrpc": "2.0",
+            "method": "textDocument/didOpen",
+            "params": { "textDocument": {
+                "uri": "file:///rename.yan", "languageId": "yanshu", "version": 7, "text": source
+            }}
+        }));
+        let value_reference = source
+            .find("(list value outer)")
+            .unwrap_or_else(|| panic!("value reference missing"))
+            + "(list ".len();
+        let value_character = source[..value_reference].encode_utf16().count();
+        let prepare = server.handle_message(&json!({
+            "jsonrpc": "2.0", "id": 2, "method": "textDocument/prepareRename",
+            "params": {
+                "textDocument": { "uri": "file:///rename.yan" },
+                "position": { "line": 0, "character": value_character }
+            }
+        }));
+        assert_eq!(prepare[0]["result"]["placeholder"], "value");
+
+        let rename = server.handle_message(&json!({
+            "jsonrpc": "2.0", "id": 3, "method": "textDocument/rename",
+            "params": {
+                "textDocument": { "uri": "file:///rename.yan" },
+                "position": { "line": 0, "character": value_character },
+                "newName": "item"
+            }
+        }));
+        assert_eq!(
+            rename[0]["result"]["documentChanges"][0]["textDocument"],
+            json!({ "uri": "file:///rename.yan", "version": 7 })
+        );
+        assert_eq!(
+            rename[0]["result"]["documentChanges"][0]["edits"]
+                .as_array()
+                .map(Vec::len),
+            Some(2)
+        );
+
+        let outer_reference = source
+            .rfind("outer")
+            .unwrap_or_else(|| panic!("outer reference missing"));
+        let outer_character = source[..outer_reference].encode_utf16().count();
+        let conflict = server.handle_message(&json!({
+            "jsonrpc": "2.0", "id": 4, "method": "textDocument/rename",
+            "params": {
+                "textDocument": { "uri": "file:///rename.yan" },
+                "position": { "line": 0, "character": outer_character },
+                "newName": "value"
+            }
+        }));
+        assert_eq!(
+            conflict[0]["error"]["data"]["yanshuCode"],
+            "LSP_RENAME_CONFLICT"
+        );
     }
 }

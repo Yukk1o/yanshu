@@ -8,12 +8,16 @@ use yanshu_syntax::{Program, ReaderLimits, load_program_source, symbol_index};
 
 use crate::completion::completion_at;
 use crate::hover::hover_at;
+use crate::rename::{
+    MAXIMUM_RENAME_EDITS, MAXIMUM_RENAME_TEXT_BYTES, prepare_rename_at, rename_at,
+};
 
 const MAXIMUM_OPEN_DOCUMENTS: usize = 32;
 const MAXIMUM_TOTAL_SOURCE_BYTES: usize = 16 * 1024 * 1024;
-const MAXIMUM_URI_BYTES: usize = 4 * 1024;
+pub(crate) const MAXIMUM_URI_BYTES: usize = 4 * 1024;
 const MAXIMUM_REFERENCE_LOCATIONS: usize = 1024;
 const MAXIMUM_LOCATION_JSON_OVERHEAD_BYTES: usize = 1024;
+const MAXIMUM_RENAME_EDIT_JSON_OVERHEAD_BYTES: usize = 1024;
 pub(crate) const MAXIMUM_REVIEW_SOURCE_BYTES: usize = 512 * 1024;
 pub(crate) const MAXIMUM_REVIEW_TEXT_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const REVIEW_RENDERER: &str = "rust-readonly-v3";
@@ -30,6 +34,15 @@ const _: () = assert!(
 // complete review response below the outbound protocol body limit.
 const _: () = assert!(
     MAXIMUM_REVIEW_TEXT_BYTES * 6 + MAXIMUM_LOCATION_JSON_OVERHEAD_BYTES
+        < crate::protocol::MAXIMUM_LSP_MESSAGE_BYTES
+);
+
+// Rename emits versioned TextDocumentEdit entries. Bound both escaped
+// replacement text and per-edit JSON before any response is allocated.
+const _: () = assert!(
+    MAXIMUM_RENAME_TEXT_BYTES * 6
+        + MAXIMUM_RENAME_EDITS * MAXIMUM_RENAME_EDIT_JSON_OVERHEAD_BYTES
+        + MAXIMUM_URI_BYTES * 6
         < crate::protocol::MAXIMUM_LSP_MESSAGE_BYTES
 );
 
@@ -217,6 +230,49 @@ impl OpenDocument {
             ));
         }
         Ok(locations_for_sorted_spans(&self.uri, &self.source, &spans))
+    }
+
+    pub(crate) fn prepare_rename(&self, line: u64, character: u64) -> Option<Value> {
+        let offset = offset_from_lsp(&self.source, line, character)?;
+        let program = load_program_source(&self.source).ok()?;
+        let prepared = prepare_rename_at(&program, offset)?;
+        Some(json!({
+            "range": span_range(&self.source, prepared.span),
+            "placeholder": prepared.placeholder,
+        }))
+    }
+
+    pub(crate) fn rename(&self, line: u64, character: u64, new_name: &str) -> YanshuResult<Value> {
+        let offset = offset_from_lsp(&self.source, line, character).ok_or_else(|| {
+            Diagnostic::simple(
+                "LSP_RENAME_UNAVAILABLE",
+                "rename position is outside the open document",
+            )
+        })?;
+        let program = load_program_source(&self.source).map_err(|diagnostic| {
+            Diagnostic::new(
+                "LSP_RENAME_UNAVAILABLE",
+                "rename requires a valid open Yanshu program",
+                json!({ "sourceCode": diagnostic.code }),
+            )
+        })?;
+        let result = rename_at(&program, offset, new_name)?;
+        let edits = text_edits_for_sorted_spans(&self.source, &result.spans, &result.new_name)
+            .ok_or_else(|| {
+                Diagnostic::simple(
+                    "LSP_RENAME_UNAVAILABLE",
+                    "rename spans do not match the open document snapshot",
+                )
+            })?;
+        Ok(json!({
+            "documentChanges": [{
+                "textDocument": {
+                    "uri": self.uri,
+                    "version": self.version,
+                },
+                "edits": edits,
+            }],
+        }))
     }
 
     pub(crate) fn review(&self, expected_version: i64) -> YanshuResult<Value> {
@@ -412,6 +468,23 @@ fn locations_for_sorted_spans(uri: &str, source: &str, spans: &[Span]) -> Option
         }));
     }
     Some(locations)
+}
+
+fn text_edits_for_sorted_spans(source: &str, spans: &[Span], new_text: &str) -> Option<Vec<Value>> {
+    let mut cursor = PositionCursor::new(source);
+    let mut edits = Vec::with_capacity(spans.len());
+    for span in spans {
+        let start = cursor.advance_to(span.start.offset)?;
+        let end = cursor.advance_to(span.end.offset)?;
+        edits.push(json!({
+            "range": {
+                "start": { "line": start.0, "character": start.1 },
+                "end": { "line": end.0, "character": end.1 },
+            },
+            "newText": new_text,
+        }));
+    }
+    Some(edits)
 }
 
 struct PositionCursor<'source> {
@@ -786,6 +859,64 @@ mod tests {
                 "actual": super::MAXIMUM_REFERENCE_LOCATIONS + 1,
                 "maximum": super::MAXIMUM_REFERENCE_LOCATIONS,
             })
+        );
+    }
+
+    #[test]
+    fn prepare_rename_and_rename_use_exact_versioned_snapshot_edits() {
+        let source = "(program (name rename) (version 1) (def use (fn (outer) (let ((value outer)) (list value outer)))) (export use))";
+        let document = document(source);
+        let reference = source
+            .find("(list value outer)")
+            .unwrap_or_else(|| panic!("value reference missing"))
+            + "(list ".len();
+        let prepared = document
+            .prepare_rename(0, character_at(source, reference))
+            .unwrap_or_else(|| panic!("prepare rename result missing"));
+        assert_eq!(prepared["placeholder"], "value");
+        assert_eq!(
+            prepared["range"]["start"]["character"],
+            character_at(source, reference)
+        );
+        assert_eq!(
+            prepared["range"]["end"]["character"],
+            character_at(source, reference + "value".len())
+        );
+
+        let edit = document
+            .rename(0, character_at(source, reference), "item")
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(
+            edit["documentChanges"][0]["textDocument"],
+            serde_json::json!({ "uri": "file:///policy.yan", "version": 1 })
+        );
+        let edits = edit["documentChanges"][0]["edits"]
+            .as_array()
+            .unwrap_or_else(|| panic!("rename edits missing"));
+        assert_eq!(edits.len(), 2);
+        assert!(edits.iter().all(|edit| edit["newText"] == "item"));
+        assert_eq!(document.source, source);
+    }
+
+    #[test]
+    fn rename_rejects_capture_and_prepare_ignores_primitives() {
+        let source = "(program (name capture) (version 1) (def use (fn (outer) (let ((value outer)) (list value outer)))) (export use))";
+        let document = document(source);
+        let outer_reference = source
+            .rfind("outer")
+            .unwrap_or_else(|| panic!("outer reference missing"));
+        let diagnostic = document
+            .rename(0, character_at(source, outer_reference), "value")
+            .err()
+            .unwrap_or_else(|| panic!("capturing rename unexpectedly succeeded"));
+        assert_eq!(diagnostic.code, "LSP_RENAME_CONFLICT");
+
+        let primitive = source
+            .find("list")
+            .unwrap_or_else(|| panic!("list primitive missing"));
+        assert_eq!(
+            document.prepare_rename(0, character_at(source, primitive)),
+            None
         );
     }
 

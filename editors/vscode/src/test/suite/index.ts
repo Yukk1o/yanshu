@@ -221,6 +221,36 @@ async function verifyLanguageFeatures(uri: vscode.Uri, expectedFormatUri: vscode
     'local references mixed a shadowed or unrelated symbol',
   );
 
+  const renameEdit = await withTimeout(vscode.commands.executeCommand<vscode.WorkspaceEdit>(
+    'vscode.executeDocumentRenameProvider',
+    uri,
+    localReferencePosition,
+    'renamedValue',
+  ), 'local rename request');
+  assert.ok(renameEdit, 'rename provider returned no workspace edit');
+  const renameEntries = renameEdit.entries();
+  assert.equal(renameEntries.length, 1, 'same-document rename returned extra document edits');
+  const [renameEntry] = renameEntries;
+  assert.ok(renameEntry, 'rename workspace edit is empty');
+  assert.equal(renameEntry[0].toString(), uri.toString(), 'rename escaped the open document');
+  assert.equal(renameEntry[1].length, 2, 'rename omitted a local declaration or reference');
+  assert.ok(
+    renameEntry[1].every((edit) => (
+      document.getText(edit.range) === 'value' && edit.newText === 'renamedValue'
+    )),
+    'rename mixed unrelated symbols or replacement text',
+  );
+  assert.equal(
+    applyTextEdits(document, renameEntry[1]),
+    sourceBeforeFormatting.replace(
+      localDeclarationMarker,
+      '(fn (renamedValue) (target renamedValue))',
+    ),
+    'rename edits did not preserve the selected lexical binding',
+  );
+  assert.equal(document.getText(), sourceBeforeFormatting, 'rename provider changed document text');
+  assert.equal(document.isDirty, false, 'rename provider modified the document instead of returning edits');
+
   const edits = await withTimeout(vscode.commands.executeCommand<vscode.TextEdit[]>(
     'vscode.executeFormatDocumentProvider',
     uri,

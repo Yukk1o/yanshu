@@ -150,6 +150,7 @@ const publishedFiles = [
   'rust/crates/yanshu-lsp/src/lib.rs',
   'rust/crates/yanshu-lsp/src/main.rs',
   'rust/crates/yanshu-lsp/src/protocol.rs',
+  'rust/crates/yanshu-lsp/src/rename.rs',
   'rust/crates/yanshu-lsp/src/server.rs',
   'rust/crates/yanshu-service/src/lib.rs',
   'rust/crates/yanshu-server/src/main.rs',
