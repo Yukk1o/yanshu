@@ -39,6 +39,8 @@
 | [lsp/completion/context.rs](/source/rust/crates/yanshu-lsp/src/completion/context.rs.txt) | Reader 驱动的表达式、顶层、类型与 Schema 光标上下文 |
 | [lsp/hover/mod.rs](/source/rust/crates/yanshu-lsp/src/hover/mod.rs.txt) | 精确 symbol、词法遮蔽、AST/类型/Library 合约解析与 8 KiB 输出边界 |
 | [lsp/hover/catalog.rs](/source/rust/crates/yanshu-lsp/src/hover/catalog.rs.txt) | form 与 core primitive 的版本化 plaintext 提示目录 |
+| [lsp/semantic_tokens/classify.rs](/source/rust/crates/yanshu-lsp/src/semantic_tokens/classify.rs.txt) | AST/Reader/符号索引驱动的关键词、类型、绑定、构造器与内建分类 |
+| [lsp/semantic_tokens/encode.rs](/source/rust/crates/yanshu-lsp/src/semantic_tokens/encode.rs.txt) | 排序后单次向前扫描的 UTF-16 相对五元组编码 |
 | [lsp/rename.rs](/source/rust/crates/yanshu-lsp/src/rename.rs.txt) | 同文件绑定重命名、候选重解析、完整符号图复核与 edit/字节上限 |
 | [lsp/server.rs](/source/rust/crates/yanshu-lsp/src/server.rs.txt) | initialize/shutdown/exit、full sync、标准与 experimental method dispatch |
 | [VS Code extension.ts](/source/editors/vscode/src/extension.ts.txt) | language client、快照 selector 与 LSP 生命周期 |
@@ -47,7 +49,7 @@
 | [VSIX package.cjs](/source/editors/vscode/scripts/package.cjs.txt) | 当前平台 binary、大小/symlink 边界与安装包生成 |
 | [VS Code bundle.cjs](/source/editors/vscode/scripts/bundle.cjs.txt) | 单入口 CommonJS bundle 与可复现输出目录 |
 | [VS Code test-e2e.cjs](/source/editors/vscode/scripts/test-e2e.cjs.txt) | 临时扩展副本、固定编辑器版本、隔离 profile 与凭据环境过滤 |
-| [VS Code Extension Host suite](/source/editors/vscode/src/test/suite/index.ts.txt) | 激活、诊断、补全、导航、rename、formatting 与无文本模型审查面板的端到端断言 |
+| [VS Code Extension Host suite](/source/editors/vscode/src/test/suite/index.ts.txt) | 激活、诊断、补全、semantic tokens、导航、rename、formatting 与无文本模型审查面板的端到端断言 |
 | [VS Code review-preview.ts](/source/editors/vscode/src/review-preview.ts.txt) | 版本绑定、debounce、面板生命周期和自定义 LSP 请求 |
 | [VS Code review-html.ts](/source/editors/vscode/src/review-html.ts.txt) | 无脚本 CSP、HTML 转义和响应式只读审查布局 |
 | [VS Code review-protocol.ts](/source/editors/vscode/src/review-protocol.ts.txt) | renderer/version/read-only marker 与 4 MiB client 复核 |

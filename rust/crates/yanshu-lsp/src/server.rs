@@ -5,6 +5,7 @@ use crate::document::{
     DocumentStore, MAXIMUM_REVIEW_SOURCE_BYTES, MAXIMUM_REVIEW_TEXT_BYTES, REVIEW_LANGUAGE_ID,
     REVIEW_RENDERER,
 };
+use crate::semantic_tokens::{SEMANTIC_TOKEN_MODIFIERS, SEMANTIC_TOKEN_TYPES};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Lifecycle {
@@ -108,6 +109,7 @@ impl LanguageServer {
             ("textDocument/completion", Some(id)) => self.completion(id, params),
             ("textDocument/definition", Some(id)) => self.definition(id, params),
             ("textDocument/references", Some(id)) => self.references(id, params),
+            ("textDocument/semanticTokens/full", Some(id)) => self.semantic_tokens(id, params),
             ("textDocument/prepareRename", Some(id)) => self.prepare_rename(id, params),
             ("textDocument/rename", Some(id)) => self.rename(id, params),
             ("textDocument/formatting", Some(id)) => self.formatting(id, params),
@@ -145,6 +147,14 @@ impl LanguageServer {
                     "completionProvider": { "resolveProvider": false },
                     "definitionProvider": true,
                     "referencesProvider": true,
+                    "semanticTokensProvider": {
+                        "legend": {
+                            "tokenTypes": SEMANTIC_TOKEN_TYPES,
+                            "tokenModifiers": SEMANTIC_TOKEN_MODIFIERS,
+                        },
+                        "range": false,
+                        "full": true,
+                    },
                     "renameProvider": { "prepareProvider": true },
                     "documentFormattingProvider": true,
                     "experimental": {
@@ -317,6 +327,20 @@ impl LanguageServer {
                     .and_then(|document| document.prepare_rename(line, character))
                     .unwrap_or(Value::Null),
             )],
+            Err(diagnostic) => vec![invalid_params_response(id, &diagnostic)],
+        }
+    }
+
+    fn semantic_tokens(&self, id: Value, params: &Value) -> Vec<Value> {
+        let result = (|| {
+            let document = object_field(params, "textDocument")?;
+            let uri = string_field(document, "uri")?;
+            self.documents
+                .get(uri)
+                .map_or(Ok(None), |open| open.semantic_tokens())
+        })();
+        match result {
+            Ok(tokens) => vec![success_response(id, tokens.unwrap_or(Value::Null))],
             Err(diagnostic) => vec![invalid_params_response(id, &diagnostic)],
         }
     }
@@ -504,6 +528,28 @@ mod tests {
             true
         );
         assert_eq!(
+            initialized["result"]["capabilities"]["semanticTokensProvider"]["full"],
+            true
+        );
+        assert_eq!(
+            initialized["result"]["capabilities"]["semanticTokensProvider"]["range"],
+            false
+        );
+        assert_eq!(
+            initialized["result"]["capabilities"]["semanticTokensProvider"]["legend"]["tokenTypes"],
+            json!([
+                "namespace",
+                "type",
+                "parameter",
+                "variable",
+                "property",
+                "enumMember",
+                "function",
+                "keyword",
+                "operator"
+            ])
+        );
+        assert_eq!(
             initialized["result"]["capabilities"]["renameProvider"]["prepareProvider"],
             true
         );
@@ -547,6 +593,14 @@ mod tests {
         }));
         assert_eq!(opened[0]["params"]["version"], 1);
         assert_eq!(opened[0]["params"]["diagnostics"][0]["code"], "READ_SYNTAX");
+
+        let semantic_tokens = server.handle_message(&json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "textDocument/semanticTokens/full",
+            "params": { "textDocument": { "uri": "file:///broken.yan" } }
+        }));
+        assert_eq!(semantic_tokens[0]["result"], Value::Null);
 
         let changed = server.handle_message(&json!({
             "jsonrpc": "2.0",
@@ -606,6 +660,16 @@ mod tests {
                 .iter()
                 .all(|location| location["uri"] == "file:///tools.yan")
         }));
+
+        let semantic_tokens = server.handle_message(&json!({
+            "jsonrpc": "2.0", "id": 9, "method": "textDocument/semanticTokens/full",
+            "params": { "textDocument": { "uri": "file:///tools.yan" } }
+        }));
+        let semantic_data = semantic_tokens[0]["result"]["data"]
+            .as_array()
+            .unwrap_or_else(|| panic!("semantic token data missing"));
+        assert!(!semantic_data.is_empty());
+        assert_eq!(semantic_data.len() % 5, 0);
 
         let hover = server.handle_message(&json!({
             "jsonrpc": "2.0", "id": 3, "method": "textDocument/hover",

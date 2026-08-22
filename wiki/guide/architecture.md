@@ -38,7 +38,7 @@
 | `yanshu-diagnostic` | 稳定 code/message/details 与私有 source span | 公共错误不泄漏内部诊断 |
 | `yanshu-syntax` | 有边界 Reader、Parser、AST、Schema/route 元数据 | 未知语法在执行前拒绝 |
 | `yanshu-format` | 注释保留 concrete tree、规范布局与语义/幂等复核 | 只返回候选源码，不反向解析审查视图 |
-| `yanshu-lsp` | 有界 stdio framing、内存文档快照、诊断、导航、防捕获 rename、格式化 edit | 不读写 workspace 文件，不调用 provider |
+| `yanshu-lsp` | 有界 stdio framing、内存文档快照、诊断、全文 semantic tokens、导航、防捕获 rename、格式化 edit | 不读写 workspace 文件，不调用 provider |
 | `yanshu-runtime` | Value、词法环境、闭包、primitive、Schema、fuel/depth | 只执行自己的 AST |
 | `yanshu-conformance` | 读取 canonical fixture 并生成报告 | 固定 portable value / diagnostic |
 | `yanshu-service` | route dispatch、capability、事务 KV、响应验证 | 合法响应后才提交 |
