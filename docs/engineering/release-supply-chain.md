@@ -23,22 +23,22 @@ Pull requests and manual workflow dispatches run a release rehearsal, but the
 
 ## Artifact set
 
-v0.11 builds the `yanshu` CLI for the two platforms that are continuously
-tested by this repository:
+v0.11 builds the `yanshu` CLI and the read-only `yanshu-mcp` server for the two
+platforms that are continuously tested by this repository:
 
 | Target | Archive |
 | --- | --- |
 | `x86_64-unknown-linux-gnu` | `yanshu-vVERSION-x86_64-unknown-linux-gnu.zip` |
 | `x86_64-pc-windows-msvc` | `yanshu-vVERSION-x86_64-pc-windows-msvc.zip` |
 
-Each archive contains the CLI, README, MIT license, and Apache-2.0 license under
-one versioned directory. macOS, ARM, installers, dynamic libraries, and
-crates.io packages are not implied by this contract.
+Each archive contains both executables, README, MIT license, and Apache-2.0
+license under one versioned directory. macOS, ARM, installers, dynamic
+libraries, and crates.io packages are not implied by this contract.
 
 The final GitHub Release also contains:
 
 - one machine-readable `.build.json` record per target;
-- a normalized CycloneDX 1.5 SBOM for the CLI dependency graph;
+- normalized CycloneDX 1.5 SBOMs for the CLI and MCP dependency graphs;
 - `yanshu-vVERSION.release.json`, which binds version, source commit, targets,
   artifact sizes, and hashes;
 - `SHA256SUMS`, covering every payload and the release manifest.
@@ -48,13 +48,17 @@ not prove who created the file. Authenticity comes from provenance.
 
 ## Reproducibility gate
 
-Every platform job builds from two fresh Cargo target directories. Both builds
+Every platform job builds both executables from two fresh Cargo target
+directories and compares each executable independently. Both builds
 use `--locked`, an exact Rust release toolchain, disabled incremental builds,
 the tag commit timestamp as `SOURCE_DATE_EPOCH`, and a remapped repository path.
-The job rejects the release unless the two executable byte streams are exactly
-equal. MSVC links with `/Brepro` so the PE timestamp and CodeView identifier are
-content-derived instead of wall-clock/random values. The release profile also
-fixes codegen units, thin LTO, incremental mode, and symbol stripping.
+reject the release unless both pairs of executable byte streams are exactly
+equal. The CLI smoke must return its stable `CLI_USAGE` JSON; the MCP smoke must
+complete a real initialize plus `tools/list` exchange and expose exactly the
+three read-only source tools. MSVC links with `/Brepro` so the PE timestamp and
+CodeView identifier are content-derived instead of wall-clock/random values.
+The release profile also fixes codegen units, thin LTO, incremental mode, and
+symbol stripping.
 
 Archives use a repository-owned deterministic ZIP writer: entries are sorted,
 stored without compression, have fixed timestamps and Unix modes, and contain
@@ -98,7 +102,8 @@ node --test scripts/release.test.mjs
 node scripts/release-metadata.mjs
 ```
 
-Build the native Windows archive twice from clean target directories:
+Build both native Windows tools twice from clean target directories and create
+their shared archive:
 
 ```powershell
 $commit = git rev-parse HEAD
@@ -122,9 +127,10 @@ published tags and assets are never silently overwritten.
 
 ## Trust boundary and remaining work
 
-The release workflow packages the trusted Rust host; it never runs an Agent
-Backend, provider request, guest service, production capability, or version
-promotion. Pull-request code cannot reach the tag-only write-token job.
+The release workflow packages the trusted Rust CLI and read-only MCP host; it
+never runs an Agent Backend, provider request, guest service, production
+capability, or version promotion. Pull-request code cannot reach the tag-only
+write-token job.
 Checkout credentials are not persisted, every Action is pinned to a full
 commit SHA, and cargo-cyclonedx is installed at an exact locked version.
 

@@ -123,7 +123,7 @@ jobs:
         with:
           shared-key: release-${{ matrix.target }}
 
-      - name: Build twice and package deterministic archive
+      - name: Build both tools twice and package deterministic archive
         run: >-
           node scripts/build-release.mjs
           --target ${{ matrix.target }}
@@ -168,9 +168,19 @@ jobs:
       - name: Install cargo-cyclonedx 0.5.9
         run: cargo install cargo-cyclonedx --locked --version 0.5.9
 
-      - name: Generate and normalize CycloneDX 1.5 SBOM
+      - name: Generate and normalize CycloneDX 1.5 SBOMs
         shell: pwsh
         run: |
+          $programs = @(
+            @{
+              Key = "cli"
+              Generated = "rust/crates/yanshu-cli/yanshu_bin.cdx.json"
+            },
+            @{
+              Key = "mcp"
+              Generated = "rust/crates/yanshu-mcp/yanshu-mcp_bin.cdx.json"
+            }
+          )
           cargo cyclonedx `
             --manifest-path rust/crates/yanshu-cli/Cargo.toml `
             --format json `
@@ -178,17 +188,19 @@ jobs:
             --target all `
             --spec-version 1.5
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $generated = "rust/crates/yanshu-cli/yanshu_bin.cdx.json"
-          if (-not (Test-Path -LiteralPath $generated -PathType Leaf)) {
-            throw "cargo-cyclonedx did not generate the expected yanshu CLI SBOM"
+          foreach ($program in $programs) {
+            if (-not (Test-Path -LiteralPath $program.Generated -PathType Leaf)) {
+              throw "cargo-cyclonedx did not generate the expected $($program.Key) SBOM"
+            }
+            node scripts/normalize-sbom.mjs `
+              --input $program.Generated `
+              --output ".runtime/release/yanshu-v${{ needs.metadata.outputs.version }}-$($program.Key).cdx.json" `
+              --program $program.Key `
+              --version "${{ needs.metadata.outputs.version }}" `
+              --source-commit "${{ needs.metadata.outputs.source_commit }}" `
+              --source-date-epoch "${{ needs.metadata.outputs.source_date_epoch }}"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-          node scripts/normalize-sbom.mjs `
-            --input $generated `
-            --output ".runtime/release/yanshu-v${{ needs.metadata.outputs.version }}.cdx.json" `
-            --version "${{ needs.metadata.outputs.version }}" `
-            --source-commit "${{ needs.metadata.outputs.source_commit }}" `
-            --source-date-epoch "${{ needs.metadata.outputs.source_date_epoch }}"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload SBOM
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

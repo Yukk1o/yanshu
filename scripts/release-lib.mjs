@@ -2,18 +2,43 @@ import { createHash } from 'node:crypto'
 import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
-export const RELEASE_SCHEMA_VERSION = 1
+export const RELEASE_SCHEMA_VERSION = 2
+
+export const RELEASE_PROGRAMS = Object.freeze([
+  Object.freeze({
+    key: 'cli',
+    packageName: 'yanshu-cli',
+    binaryStem: 'yanshu',
+    smokeTest: 'cli-usage-json-v1'
+  }),
+  Object.freeze({
+    key: 'mcp',
+    packageName: 'yanshu-mcp',
+    binaryStem: 'yanshu-mcp',
+    smokeTest: 'mcp-tools-list-jsonrpc-v1'
+  })
+])
 
 export const RELEASE_TARGETS = Object.freeze({
   'x86_64-pc-windows-msvc': Object.freeze({
-    binaryName: 'yanshu.exe',
+    executableSuffix: '.exe',
     label: 'windows-x86_64'
   }),
   'x86_64-unknown-linux-gnu': Object.freeze({
-    binaryName: 'yanshu',
+    executableSuffix: '',
     label: 'linux-x86_64'
   })
 })
+
+export function releaseBinaryName(program, targetConfiguration) {
+  if (!RELEASE_PROGRAMS.includes(program)) {
+    throw new Error('release binary must be one of the declared programs')
+  }
+  if (!Object.values(RELEASE_TARGETS).includes(targetConfiguration)) {
+    throw new Error('release binary target configuration is not declared')
+  }
+  return `${program.binaryStem}${targetConfiguration.executableSuffix}`
+}
 
 export function canonicalJson(value) {
   return `${JSON.stringify(value, null, 2)}\n`

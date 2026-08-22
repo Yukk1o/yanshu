@@ -4,13 +4,37 @@
 
 这和 [AI Agent Backend](/development/ai-agents) 是两条互补路径：Agent Backend 让宿主启动 Agent 去编辑一次性候选目录；MCP 则让已经在仓库里工作的 Codex、Claude Code 或 OpenCode 随时调用 Yanshu 的权威语言工具。
 
-## 构建
+## 从发布包安装（无需 Rust）
+
+合并本发布链变更后创建的后续 GitHub Release，会在每个平台 ZIP 中同时提供 `yanshu` 和 `yanshu-mcp`。历史 Release 不会被静默改写；下载时应确认归档内确实存在 MCP 可执行文件。
+
+Windows 示例：
+
+```powershell
+$yanshuTag = "<版本标签>"
+gh release download $yanshuTag --repo Yukk1o/yanshu --pattern "yanshu-*-x86_64-pc-windows-msvc.zip"
+$yanshuArchive = Get-ChildItem -File "yanshu-*-x86_64-pc-windows-msvc.zip" | Select-Object -First 1
+gh attestation verify $yanshuArchive.FullName --repo Yukk1o/yanshu
+Expand-Archive $yanshuArchive.FullName -DestinationPath C:\Tools
+```
+
+完整下载全部资产后，还可以运行 `node scripts/verify-release.mjs <下载目录>`，检查 schema v2 manifest、两个程序的构建记录、CLI/MCP 各自的 SBOM 和 `SHA256SUMS` 闭包。校验和不能替代上面的来源证明，详见[可验证发布](/development/releases)。
+
+解压后的 server 路径类似：
+
+```text
+C:\Tools\yanshu-vVERSION-x86_64-pc-windows-msvc\yanshu-mcp.exe
+```
+
+Linux 归档同样把 `yanshu` 与 `yanshu-mcp` 放在一个版本目录中。配置 Agent 时使用解压后的绝对路径，避免启动目录变化后找不到 server。
+
+## 从源码构建
 
 ```powershell
 cargo build --locked --release -p yanshu-mcp
 ```
 
-Windows 产物是 `target\release\yanshu-mcp.exe`，Linux 产物是 `target/release/yanshu-mcp`。配置 Agent 时建议使用绝对路径，避免启动目录改变后找不到 server。
+Windows 产物是 `target\release\yanshu-mcp.exe`，Linux 产物是 `target/release/yanshu-mcp`。源码构建同样应在 Agent 配置中使用绝对路径。
 
 ## 三个工具
 
@@ -27,7 +51,7 @@ Windows 产物是 `target\release\yanshu-mcp.exe`，Linux 产物是 `target/rele
 按 [Codex 官方 MCP 文档](https://developers.openai.com/codex/mcp/) 可以直接用 CLI 添加本地 stdio server：
 
 ```powershell
-codex mcp add yanshu -- E:\learn\yanshu\target\release\yanshu-mcp.exe
+codex mcp add yanshu -- C:\Tools\yanshu-vVERSION-x86_64-pc-windows-msvc\yanshu-mcp.exe
 codex mcp list
 ```
 
@@ -35,7 +59,7 @@ codex mcp list
 
 ```toml
 [mcp_servers.yanshu]
-command = "E:\\learn\\yanshu\\target\\release\\yanshu-mcp.exe"
+command = "C:\\Tools\\yanshu-vVERSION-x86_64-pc-windows-msvc\\yanshu-mcp.exe"
 enabled_tools = [
   "yanshu.inspect_source",
   "yanshu.format_source",
@@ -51,7 +75,7 @@ Codex CLI、IDE 扩展和同一宿主上的 ChatGPT 桌面端共享这份 MCP �
 
 ```powershell
 claude mcp add --transport stdio --scope local yanshu -- `
-  E:\learn\yanshu\target\release\yanshu-mcp.exe
+  C:\Tools\yanshu-vVERSION-x86_64-pc-windows-msvc\yanshu-mcp.exe
 claude mcp list
 ```
 
@@ -69,7 +93,7 @@ claude mcp list
       "yanshu": {
         "type": "local",
         "command": [
-          "E:\\learn\\yanshu\\target\\release\\yanshu-mcp.exe"
+          "C:\\Tools\\yanshu-vVERSION-x86_64-pc-windows-msvc\\yanshu-mcp.exe"
         ]
       }
     }

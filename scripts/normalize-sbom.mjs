@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
+  RELEASE_PROGRAMS,
   canonicalJson,
   requireGitCommit,
   requireSourceEpoch,
@@ -21,6 +22,9 @@ function requiredOption(name) {
 const input = resolve(repositoryRoot, requiredOption('--input'))
 const output = resolve(repositoryRoot, requiredOption('--output'))
 const version = requireStableVersion(requiredOption('--version'))
+const programKey = requiredOption('--program')
+const releaseProgram = RELEASE_PROGRAMS.find((program) => program.key === programKey)
+if (!releaseProgram) throw new Error(`unsupported release program: ${programKey}`)
 const sourceCommit = requireGitCommit(requiredOption('--source-commit'))
 const sourceDateEpoch = requireSourceEpoch(requiredOption('--source-date-epoch'))
 const sbom = JSON.parse(await readFile(input, 'utf8'))
@@ -50,6 +54,11 @@ for (const component of components) {
 if (!firstPartyReferenceMap.has(sbom.metadata.component['bom-ref']) && !sbom.metadata.component['bom-ref'].startsWith('urn:yanshu:crate:')) {
   throw new Error('SBOM root component was not recognized as first-party source')
 }
+const expectedRootReference =
+  `urn:yanshu:crate:${releaseProgram.packageName}:${version}:${sourceCommit}`
+if (sbom.metadata.component['bom-ref'] !== expectedRootReference) {
+  throw new Error(`SBOM root component does not describe ${releaseProgram.packageName}`)
+}
 
 function rewriteReferences(value) {
   if (typeof value === 'string') return firstPartyReferenceMap.get(value) ?? value
@@ -65,7 +74,8 @@ delete sbom.serialNumber
 sbom.metadata.timestamp = new Date(sourceDateEpoch * 1000).toISOString()
 const yanshuProperties = [
   { name: 'yanshu:source-commit', value: sourceCommit },
-  { name: 'yanshu:source-date-epoch', value: String(sourceDateEpoch) }
+  { name: 'yanshu:source-date-epoch', value: String(sourceDateEpoch) },
+  { name: 'yanshu:release-program', value: releaseProgram.key }
 ]
 const existingProperties = (sbom.metadata.properties ?? []).filter(
   (property) => !yanshuProperties.some((candidate) => candidate.name === property.name)
@@ -98,6 +108,7 @@ process.stdout.write(
     ok: true,
     output,
     components: Array.isArray(sbom.components) ? sbom.components.length : 0,
+    program: releaseProgram.key,
     sourceCommit,
     version
   })
