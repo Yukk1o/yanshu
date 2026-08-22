@@ -4,6 +4,7 @@ mod completion;
 mod document;
 mod hover;
 mod protocol;
+mod rename;
 mod server;
 
 use std::io::{BufRead, Write};

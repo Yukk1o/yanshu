@@ -32,6 +32,7 @@ VS Code 用户可以直接使用[平台专用扩展](/development/vscode)，不�
 | completion | 当前作用域可见的 form、binding、primitive、构造器、Schema、声明 Library operation 与类型；精确替换当前 token |
 | definition | 跳到同文件全局 `def`，或参数、顺序 `let`、pattern binding 的精确声明 |
 | references | 查找同文件全局/局部变量引用，遵守 `includeDeclaration` 与词法遮蔽 |
+| prepareRename / rename | 只重命名同文件已解析 binding；版本化 edit 在返回前通过候选 Parser 与完整符号图复核 |
 | formatting | 返回 canonical full-document `TextEdit[]`；server 不写文件 |
 | `yanshu/reviewDocument` | experimental 版本化请求；返回 `rust-readonly-v3`、`editable:false` 与审查文本 |
 
@@ -67,6 +68,7 @@ form 和 core primitive 复用 hover 的版本化目录。primitive 不高于当
 - hover plaintext 最多 8 KiB，六倍 JSON 转义上界仍小于消息限制；
 - completion 最多 128 项、候选文本合计最多 256 KiB，超限失败关闭；
 - 单次 references 最多 1,024 个 Location，超限返回 `LSP_REFERENCE_LIMIT`，不静默截断；
+- 单次 rename 最多 1,024 个 edit、replacement 文本合计最多 4 MiB，候选源码仍受 4 MiB Reader 上限；响应最坏 JSON 转义在编译期证明小于消息限制；
 - review 输入最多 512 KiB、投影文本最多 4 MiB，版本和 renderer/read-only 契约必须精确匹配；
 - 只接受 ASCII header 和 UTF-8 JSON body。
 
@@ -80,11 +82,19 @@ definition 与 references 不使用文本搜索。正式 AST 决定全局 `def`�
 
 因此，内层参数或 binding 与全局 `def` 同名时会解析到内层声明；顺序 `let` 的右侧只能引用更早的 binding；退出嵌套函数或 match arm 后会恢复外层作用域。全局定义的 signature、route handler 和 export 位置计入语义引用；字符串、注释、quote、类型和 Schema 名称不会冒充变量引用。references 按源码顺序返回当前打开文档中的 Location，并用一次向前扫描转换 UTF-16 range，避免结果数量增加时反复扫描源码。这个只读索引不改变 `.yan`、Bundle、package 或运行语义。
 
+## Rename 怎样避免捕获
+
+`prepareRename` 只在符号索引确认属于某个全局 `def`、参数、顺序 `let` 或 pattern binding 的声明/引用上返回精确 range。form、primitive、构造器、类型、Schema、字符串、注释与 quote 返回 `null`，不会按文本相似度猜测。
+
+`rename` 先要求新名称由正式 bounded Reader 解析为恰好一个相同 symbol，再收集目标 binding 的声明和全部已解析引用并核对原始源码切片。server 在内存中生成候选源码，重新运行正式 Reader/Parser 与 `symbol_index`，然后比较重命名前所有 binding 经 offset 变换后的种类、名称、声明与引用集合。若改名引用被内层名字捕获、改名 binding 捕获其它原有引用、特殊 form 改变解析或任意符号图发生变化，整个请求以 `LSP_RENAME_CONFLICT` 拒绝。
+
+成功时只返回按源码排序、互不重叠的同文件 `WorkspaceEdit.documentChanges`，并携带分析快照的当前 document version。server 不应用 edit，也不修改快照；VS Code 负责只把它应用到匹配版本。非法名字使用 `LSP_RENAME_NAME`，光标无 binding 使用 `LSP_RENAME_UNAVAILABLE`，edit/字节上界使用 `LSP_RENAME_LIMIT`。这些诊断都不回显源码或待改名称。
+
 ## 当前限制
 
 - 没有局部增量同步；
-- 没有 rename、semantic tokens、code action；
+- 没有 semantic tokens、code action；
 - 没有 Tree-sitter grammar、Neovim 安装包或 macOS/Arm Extension Host 平台验收；
 - 没有跨 Bundle/package 的多文件链接导航。
 
-实现入口：[符号索引](/source/rust/crates/yanshu-syntax/src/symbol.rs.txt)、[Completion 候选](/source/rust/crates/yanshu-lsp/src/completion/mod.rs.txt)、[Completion 上下文](/source/rust/crates/yanshu-lsp/src/completion/context.rs.txt)、[Hover 解析](/source/rust/crates/yanshu-lsp/src/hover/mod.rs.txt)、[Hover 目录](/source/rust/crates/yanshu-lsp/src/hover/catalog.rs.txt)、[协议 framing](/source/rust/crates/yanshu-lsp/src/protocol.rs.txt)、[文档与导航](/source/rust/crates/yanshu-lsp/src/document.rs.txt)、[server 生命周期](/source/rust/crates/yanshu-lsp/src/server.rs.txt)。完整契约见 [v0.12 规格](/source/docs/specs/v0.12.md.txt)。
+实现入口：[符号索引](/source/rust/crates/yanshu-syntax/src/symbol.rs.txt)、[Completion 候选](/source/rust/crates/yanshu-lsp/src/completion/mod.rs.txt)、[Completion 上下文](/source/rust/crates/yanshu-lsp/src/completion/context.rs.txt)、[Hover 解析](/source/rust/crates/yanshu-lsp/src/hover/mod.rs.txt)、[Hover 目录](/source/rust/crates/yanshu-lsp/src/hover/catalog.rs.txt)、[Rename 复核](/source/rust/crates/yanshu-lsp/src/rename.rs.txt)、[协议 framing](/source/rust/crates/yanshu-lsp/src/protocol.rs.txt)、[文档与导航](/source/rust/crates/yanshu-lsp/src/document.rs.txt)、[server 生命周期](/source/rust/crates/yanshu-lsp/src/server.rs.txt)。完整契约见 [v0.12 规格](/source/docs/specs/v0.12.md.txt)。
