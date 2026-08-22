@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
+  RELEASE_EXTENSION,
   RELEASE_PROGRAMS,
   RELEASE_SCHEMA_VERSION,
   RELEASE_TARGETS,
@@ -11,6 +12,7 @@ import {
   createDeterministicZip,
   readWorkspaceReleaseMetadata,
   releaseBinaryName,
+  releaseVsixName,
   requireGitCommit,
   requireSourceEpoch,
   requireStableVersion,
@@ -32,7 +34,7 @@ function hasOption(name) {
 
 function run(command, arguments_, options = {}) {
   const result = spawnSync(command, arguments_, {
-    cwd: repositoryRoot,
+    cwd: options.cwd ?? repositoryRoot,
     encoding: options.encoding,
     env: options.env ?? process.env,
     input: options.input,
@@ -190,6 +192,78 @@ function smokeMcp(binaryPath) {
   }
 }
 
+function lspFrame(message) {
+  const body = Buffer.from(JSON.stringify(message), 'utf8')
+  return Buffer.concat([
+    Buffer.from(`Content-Length: ${body.length}`, 'ascii'),
+    Buffer.from([13, 10, 13, 10]),
+    body
+  ])
+}
+
+function parseLspResponses(output) {
+  const responses = []
+  let offset = 0
+  while (offset < output.length) {
+    const headerEnd = output.indexOf(Buffer.from([13, 10, 13, 10]), offset)
+    if (headerEnd === -1) {
+      throw new Error('release LSP smoke returned an incomplete header')
+    }
+    const header = output.subarray(offset, headerEnd).toString('ascii')
+    const match = header.match(/^Content-Length: ([0-9]+)$/)
+    if (!match) {
+      throw new Error('release LSP smoke returned unexpected framing headers')
+    }
+    const length = Number(match[1])
+    if (!Number.isSafeInteger(length) || length <= 0 || length > 64 * 1024) {
+      throw new Error('release LSP smoke response length is outside bounds')
+    }
+    const bodyStart = headerEnd + 4
+    const bodyEnd = bodyStart + length
+    if (bodyEnd > output.length) {
+      throw new Error('release LSP smoke returned an incomplete body')
+    }
+    try {
+      responses.push(JSON.parse(output.subarray(bodyStart, bodyEnd).toString('utf8')))
+    } catch {
+      throw new Error('release LSP smoke did not return JSON-RPC JSON')
+    }
+    offset = bodyEnd
+  }
+  return responses
+}
+
+function smokeLsp(binaryPath) {
+  const input = Buffer.concat([
+    lspFrame({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }),
+    lspFrame({ jsonrpc: '2.0', id: 2, method: 'shutdown' }),
+    lspFrame({ jsonrpc: '2.0', method: 'exit' })
+  ])
+  const smoke = run(binaryPath, [], {
+    expectedStatus: 0,
+    input,
+    maxBuffer: 64 * 1024,
+    timeout: 5_000
+  })
+  if (smoke.stderr.length !== 0) {
+    throw new Error('release LSP smoke wrote unexpected stderr')
+  }
+  const responses = parseLspResponses(smoke.stdout)
+  if (
+    responses.length !== 2 ||
+    responses[0]?.jsonrpc !== '2.0' ||
+    responses[0]?.id !== 1 ||
+    responses[0]?.result?.serverInfo?.name !== 'yanshu-lsp' ||
+    responses[0]?.result?.capabilities?.positionEncoding !== 'utf-16' ||
+    responses[0]?.result?.capabilities?.experimental?.yanshuReviewDocument?.editable !== false ||
+    responses[1]?.jsonrpc !== '2.0' ||
+    responses[1]?.id !== 2 ||
+    responses[1]?.result !== null
+  ) {
+    throw new Error('release LSP smoke did not return the expected read-only capability contract')
+  }
+}
+
 const builtPrograms = []
 for (const program of RELEASE_PROGRAMS) {
   const binaryName = releaseBinaryName(program, targetConfiguration)
@@ -206,6 +280,7 @@ for (const program of RELEASE_PROGRAMS) {
   const binaryPath = join(firstTargetDirectory, binaryRelativePath)
   if (program.key === 'cli') smokeCli(binaryPath)
   else if (program.key === 'mcp') smokeMcp(binaryPath)
+  else if (program.key === 'lsp') smokeLsp(binaryPath)
   else throw new Error(`release program has no smoke test: ${program.key}`)
   builtPrograms.push({
     data: firstBinary,
@@ -219,6 +294,35 @@ for (const program of RELEASE_PROGRAMS) {
     }
   })
 }
+
+const lspProgram = RELEASE_PROGRAMS.find((program) => program.key === 'lsp')
+if (!lspProgram) throw new Error('release programs do not declare the LSP')
+const lspBinaryName = releaseBinaryName(lspProgram, targetConfiguration)
+const lspRelativePath = join(target, 'release', lspBinaryName)
+const extensionRoot = join(repositoryRoot, 'editors', 'vscode')
+const vsixName = releaseVsixName(version, targetConfiguration)
+const packagedVsixPath = join(extensionRoot, 'dist', vsixName)
+
+function packageVsix(lspBinaryPath) {
+  run(process.execPath, [join(extensionRoot, 'scripts', 'package.cjs')], {
+    env: {
+      ...buildEnvironment,
+      YANSHU_LSP_BINARY: lspBinaryPath
+    },
+    stdio: 'inherit'
+  })
+}
+
+packageVsix(join(firstTargetDirectory, lspRelativePath))
+const firstVsix = await readFile(packagedVsixPath)
+packageVsix(join(secondTargetDirectory, lspRelativePath))
+const secondVsix = await readFile(packagedVsixPath)
+const firstVsixDigest = sha256(firstVsix)
+const secondVsixDigest = sha256(secondVsix)
+if (firstVsixDigest !== secondVsixDigest || !firstVsix.equals(secondVsix)) {
+  throw new Error(`release VSIX is not reproducible: ${firstVsixDigest} != ${secondVsixDigest}`)
+}
+await writeFile(join(outputDirectory, vsixName), firstVsix, { flag: 'wx' })
 
 const archiveStem = `yanshu-v${version}-${target}`
 const archiveName = `${archiveStem}.zip`
@@ -250,6 +354,9 @@ await writeFile(join(outputDirectory, archiveName), firstArchive, { flag: 'wx' }
 
 const rustc = run('rustc', ['--version'], { encoding: 'utf8' }).stdout.trim()
 const cargo = run('cargo', ['--version'], { encoding: 'utf8' }).stdout.trim()
+const node = process.version
+const lspRecord = builtPrograms.find((program) => program.record.key === 'lsp')?.record
+if (!lspRecord) throw new Error('release build did not record the LSP')
 const record = {
   schemaVersion: RELEASE_SCHEMA_VERSION,
   product: 'Yanshu',
@@ -262,13 +369,26 @@ const record = {
   build: {
     cargo,
     cargoLocked: true,
+    node,
     profile: 'release',
     repetitions: 2,
     rustc,
     sourcePathRemapped: true,
+    vsce: workspace.vsceVersion,
     windowsBrepro: target === 'x86_64-pc-windows-msvc'
   },
   binaries: builtPrograms.map((program) => program.record),
+  extension: {
+    bundledBinary: lspRecord.key,
+    bundledBinarySha256: lspRecord.sha256,
+    name: vsixName,
+    package: RELEASE_EXTENSION.packageName,
+    repetitions: 2,
+    sha256: firstVsixDigest,
+    size: firstVsix.length,
+    smokeTest: RELEASE_EXTENSION.smokeTest,
+    target: targetConfiguration.vsixTarget
+  },
   archive: {
     name: archiveName,
     sha256: sha256(firstArchive),

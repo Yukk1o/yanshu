@@ -3,7 +3,7 @@
 这一页只讨论 `.yan` 语言的当前 Rust 实现和后续生态，不定义语言本身。语法、Value、Schema、route、diagnostic 与版本格式应先由语言规格固定，宿主只能实现这些契约。
 
 ::: warning 当前定位
-Rust v0.10 已形成通用语言的安全内核；v0.11 正在把跨平台 CI、依赖审计、conformance、WASM smoke、不可信输入 fuzz，以及双构建/SBOM/checksum/keyless provenance 固化为持续门禁。项目仍未生产就绪，workspace 的 crate 仍是 `publish = false`，没有稳定 FFI，也没有 crates.io 发布物。
+Rust v0.10 已形成通用语言的安全内核；v0.11 把跨平台 CI、依赖审计、conformance、WASM smoke、不可信输入 fuzz，以及双构建/SBOM/checksum/keyless provenance 固化为持续门禁，v0.12 又把 LSP 与平台 VSIX 纳入同一发布闭包。项目仍未生产就绪，workspace 的 crate 仍是 `publish = false`，没有稳定 FFI，也没有 crates.io 或 Marketplace 发布物。
 :::
 
 ## 当前实现快照
@@ -86,7 +86,7 @@ Rust 实现不能为了方便静默改变：
 6. 使用 `cargo package` 检查发布内容，确保不含凭据、runtime store 和未授权 source；
 7. 建立 release signing、RustSec、license 和 dependency provenance gate。
 
-CLI 的发布供应链 gate 已建立，但 crates.io 仍保持关闭。它提供确定性归档、CycloneDX SBOM、SHA-256 闭包和 GitHub OIDC provenance；具体承诺与非承诺见[可验证发布](/development/releases)。这不等于 crate 公共 API 已达到 semver 稳定要求。
+CLI/MCP/LSP 与平台 VSIX 的发布供应链 gate 已建立，但 crates.io 和 Marketplace 仍保持关闭。它提供确定性归档、双构建 VSIX、CycloneDX SBOM、SHA-256 闭包和 GitHub OIDC provenance；具体承诺与非承诺见[可验证发布](/development/releases)。这不等于 crate 公共 API 已达到 semver 稳定要求。
 
 建议首先评估发布：
 

@@ -2,31 +2,54 @@ import { createHash } from 'node:crypto'
 import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
-export const RELEASE_SCHEMA_VERSION = 2
+export const RELEASE_SCHEMA_VERSION = 3
 
 export const RELEASE_PROGRAMS = Object.freeze([
   Object.freeze({
     key: 'cli',
     packageName: 'yanshu-cli',
     binaryStem: 'yanshu',
+    ecosystem: 'crate',
     smokeTest: 'cli-usage-json-v1'
   }),
   Object.freeze({
     key: 'mcp',
     packageName: 'yanshu-mcp',
     binaryStem: 'yanshu-mcp',
+    ecosystem: 'crate',
     smokeTest: 'mcp-tools-list-jsonrpc-v1'
+  }),
+  Object.freeze({
+    key: 'lsp',
+    packageName: 'yanshu-lsp',
+    binaryStem: 'yanshu-lsp',
+    ecosystem: 'crate',
+    smokeTest: 'lsp-initialize-jsonrpc-v1'
   })
+])
+
+export const RELEASE_EXTENSION = Object.freeze({
+  key: 'vscode',
+  packageName: 'yanshu-language',
+  ecosystem: 'npm',
+  smokeTest: 'vsix-bundled-lsp-v1'
+})
+
+export const RELEASE_SBOM_COMPONENTS = Object.freeze([
+  ...RELEASE_PROGRAMS,
+  RELEASE_EXTENSION
 ])
 
 export const RELEASE_TARGETS = Object.freeze({
   'x86_64-pc-windows-msvc': Object.freeze({
     executableSuffix: '.exe',
-    label: 'windows-x86_64'
+    label: 'windows-x86_64',
+    vsixTarget: 'win32-x64'
   }),
   'x86_64-unknown-linux-gnu': Object.freeze({
     executableSuffix: '',
-    label: 'linux-x86_64'
+    label: 'linux-x86_64',
+    vsixTarget: 'linux-x64'
   })
 })
 
@@ -38,6 +61,23 @@ export function releaseBinaryName(program, targetConfiguration) {
     throw new Error('release binary target configuration is not declared')
   }
   return `${program.binaryStem}${targetConfiguration.executableSuffix}`
+}
+
+export function releaseVsixName(version, targetConfiguration) {
+  requireStableVersion(version)
+  if (!Object.values(RELEASE_TARGETS).includes(targetConfiguration)) {
+    throw new Error('release VSIX target configuration is not declared')
+  }
+  return `yanshu-vscode-${version}-${targetConfiguration.vsixTarget}.vsix`
+}
+
+export function releaseSbomRootReference(component, version, sourceCommit) {
+  if (!RELEASE_SBOM_COMPONENTS.includes(component)) {
+    throw new Error('release SBOM component is not declared')
+  }
+  requireStableVersion(version)
+  requireGitCommit(sourceCommit)
+  return `urn:yanshu:${component.ecosystem}:${component.packageName}:${version}:${sourceCommit}`
 }
 
 export function canonicalJson(value) {
@@ -155,7 +195,39 @@ export async function readWorkspaceReleaseMetadata(repositoryRoot) {
     }
   }
 
-  return Object.freeze({ crateCount: crateNames.length, rustVersion, version })
+  const extensionManifest = JSON.parse(
+    await readFile(join(repositoryRoot, 'editors', 'vscode', 'package.json'), 'utf8')
+  )
+  const extensionLock = JSON.parse(
+    await readFile(join(repositoryRoot, 'editors', 'vscode', 'package-lock.json'), 'utf8')
+  )
+  const vsceVersion = requireStableVersion(
+    extensionManifest.devDependencies?.['@vscode/vsce']
+  )
+  if (
+    extensionManifest.name !== RELEASE_EXTENSION.packageName ||
+    extensionManifest.publisher !== 'Yukk1o' ||
+    requireStableVersion(extensionManifest.version) !== version
+  ) {
+    throw new Error('VS Code extension identity must match the workspace release')
+  }
+  if (
+    extensionLock.lockfileVersion !== 3 ||
+    extensionLock.name !== RELEASE_EXTENSION.packageName ||
+    extensionLock.version !== version ||
+    extensionLock.packages?.['']?.name !== RELEASE_EXTENSION.packageName ||
+    extensionLock.packages[''].version !== version
+  ) {
+    throw new Error('VS Code extension lockfile identity must match the workspace release')
+  }
+
+  return Object.freeze({
+    crateCount: crateNames.length,
+    extensionPackage: RELEASE_EXTENSION.packageName,
+    rustVersion,
+    version,
+    vsceVersion
+  })
 }
 
 function crc32Table() {

@@ -3,12 +3,16 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
+  RELEASE_EXTENSION,
   RELEASE_PROGRAMS,
+  RELEASE_SBOM_COMPONENTS,
   RELEASE_SCHEMA_VERSION,
   RELEASE_TARGETS,
   canonicalJson,
   formatChecksums,
   releaseBinaryName,
+  releaseSbomRootReference,
+  releaseVsixName,
   requireGitCommit,
   requireSha256,
   requireSourceEpoch,
@@ -53,8 +57,10 @@ for (const target of Object.keys(RELEASE_TARGETS).sort()) {
   const stem = `yanshu-v${version}-${target}`
   const archiveName = `${stem}.zip`
   const recordName = `${stem}.build.json`
+  const vsixName = releaseVsixName(version, RELEASE_TARGETS[target])
   expectedInputs.add(archiveName)
   expectedInputs.add(recordName)
+  expectedInputs.add(vsixName)
 
   const record = JSON.parse(await readFile(join(inputDirectory, recordName), 'utf8'))
   const expectedBinaries = RELEASE_PROGRAMS.map((program) => ({
@@ -79,7 +85,15 @@ for (const target of Object.keys(RELEASE_TARGETS).sort()) {
     record.sourceTreeClean !== true ||
     record.build?.cargoLocked !== true ||
     record.build?.repetitions !== 2 ||
+    !/^v[0-9]+\.[0-9]+\.[0-9]+$/.test(record.build?.node) ||
+    !/^[0-9]+\.[0-9]+\.[0-9]+$/.test(record.build?.vsce) ||
     record.archive?.name !== archiveName ||
+    record.extension?.name !== vsixName ||
+    record.extension?.package !== RELEASE_EXTENSION.packageName ||
+    record.extension?.target !== RELEASE_TARGETS[target].vsixTarget ||
+    record.extension?.repetitions !== 2 ||
+    record.extension?.smokeTest !== RELEASE_EXTENSION.smokeTest ||
+    record.extension?.bundledBinary !== 'lsp' ||
     !Array.isArray(record.binaries) ||
     record.binaries.length !== expectedBinaries.length ||
     !Array.isArray(record.archive?.entries) ||
@@ -100,15 +114,28 @@ for (const target of Object.keys(RELEASE_TARGETS).sort()) {
     }
     requireSha256(binary.sha256, `${expectedBinary.key} binary digest`)
   }
+  const lspBinary = record.binaries.find((binary) => binary.key === 'lsp')
+  if (
+    record.extension.bundledBinarySha256 !== lspBinary?.sha256 ||
+    !Number.isSafeInteger(record.extension.size) ||
+    record.extension.size <= 0
+  ) {
+    throw new Error(`invalid VSIX build record: ${recordName}`)
+  }
+  requireSha256(record.extension.sha256, 'VSIX digest')
   const archive = await readFile(join(inputDirectory, archiveName))
   if (record.archive.size !== archive.length || record.archive.sha256 !== sha256(archive)) {
     throw new Error(`archive does not match build record: ${archiveName}`)
+  }
+  const vsix = await readFile(join(inputDirectory, vsixName))
+  if (record.extension.size !== vsix.length || record.extension.sha256 !== sha256(vsix)) {
+    throw new Error(`VSIX does not match build record: ${vsixName}`)
   }
   buildRecords.push(record)
 }
 
 const sbomRecords = []
-for (const program of RELEASE_PROGRAMS) {
+for (const program of RELEASE_SBOM_COMPONENTS) {
   const sbomName = `yanshu-v${version}-${program.key}.cdx.json`
   expectedInputs.add(sbomName)
   const sbom = JSON.parse(await readFile(join(inputDirectory, sbomName), 'utf8'))
@@ -119,8 +146,10 @@ for (const program of RELEASE_PROGRAMS) {
   const releaseProgramProperties = properties.filter(
     (property) => property.name === 'yanshu:release-program'
   )
-  const expectedRootReference =
-    `urn:yanshu:crate:${program.packageName}:${version}:${sourceCommit}`
+  const bundledProgramProperties = properties.filter(
+    (property) => property.name === 'yanshu:bundled-program'
+  )
+  const expectedRootReference = releaseSbomRootReference(program, version, sourceCommit)
   if (
     sbom.bomFormat !== 'CycloneDX' ||
     sbom.specVersion !== '1.5' ||
@@ -129,7 +158,10 @@ for (const program of RELEASE_PROGRAMS) {
     sourceCommitProperties.length !== 1 ||
     sourceCommitProperties[0].value !== sourceCommit ||
     releaseProgramProperties.length !== 1 ||
-    releaseProgramProperties[0].value !== program.key
+    releaseProgramProperties[0].value !== program.key ||
+    (program === RELEASE_EXTENSION &&
+      (bundledProgramProperties.length !== 1 || bundledProgramProperties[0].value !== 'lsp')) ||
+    (program !== RELEASE_EXTENSION && bundledProgramProperties.length !== 0)
   ) {
     throw new Error(`normalized SBOM does not describe release program ${program.key}`)
   }
@@ -170,11 +202,20 @@ const assetRecords = []
 for (const name of inputFiles) {
   const data = await readFile(join(outputDirectory, name))
   const buildRecord = buildRecords.find(
-    (record) => name === record.archive.name || name === `yanshu-v${version}-${record.target}.build.json`
+    (record) =>
+      name === record.archive.name ||
+      name === record.extension.name ||
+      name === `yanshu-v${version}-${record.target}.build.json`
   )
   assetRecords.push({
     name,
-    kind: name.endsWith('.zip') ? 'archive' : name.endsWith('.cdx.json') ? 'sbom' : 'build-record',
+    kind: name.endsWith('.zip')
+      ? 'archive'
+      : name.endsWith('.vsix')
+        ? 'extension'
+        : name.endsWith('.cdx.json')
+          ? 'sbom'
+          : 'build-record',
     target: buildRecord?.target ?? null,
     sha256: sha256(data),
     size: data.length
@@ -195,6 +236,7 @@ const manifest = {
   reproducibility: {
     binaryBuildsPerTarget: 2,
     deterministicArchive: 'zip-store-v1',
+    extensionPackagesPerTarget: 2,
     sourcePathRemapped: true
   },
   sboms: sbomRecords,

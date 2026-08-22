@@ -11,10 +11,12 @@ on:
       - "Cargo.toml"
       - "LICENSE-*"
       - "README.md"
+      - "editors/vscode/**"
       - "rust/**"
       - "scripts/assemble-release.mjs"
       - "scripts/build-release.mjs"
       - "scripts/normalize-sbom.mjs"
+      - "scripts/normalize-extension-sbom.mjs"
       - "scripts/release-lib.mjs"
       - "scripts/release-metadata.mjs"
       - "scripts/release.test.mjs"
@@ -110,6 +112,8 @@ jobs:
       - name: Install Node.js 22
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
+          cache: npm
+          cache-dependency-path: editors/vscode/package-lock.json
           node-version: 22
 
       - name: Install release Rust toolchain
@@ -123,7 +127,14 @@ jobs:
         with:
           shared-key: release-${{ matrix.target }}
 
-      - name: Build both tools twice and package deterministic archive
+      - name: Install and audit locked extension dependencies
+        working-directory: editors/vscode
+        run: |
+          npm ci --registry=https://registry.npmjs.org
+          npm audit --registry=https://registry.npmjs.org --audit-level=high
+          npm run check
+
+      - name: Build all tools and VSIX twice and package deterministic archive
         run: >-
           node scripts/build-release.mjs
           --target ${{ matrix.target }}
@@ -179,6 +190,10 @@ jobs:
             @{
               Key = "mcp"
               Generated = "rust/crates/yanshu-mcp/yanshu-mcp_bin.cdx.json"
+            },
+            @{
+              Key = "lsp"
+              Generated = "rust/crates/yanshu-lsp/yanshu-lsp_bin.cdx.json"
             }
           )
           cargo cyclonedx `
@@ -201,6 +216,22 @@ jobs:
               --source-date-epoch "${{ needs.metadata.outputs.source_date_epoch }}"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+          $rawExtension = Join-Path $PWD ".runtime/sbom-work/vscode.cdx.json"
+          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $rawExtension) | Out-Null
+          Push-Location editors/vscode
+          try {
+            $extensionSbom = npm sbom --package-lock-only --omit=dev --sbom-format=cyclonedx --sbom-type=application
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            Pop-Location
+          }
+          [System.IO.File]::WriteAllText(
+            $rawExtension,
+            (($extensionSbom -join [Environment]::NewLine) + [Environment]::NewLine),
+            [System.Text.UTF8Encoding]::new($false)
+          )
+          node scripts/normalize-extension-sbom.mjs --input $rawExtension --output ".runtime/release/yanshu-v${{ needs.metadata.outputs.version }}-vscode.cdx.json" --version "${{ needs.metadata.outputs.version }}" --source-commit "${{ needs.metadata.outputs.source_commit }}" --source-date-epoch "${{ needs.metadata.outputs.source_date_epoch }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload SBOM
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
