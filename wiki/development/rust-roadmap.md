@@ -3,7 +3,7 @@
 这一页只讨论 `.yan` 语言的当前 Rust 实现和后续生态，不定义语言本身。语法、Value、Schema、route、diagnostic 与版本格式应先由语言规格固定，宿主只能实现这些契约。
 
 ::: warning 当前定位
-Rust v0.10 已形成通用语言的安全内核；v0.11 把跨平台 CI、依赖审计、conformance、WASM smoke、不可信输入 fuzz，以及双构建/SBOM/checksum/keyless provenance 固化为持续门禁，v0.12 又把 LSP 与平台 VSIX 纳入同一发布闭包。项目仍未生产就绪，workspace 的 crate 仍是 `publish = false`，没有稳定 FFI，也没有 crates.io 或 Marketplace 发布物。
+Rust v0.12 已形成带持续验证与编辑器/Agent 工具链的通用语言安全内核：v0.11 把跨平台 CI、依赖审计、conformance、WASM smoke、不可信输入 fuzz，以及双构建/SBOM/checksum/keyless provenance 固化为持续门禁，v0.12 又把 LSP 与平台 VSIX 纳入同一发布闭包。项目仍未生产就绪，workspace 的 crate 仍是 `publish = false`，没有稳定 FFI，也没有 crates.io 或 Marketplace 发布物。
 :::
 
 ## 当前实现快照
@@ -76,7 +76,7 @@ Rust 实现不能为了方便静默改变：
 
 ## crates.io 发布路线
 
-当前 workspace 使用统一版本 `0.10.0`，但 `publish = false`。发布前至少需要：
+当前 workspace 使用统一版本 `0.12.0`，但 `publish = false`。发布 crates.io 前至少需要：
 
 1. 明确哪些 crate 是公共 API，哪些只服务于 binary；
 2. 把 `Program`、`Value`、`Diagnostic`、Library Contract 的兼容性写入 semver 策略；

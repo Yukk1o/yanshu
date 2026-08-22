@@ -10,7 +10,7 @@ make the project production-ready.
 
 ## Release identity
 
-The only publishing trigger is a pushed stable tag such as `v0.10.0`. The
+The only publishing trigger is a pushed stable tag such as `v0.12.0`. The
 release workflow fails closed unless all of the following are true:
 
 - the tag is an annotated Git tag rather than a lightweight ref;
@@ -136,7 +136,7 @@ $epoch = git show -s --format=%ct HEAD
 node scripts/build-release.mjs `
   --target x86_64-pc-windows-msvc `
   --out-dir .runtime/release-local `
-  --version 0.10.0 `
+  --version 0.12.0 `
   --source-commit $commit `
   --source-date-epoch $epoch `
   --allow-dirty

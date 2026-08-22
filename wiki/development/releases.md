@@ -3,7 +3,7 @@
 Yanshu 的 GitHub Release 不是“编译完随手上传”。v0.11 把版本身份、构建一致性、依赖清单、内容校验和来源证明连成一条机器可验证的证据链；v0.12 又把 LSP 和平台 VSIX 纳入同一个闭包。
 
 ::: warning 当前范围
-当前公开里程碑仍是 v0.10；已有发布不会被补写或替换。新的合格标签会覆盖 Windows x86-64 与 Linux x86-64 的 `yanshu` CLI、只读 `yanshu-mcp`、`yanshu-lsp` 和对应平台 VSIX；这不代表 crates.io、VS Code Marketplace、macOS、ARM、安装器或生产稳定性。
+当前发布里程碑是 v0.12。合格标签覆盖 Windows x86-64 与 Linux x86-64 的 `yanshu` CLI、只读 `yanshu-mcp`、`yanshu-lsp` 和对应平台 VSIX；已有发布不会被补写或替换。这不代表 crates.io、VS Code Marketplace、macOS、ARM、安装器或生产稳定性。
 :::
 
 ## 标签怎样获得发布资格

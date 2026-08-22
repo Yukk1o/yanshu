@@ -1621,7 +1621,7 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
 name = "yanshu-analysis"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "serde_json",
  "yanshu-diagnostic",
@@ -1630,7 +1630,7 @@ dependencies = [
 
 [[package]]
 name = "yanshu-bundle"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "serde_json",
  "sha2",
@@ -1642,7 +1642,7 @@ dependencies = [
 
 [[package]]
 name = "yanshu-cli"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "serde_json",
  "yanshu-analysis",
@@ -1662,7 +1662,7 @@ dependencies = [
 
 [[package]]
 name = "yanshu-compiler"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "serde_json",
  "sha2",
@@ -1673,7 +1673,7 @@ dependencies = [
 
 [[package]]
 name = "yanshu-conformance"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "num-bigint",
  "serde_json",
@@ -1686,14 +1686,14 @@ dependencies = [
 
 [[package]]
 name = "yanshu-diagnostic"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "yanshu-format"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "serde_json",
  "yanshu-diagnostic",
@@ -1702,7 +1702,7 @@ dependencies = [
 
 [[package]]
 name = "yanshu-http"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "axum",
  "getrandom 0.4.3",
@@ -1725,7 +1725,7 @@ dependencies = [
 
 [[package]]
 name = "yanshu-library"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "num-bigint",
  "serde_json",
@@ -1734,7 +1734,7 @@ dependencies = [
 
 [[package]]
 name = "yanshu-lsp"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "serde_json",
  "yanshu-analysis",
@@ -1746,7 +1746,7 @@ dependencies = [
 
 [[package]]
 name = "yanshu-mcp"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "serde_json",
  "yanshu-analysis",
@@ -1757,7 +1757,7 @@ dependencies = [
 
 [[package]]
 name = "yanshu-ops"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "serde_json",
  "sha2",
@@ -1768,7 +1768,7 @@ dependencies = [
 
 [[package]]
 name = "yanshu-package"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "serde_json",
  "sha2",
@@ -1781,7 +1781,7 @@ dependencies = [
 
 [[package]]
 name = "yanshu-provider"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "reqwest",
  "serde_json",
@@ -1791,7 +1791,7 @@ dependencies = [
 
 [[package]]
 name = "yanshu-rollout"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "serde_json",
  "sha2",
@@ -1803,7 +1803,7 @@ dependencies = [
 
 [[package]]
 name = "yanshu-runtime"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "num-bigint",
  "num-traits",
@@ -1817,7 +1817,7 @@ dependencies = [
 
 [[package]]
 name = "yanshu-server"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "serde_json",
  "tokio",
@@ -1829,7 +1829,7 @@ dependencies = [
 
 [[package]]
 name = "yanshu-service"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "num-bigint",
  "num-traits",
@@ -1842,7 +1842,7 @@ dependencies = [
 
 [[package]]
 name = "yanshu-store"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "serde_json",
  "sha2",
@@ -1852,7 +1852,7 @@ dependencies = [
 
 [[package]]
 name = "yanshu-syntax"
-version = "0.10.0"
+version = "0.12.0"
 dependencies = [
  "num-bigint",
  "num-traits",

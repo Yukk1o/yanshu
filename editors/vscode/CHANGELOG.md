@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.0
+
+- Ship the bounded safe-Rust `yanshu-lsp` in verified Windows x64 and Linux x64 VSIX assets.
+- Add scope-aware completion, full semantic tokens, same-document definitions/references, and capture-avoiding rename.
+- Add exact language/function/binding hover and the scriptless, version-bound Rust-style review panel.
+- Build the LSP and VSIX twice per platform and bind them into the schema v3 release manifest, checksums, SBOMs, and keyless provenance.
+
 ## 0.10.0
 
 - Register `.yan`, language configuration, and baseline TextMate highlighting.

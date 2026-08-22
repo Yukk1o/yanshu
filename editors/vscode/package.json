@@ -2,7 +2,7 @@
   "name": "yanshu-language",
   "displayName": "衍术 Yanshu",
   "description": "Experimental language support for .yan source, backed by the safe-Rust yanshu-lsp server.",
-  "version": "0.10.0",
+  "version": "0.12.0",
   "publisher": "Yukk1o",
   "license": "MIT OR Apache-2.0",
   "homepage": "https://yukk1o.github.io/yanshu/",

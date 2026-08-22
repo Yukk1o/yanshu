@@ -25,13 +25,13 @@ npm ci
 npm run package
 ```
 
-产物位于 `editors/vscode/dist/`，文件名包含版本和平台，例如 `yanshu-vscode-0.10.0-win32-x64.vsix`。安装：
+产物位于 `editors/vscode/dist/`，文件名包含版本和平台，例如 `yanshu-vscode-0.12.0-win32-x64.vsix`。安装：
 
 ```powershell
-code --install-extension dist\yanshu-vscode-0.10.0-win32-x64.vsix
+code --install-extension dist\yanshu-vscode-0.12.0-win32-x64.vsix
 ```
 
-这个本地打包流程只生成当前宿主平台的 VSIX。CI 会在 Windows x64 与 Linux x64 分别测试并暂存平台包，但这不等于已经完成 Marketplace、macOS 或 Arm 发布。
+这个本地打包流程只生成当前宿主平台的 VSIX。合格稳定标签会在 Windows x64 与 Linux x64 分别双构建、验证并发布平台包，但这不等于已经完成 Marketplace、macOS 或 Arm 发布。
 
 ## Extension Host 自动验收
 
@@ -95,7 +95,7 @@ npm run test:e2e
 
 - Tree-sitter grammar 的 VS Code 消费适配与 semantic token range/delta；
 - 跨 Bundle/package 的多文件 references；
-- 自动生成 Windows/Linux/macOS 与 x64/Arm 全矩阵 VSIX 的发布工作流；
+- macOS、Arm 与 Marketplace 发布；
 - Neovim、Zed、JetBrains 等安装包。
 
 源码入口：[扩展 client](/source/editors/vscode/src/extension.ts.txt)、[审查面板控制器](/source/editors/vscode/src/review-preview.ts.txt)、[无脚本审查 HTML](/source/editors/vscode/src/review-html.ts.txt)、[server 选择与脱敏](/source/editors/vscode/src/server-command.ts.txt)、[语言 grammar](/source/editors/vscode/syntaxes/yanshu.tmLanguage.json.txt)、[VSIX 打包边界](/source/editors/vscode/scripts/package.cjs.txt)。LSP 能力见[最小 LSP Server](/development/lsp)。

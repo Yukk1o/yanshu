@@ -10,6 +10,6 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-yanshu-diagnostic = { path = "../yanshu-diagnostic", version = "=0.10.0" }
+yanshu-diagnostic = { path = "../yanshu-diagnostic", version = "=0.12.0" }
 num-bigint.workspace = true
 serde_json.workspace = true

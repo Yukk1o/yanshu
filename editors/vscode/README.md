@@ -58,7 +58,7 @@ npm run package
 安装示例：
 
 ```powershell
-code --install-extension dist\yanshu-vscode-0.10.0-win32-x64.vsix
+code --install-extension dist\yanshu-vscode-0.12.0-win32-x64.vsix
 ```
 
 ## Extension Host 端到端测试

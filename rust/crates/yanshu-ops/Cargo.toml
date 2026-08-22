@@ -10,8 +10,8 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-yanshu-diagnostic = { path = "../yanshu-diagnostic", version = "=0.10.0" }
-yanshu-service = { path = "../yanshu-service", version = "=0.10.0" }
-yanshu-store = { path = "../yanshu-store", version = "=0.10.0" }
+yanshu-diagnostic = { path = "../yanshu-diagnostic", version = "=0.12.0" }
+yanshu-service = { path = "../yanshu-service", version = "=0.12.0" }
+yanshu-store = { path = "../yanshu-store", version = "=0.12.0" }
 serde_json.workspace = true
 sha2.workspace = true

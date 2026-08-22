@@ -13,12 +13,12 @@ libfuzzer-sys = "=0.4.13"
 serde_json = { version = "1.0", features = ["arbitrary_precision"] }
 axum = { version = "=0.8.9", default-features = false, features = ["http1"] }
 tokio = { version = "=1.53.1", default-features = false, features = ["rt", "time"] }
-yanshu-bundle = { version = "=0.10.0", path = "../rust/crates/yanshu-bundle" }
-yanshu-compiler = { version = "=0.10.0", path = "../rust/crates/yanshu-compiler" }
-yanshu-http = { version = "=0.10.0", path = "../rust/crates/yanshu-http" }
-yanshu-package = { version = "=0.10.0", path = "../rust/crates/yanshu-package" }
-yanshu-runtime = { version = "=0.10.0", path = "../rust/crates/yanshu-runtime" }
-yanshu-syntax = { version = "=0.10.0", path = "../rust/crates/yanshu-syntax" }
+yanshu-bundle = { version = "=0.12.0", path = "../rust/crates/yanshu-bundle" }
+yanshu-compiler = { version = "=0.12.0", path = "../rust/crates/yanshu-compiler" }
+yanshu-http = { version = "=0.12.0", path = "../rust/crates/yanshu-http" }
+yanshu-package = { version = "=0.12.0", path = "../rust/crates/yanshu-package" }
+yanshu-runtime = { version = "=0.12.0", path = "../rust/crates/yanshu-runtime" }
+yanshu-syntax = { version = "=0.12.0", path = "../rust/crates/yanshu-syntax" }
 
 [[bin]]
 name = "reader_parser"
