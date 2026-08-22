@@ -242,7 +242,7 @@ formatter v1、稳定表达式节点路径、有界全局/局部符号索引、�
 
 ## 可验证发布
 
-v0.11 发布链为 Windows x86-64 与 Linux x86-64 CLI 执行两次独立 target-dir 构建和逐字节比对，再生成确定性 ZIP、每平台构建记录、CycloneDX 1.5 SBOM、release manifest 与 `SHA256SUMS`。标签还必须是位于 `main`、与 workspace 版本完全一致的注解式标签。
+v0.11 发布链为 Windows x86-64 与 Linux x86-64 的 `yanshu` CLI 和只读 `yanshu-mcp` 分别执行两次独立 target-dir 构建、真实 smoke 和逐字节比对，再把两个可执行文件放入同一确定性 ZIP，并生成每平台构建记录、两份 CycloneDX 1.5 SBOM、release manifest 与 `SHA256SUMS`。标签还必须是位于 `main`、与 workspace 版本完全一致的注解式标签。
 
 发布资产由 GitHub OIDC 生成 keyless provenance，不在仓库保存签名私钥。下载后应同时检查内容闭包与来源证明：
 

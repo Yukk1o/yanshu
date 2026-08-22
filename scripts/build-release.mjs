@@ -4,11 +4,13 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
+  RELEASE_PROGRAMS,
   RELEASE_SCHEMA_VERSION,
   RELEASE_TARGETS,
   canonicalJson,
   createDeterministicZip,
   readWorkspaceReleaseMetadata,
+  releaseBinaryName,
   requireGitCommit,
   requireSourceEpoch,
   requireStableVersion,
@@ -33,8 +35,11 @@ function run(command, arguments_, options = {}) {
     cwd: repositoryRoot,
     encoding: options.encoding,
     env: options.env ?? process.env,
+    input: options.input,
+    maxBuffer: options.maxBuffer,
     shell: false,
-    stdio: options.stdio
+    stdio: options.stdio,
+    timeout: options.timeout
   })
   if (result.error) throw result.error
   if (result.status !== (options.expectedStatus ?? 0)) {
@@ -88,58 +93,141 @@ const buildEnvironment = {
   CARGO_INCREMENTAL: '0',
   SOURCE_DATE_EPOCH: String(sourceDateEpoch)
 }
-const cargoArguments = [
-  'rustc',
-  '--locked',
-  '--release',
-  '-p',
-  'yanshu-cli',
-  '--target',
-  target
-]
 const finalRustcArguments = [
   remapPath,
   ...(target === 'x86_64-pc-windows-msvc' ? ['-C', 'link-arg=/Brepro'] : [])
 ]
 
 for (const targetDirectory of [firstTargetDirectory, secondTargetDirectory]) {
-  run('cargo', [...cargoArguments, '--target-dir', targetDirectory, '--', ...finalRustcArguments], {
-    env: buildEnvironment,
-    stdio: 'inherit'
+  for (const program of RELEASE_PROGRAMS) {
+    run(
+      'cargo',
+      [
+        'rustc',
+        '--locked',
+        '--release',
+        '-p',
+        program.packageName,
+        '--bin',
+        program.binaryStem,
+        '--target',
+        target,
+        '--target-dir',
+        targetDirectory,
+        '--',
+        ...finalRustcArguments
+      ],
+      {
+        env: buildEnvironment,
+        stdio: 'inherit'
+      }
+    )
+  }
+}
+
+function smokeCli(binaryPath) {
+  const smoke = run(binaryPath, [], {
+    encoding: 'utf8',
+    expectedStatus: 1,
+    maxBuffer: 64 * 1024,
+    timeout: 5_000
   })
+  let smokeDocument
+  try {
+    smokeDocument = JSON.parse(smoke.stdout)
+  } catch {
+    throw new Error('release CLI smoke test did not return JSON')
+  }
+  if (smokeDocument?.error?.code !== 'CLI_USAGE') {
+    throw new Error('release CLI smoke test did not return CLI_USAGE')
+  }
 }
 
-const binaryRelativePath = join(target, 'release', targetConfiguration.binaryName)
-const firstBinary = await readFile(join(firstTargetDirectory, binaryRelativePath))
-const secondBinary = await readFile(join(secondTargetDirectory, binaryRelativePath))
-const firstDigest = sha256(firstBinary)
-const secondDigest = sha256(secondBinary)
-if (firstDigest !== secondDigest || !firstBinary.equals(secondBinary)) {
-  throw new Error(`release binary is not reproducible: ${firstDigest} != ${secondDigest}`)
+function smokeMcp(binaryPath) {
+  const input = [
+    {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-11-25',
+        capabilities: {},
+        clientInfo: { name: 'release-smoke', version: '1' }
+      }
+    },
+    { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }
+  ]
+    .map((message) => JSON.stringify(message))
+    .join('\n') + '\n'
+  const smoke = run(binaryPath, [], {
+    encoding: 'utf8',
+    expectedStatus: 0,
+    input,
+    maxBuffer: 64 * 1024,
+    timeout: 5_000
+  })
+  const lines = smoke.stdout.trimEnd().split('\n')
+  if (smoke.stderr !== '' || lines.length !== 2) {
+    throw new Error('release MCP smoke test did not return exactly two clean JSON-RPC responses')
+  }
+  let responses
+  try {
+    responses = lines.map((line) => JSON.parse(line))
+  } catch {
+    throw new Error('release MCP smoke test did not return newline-delimited JSON')
+  }
+  const toolNames = responses[1]?.result?.tools?.map((tool) => tool.name)
+  if (
+    responses[0]?.jsonrpc !== '2.0' ||
+    responses[0]?.id !== 1 ||
+    responses[1]?.jsonrpc !== '2.0' ||
+    responses[1]?.id !== 2 ||
+    responses[0]?.result?.serverInfo?.name !== 'yanshu-mcp' ||
+    JSON.stringify(toolNames) !==
+      JSON.stringify(['yanshu.inspect_source', 'yanshu.format_source', 'yanshu.review_source'])
+  ) {
+    throw new Error('release MCP smoke test did not expose the expected read-only tool set')
+  }
 }
 
-const smoke = run(join(firstTargetDirectory, binaryRelativePath), [], {
-  encoding: 'utf8',
-  expectedStatus: 1
-})
-let smokeDocument
-try {
-  smokeDocument = JSON.parse(smoke.stdout)
-} catch {
-  throw new Error('release binary smoke test did not return JSON')
-}
-if (smokeDocument?.error?.code !== 'CLI_USAGE') {
-  throw new Error('release binary smoke test did not return CLI_USAGE')
+const builtPrograms = []
+for (const program of RELEASE_PROGRAMS) {
+  const binaryName = releaseBinaryName(program, targetConfiguration)
+  const binaryRelativePath = join(target, 'release', binaryName)
+  const firstBinary = await readFile(join(firstTargetDirectory, binaryRelativePath))
+  const secondBinary = await readFile(join(secondTargetDirectory, binaryRelativePath))
+  const firstDigest = sha256(firstBinary)
+  const secondDigest = sha256(secondBinary)
+  if (firstDigest !== secondDigest || !firstBinary.equals(secondBinary)) {
+    throw new Error(
+      `release binary ${program.key} is not reproducible: ${firstDigest} != ${secondDigest}`
+    )
+  }
+  const binaryPath = join(firstTargetDirectory, binaryRelativePath)
+  if (program.key === 'cli') smokeCli(binaryPath)
+  else if (program.key === 'mcp') smokeMcp(binaryPath)
+  else throw new Error(`release program has no smoke test: ${program.key}`)
+  builtPrograms.push({
+    data: firstBinary,
+    record: {
+      key: program.key,
+      package: program.packageName,
+      name: binaryName,
+      sha256: firstDigest,
+      size: firstBinary.length,
+      smokeTest: program.smokeTest
+    }
+  })
 }
 
 const archiveStem = `yanshu-v${version}-${target}`
 const archiveName = `${archiveStem}.zip`
 const archiveEntries = [
-  {
-    path: `${archiveStem}/${targetConfiguration.binaryName}`,
-    data: firstBinary,
+  ...builtPrograms.map((program) => ({
+    path: `${archiveStem}/${program.record.name}`,
+    data: program.data,
     mode: 0o100755
-  },
+  })),
   {
     path: `${archiveStem}/README.md`,
     data: await readFile(join(repositoryRoot, 'README.md'))
@@ -180,11 +268,7 @@ const record = {
     sourcePathRemapped: true,
     windowsBrepro: target === 'x86_64-pc-windows-msvc'
   },
-  binary: {
-    name: targetConfiguration.binaryName,
-    sha256: firstDigest,
-    size: firstBinary.length
-  },
+  binaries: builtPrograms.map((program) => program.record),
   archive: {
     name: archiveName,
     sha256: sha256(firstArchive),

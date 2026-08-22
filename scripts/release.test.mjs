@@ -7,12 +7,14 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
+  RELEASE_PROGRAMS,
   RELEASE_SCHEMA_VERSION,
   RELEASE_TARGETS,
   canonicalJson,
   createDeterministicZip,
   formatChecksums,
   parseChecksums,
+  releaseBinaryName,
   releaseRustToolchain,
   sha256,
   validateReleaseTag
@@ -72,7 +74,7 @@ test('release toolchains pin the patch component', () => {
   assert.throws(() => releaseRustToolchain('stable'), /not a release toolchain version/)
 })
 
-test('release assembly closes and verifies every payload hash', async (context) => {
+test('release assembly closes both programs and verifies every payload hash', async (context) => {
   const temporaryRoot = await mkdtemp(join(tmpdir(), 'yanshu-release-test-'))
   context.after(() => rm(temporaryRoot, { recursive: true, force: true }))
   const inputDirectory = join(temporaryRoot, 'input')
@@ -98,23 +100,50 @@ test('release assembly closes and verifies every payload hash', async (context) 
         sourceDateEpoch,
         sourceTreeClean: true,
         build: { cargoLocked: true, repetitions: 2 },
-        binary: { name: configuration.binaryName, sha256: 'b'.repeat(64), size: 1 },
-        archive: { name: archiveName, sha256: sha256(archive), size: archive.length }
+        binaries: RELEASE_PROGRAMS.map((program) => ({
+          key: program.key,
+          package: program.packageName,
+          name: releaseBinaryName(program, configuration),
+          sha256: 'b'.repeat(64),
+          size: 1,
+          smokeTest: program.smokeTest
+        })),
+        archive: {
+          name: archiveName,
+          sha256: sha256(archive),
+          size: archive.length,
+          entries: [
+            ...RELEASE_PROGRAMS.map(
+              (program) => `${stem}/${releaseBinaryName(program, configuration)}`
+            ),
+            `${stem}/README.md`,
+            `${stem}/LICENSE-APACHE`,
+            `${stem}/LICENSE-MIT`
+          ].sort((left, right) => left.localeCompare(right, 'en'))
+        }
       })
     )
   }
 
-  await writeFile(
-    join(inputDirectory, `yanshu-v${version}.cdx.json`),
-    canonicalJson({
-      bomFormat: 'CycloneDX',
-      specVersion: '1.5',
-      metadata: {
-        component: { version },
-        properties: [{ name: 'yanshu:source-commit', value: sourceCommit }]
-      }
-    })
-  )
+  for (const program of RELEASE_PROGRAMS) {
+    await writeFile(
+      join(inputDirectory, `yanshu-v${version}-${program.key}.cdx.json`),
+      canonicalJson({
+        bomFormat: 'CycloneDX',
+        specVersion: '1.5',
+        metadata: {
+          component: {
+            'bom-ref': `urn:yanshu:crate:${program.packageName}:${version}:${sourceCommit}`,
+            version
+          },
+          properties: [
+            { name: 'yanshu:source-commit', value: sourceCommit },
+            { name: 'yanshu:release-program', value: program.key }
+          ]
+        }
+      })
+    )
+  }
 
   const assemble = spawnSync(
     process.execPath,
@@ -138,13 +167,48 @@ test('release assembly closes and verifies every payload hash', async (context) 
   const verifyArguments = [join(scriptsDirectory, 'verify-release.mjs'), outputDirectory]
   const verified = spawnSync(process.execPath, verifyArguments, { encoding: 'utf8', shell: false })
   assert.equal(verified.status, 0, verified.stderr)
+  const manifest = JSON.parse(
+    await readFile(join(outputDirectory, `yanshu-v${version}.release.json`), 'utf8')
+  )
+  assert.deepEqual(
+    manifest.sboms.map((sbom) => sbom.program),
+    RELEASE_PROGRAMS.map((program) => program.key)
+  )
 
   const firstTarget = Object.keys(RELEASE_TARGETS).sort()[0]
   const tamperedArchive = join(outputDirectory, `yanshu-v${version}-${firstTarget}.zip`)
-  await writeFile(tamperedArchive, Buffer.concat([await readFile(tamperedArchive), Buffer.from('!')]))
+  const originalArchive = await readFile(tamperedArchive)
+  await writeFile(tamperedArchive, Buffer.concat([originalArchive, Buffer.from('!')]))
   const rejected = spawnSync(process.execPath, verifyArguments, { encoding: 'utf8', shell: false })
   assert.notEqual(rejected.status, 0)
   assert.match(rejected.stderr, /checksum mismatch/)
+
+  await writeFile(tamperedArchive, originalArchive)
+  const mcpSbomName = `yanshu-v${version}-mcp.cdx.json`
+  const mcpSbomPath = join(outputDirectory, mcpSbomName)
+  const mcpSbom = JSON.parse(await readFile(mcpSbomPath, 'utf8'))
+  mcpSbom.metadata.component['bom-ref'] =
+    `urn:yanshu:crate:yanshu-cli:${version}:${sourceCommit}`
+  const tamperedSbom = Buffer.from(canonicalJson(mcpSbom))
+  await writeFile(mcpSbomPath, tamperedSbom)
+  const mcpAsset = manifest.assets.find((asset) => asset.name === mcpSbomName)
+  mcpAsset.sha256 = sha256(tamperedSbom)
+  mcpAsset.size = tamperedSbom.length
+  const manifestName = `yanshu-v${version}.release.json`
+  const manifestPath = join(outputDirectory, manifestName)
+  await writeFile(manifestPath, canonicalJson(manifest))
+  const checksumNames = [...manifest.assets.map((asset) => asset.name), manifestName]
+  const checksumEntries = await Promise.all(
+    checksumNames.map(async (name) => [name, sha256(await readFile(join(outputDirectory, name)))])
+  )
+  await writeFile(join(outputDirectory, 'SHA256SUMS'), formatChecksums(checksumEntries))
+
+  const mislabeled = spawnSync(process.execPath, verifyArguments, {
+    encoding: 'utf8',
+    shell: false
+  })
+  assert.notEqual(mislabeled.status, 0)
+  assert.match(mislabeled.stderr, /release SBOM does not describe mcp/)
 })
 
 test('SBOM normalization removes random and checkout-local identity', async (context) => {
@@ -181,6 +245,8 @@ test('SBOM normalization removes random and checkout-local identity', async (con
       input,
       '--output',
       output,
+      '--program',
+      'cli',
       '--version',
       '0.11.0',
       '--source-commit',
@@ -197,5 +263,10 @@ test('SBOM normalization removes random and checkout-local identity', async (con
   assert.equal(sbom.metadata.timestamp, '2023-11-14T22:13:20.000Z')
   assert.match(sbom.metadata.component['bom-ref'], /^urn:yanshu:crate:yanshu-cli:/)
   assert.equal(sbom.dependencies[0].ref, sbom.metadata.component['bom-ref'])
+  assert.ok(
+    sbom.metadata.properties.some(
+      (property) => property.name === 'yanshu:release-program' && property.value === 'cli'
+    )
+  )
   assert.doesNotMatch(document, /path\+file|download_url=file|D:\//)
 })
