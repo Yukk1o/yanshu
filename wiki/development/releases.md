@@ -1,71 +1,90 @@
-# 可验证发布
+# 下载与验证 v0.12.0
 
-Yanshu 的 GitHub Release 不是“编译完随手上传”。v0.11 把版本身份、构建一致性、依赖清单、内容校验和来源证明连成一条机器可验证的证据链；v0.12 又把 LSP 和平台 VSIX 纳入同一个闭包。
+v0.12.0 是当前公开发布版。你可以从 [GitHub Release v0.12.0](https://github.com/Yukk1o/yanshu/releases/tag/v0.12.0) 下载命令行工具或 VS Code 扩展，不需要先安装 Rust。
 
-::: warning 当前范围
-当前发布里程碑是 v0.12。合格标签覆盖 Windows x86-64 与 Linux x86-64 的 `yanshu` CLI、只读 `yanshu-mcp`、`yanshu-lsp` 和对应平台 VSIX；已有发布不会被补写或替换。这不代表 crates.io、VS Code Marketplace、macOS、ARM、安装器或生产稳定性。
+::: warning 当前支持的平台
+官方二进制覆盖 Windows x86-64（MSVC）和 Linux x86-64（GNU）。目前没有 macOS、ARM、系统安装器、crates.io 包或 VS Code Marketplace 安装入口。
 :::
 
-## 标签怎样获得发布资格
+## 选择下载内容
 
-只有 push 到仓库的稳定标签会进入 publish job，而且必须同时满足：
+| 你要做什么 | 下载什么 |
+| --- | --- |
+| 使用命令行、MCP 或 LSP | 对应平台的 `yanshu-v0.12.0-<target>.zip` |
+| 在 VS Code 中编辑 `.yan` | 对应平台的 `yanshu-vscode-0.12.0-<platform>.vsix` |
+| 审计依赖 | `yanshu-v0.12.0-{cli,mcp,lsp,vscode}.cdx.json` 四份 SBOM |
+| 验证整套发布 | Release 页面中的全部 12 个资产 |
 
-1. 是注解式 Git tag，不是 lightweight tag；
-2. 指向 `origin/main` 已包含的 commit；
-3. 名称精确等于 `v` + workspace 版本，例如 `v0.11.0`；
-4. 第一方 crate 全部继承相同版本、MSRV、许可证和 `publish = false`；
-5. 第一方 path dependency 的精确版本没有漂移。
+每个平台 ZIP 都同时包含：
 
-Pull request 与手动触发只能做发布演练，没有 `contents`、OIDC 或 attestation 写权限。
+- `yanshu`：检查、格式化、运行与编译程序的 CLI；
+- `yanshu-mcp`：给 Codex、Claude Code、OpenCode 使用的只读 MCP server；
+- `yanshu-lsp`：编辑器语言服务。
 
-## 每个发布里有什么
+VSIX 已经内置对应平台的 LSP，不需要再单独配置 server。安装方法见 [VS Code 使用指南](/development/vscode)，Agent 接入见 [MCP 使用指南](/development/mcp)。
 
-```text
-annotated tag on main
-        │
-        ├─ Linux：全新 target A ─┐
-        │   CLI + MCP + LSP       ├─ 三个程序分别字节一致 ─ deterministic ZIP
-        │       全新 target B ───┘                   └─ linux-x64 VSIX × 2
-        │
-        ├─ Windows：全新 target A ─┐
-        │     CLI + MCP + LSP       ├─ 三个程序分别字节一致 ─ deterministic ZIP
-        │         全新 target B ───┘                   └─ win32-x64 VSIX × 2
-        │
-        ├─ CLI / MCP / LSP / VS Code CycloneDX 1.5 SBOM
-        └─ build records + release manifest + SHA256SUMS
-                                      │
-                                      ▼
-                         GitHub OIDC keyless provenance
-```
+## 下载并解压工具包
 
-每个平台有一个 ZIP、一个平台 VSIX 和一个 `.build.json`；ZIP 同时装入 `yanshu`、`yanshu-mcp` 与 `yanshu-lsp`。构建记录写明 target、源码 commit、源码时间、Rust/Cargo/Node/vsce 实际版本，以及三个二进制、VSIX 和归档各自的大小、smoke 契约与 SHA-256。总 release manifest 再把两个平台、四份 SBOM、VSIX 和构建记录闭合，`SHA256SUMS` 覆盖所有 payload 与 manifest。
-
-ZIP 不使用会随实现漂移的压缩器：条目排序、固定时间和 mode、只接受普通相对路径。Windows 使用 MSVC `/Brepro` 消除 PE timestamp 与 CodeView 随机构建标识。VSIX 使用精确锁定的 vsce 和源码时间构建两次，并分别携带两次独立构建的 LSP；任一字节不同都拒绝发布。Rust 与 npm SBOM 的随机 serial 和墙钟时间会被规范化，checkout 本地 `file:`/绝对路径会绑定到仓库 commit 身份；仍残留 runner 路径就拒绝发布。
-
-## 校验和不是签名
-
-攻击者若能同时替换 ZIP 与 `SHA256SUMS`，内容校验仍会“通过”。因此下载后必须做两层验证：
+Windows PowerShell：
 
 ```powershell
-node scripts/verify-release.mjs <下载目录>
-gh attestation verify <下载的资产> --repo Yukk1o/yanshu
+gh release download v0.12.0 --repo Yukk1o/yanshu --pattern "yanshu-v0.12.0-x86_64-pc-windows-msvc.zip"
+gh attestation verify .\yanshu-v0.12.0-x86_64-pc-windows-msvc.zip --repo Yukk1o/yanshu
+Expand-Archive .\yanshu-v0.12.0-x86_64-pc-windows-msvc.zip -DestinationPath C:\Tools
 ```
 
-第一条验证目录内 checksum 与 release manifest 的完整闭包；第二条验证 GitHub 为 `Yukk1o/yanshu` 的工作流记录过该资产的 keyless provenance。仓库不保存长期签名私钥。
+Linux x86-64：
 
-## “可复现”当前承诺到哪里
+```bash
+gh release download v0.12.0 --repo Yukk1o/yanshu \
+  --pattern 'yanshu-v0.12.0-x86_64-unknown-linux-gnu.zip'
+gh attestation verify ./yanshu-v0.12.0-x86_64-unknown-linux-gnu.zip \
+  --repo Yukk1o/yanshu
+unzip yanshu-v0.12.0-x86_64-unknown-linux-gnu.zip -d "$HOME/.local/opt"
+```
 
-同一平台 job 在两个全新的 Cargo target 目录完整构建 CLI、MCP 和 LSP，只有三个程序各自逐字节相同才继续。CLI 必须返回稳定 usage JSON；MCP 必须真实完成 initialize 和 `tools/list`；LSP 必须完成有界的 `initialize`、`shutdown`、`exit` 握手，并声明 UTF-16 与只读审查契约。两个 VSIX 也必须逐字节相同。构建固定 Cargo/npm lock、Rust patch 工具链、Node 22、精确 vsce、`SOURCE_DATE_EPOCH`、源码路径映射与 release profile。
+解压后，把版本目录加入 `PATH`，或在编辑器和 Agent 配置中使用可执行文件的绝对路径。
 
-但 GitHub 托管 runner 与系统 linker 还不是按镜像 digest 固定的 hermetic 环境。因此当前证据是“同源码、同 runner 双构建一致”，不是“任何机器已必然重建同一 hash”。`.build.json` 把实际工具链写出来，后续独立 rebuilder 才能透明比较，而不是把差异藏起来。
+## 三种验证分别证明什么
 
-## 本地检查
+### 1. `SHA256SUMS`：检查下载内容是否损坏
 
-不会发布任何内容的快速检查：
+下载资产和 `SHA256SUMS` 后，在 Linux、Git Bash 或其它带 `sha256sum` 的环境中运行：
+
+```bash
+sha256sum --check SHA256SUMS
+```
+
+它会重新计算文件哈希，适合发现下载损坏或文件被替换。但校验和文件和资产来自同一下载位置；如果二者一起被替换，仅检查 SHA-256 并不能证明发布者身份。
+
+### 2. 发布验证器：检查 schema v3 的完整闭包
+
+先把 Release 的全部 12 个资产放到同一目录，再从 Yanshu 仓库根目录运行：
 
 ```powershell
-node --test scripts/release.test.mjs
-node scripts/release-metadata.mjs
+gh release download v0.12.0 --repo Yukk1o/yanshu --dir .runtime\release-v0.12.0
+node scripts/verify-release.mjs .runtime\release-v0.12.0
 ```
 
-完整威胁模型与 Windows 本地双构建命令见[发布供应链契约](/source/docs/engineering/release-supply-chain.md.txt)，实际自动化见[release workflow](/source/.github/workflows/release.yml.txt)。
+验证器会检查 `SHA256SUMS`、`yanshu-v0.12.0.release.json`、两个平台构建记录、两个 ZIP、两个 VSIX 和四份 SBOM 是否互相引用且哈希一致。它证明“下载目录与 schema v3 发布清单内部一致”，仍不单独证明这些文件来自该 GitHub 仓库。
+
+### 3. GitHub attestation：验证来源证明
+
+对你真正要安装或分发的每个资产运行：
+
+```powershell
+gh attestation verify <资产路径> --repo Yukk1o/yanshu
+```
+
+这会验证 GitHub 记录的无密钥构建证明，并把资产绑定到 `Yukk1o/yanshu`。它不替你判断程序是否无 Bug，也不替代本机防病毒、组织软件准入和运行时权限控制。
+
+## 推荐的安装检查
+
+普通使用至少完成：
+
+1. 从 v0.12.0 Release 下载与你平台匹配的资产；
+2. 对要安装的 ZIP 或 VSIX 运行 `gh attestation verify`；
+3. 不带参数运行 `yanshu`，确认得到结构化 `CLI_USAGE`；随后按 [快速开始](/guide/quickstart) 运行 `hello.yan`；
+4. 需要归档、镜像或组织内再分发时，再下载全部资产并运行发布验证器。
+
+Yanshu 仍处于早期阶段，且项目主要由 AI 生成，可能存在大量 Bug。不要因为来源证明通过，就跳过业务测试、最小权限和回滚准备。

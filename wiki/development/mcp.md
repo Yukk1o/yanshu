@@ -1,65 +1,54 @@
-# 给 Codex、Claude Code 与 OpenCode 使用的 MCP
+# 让 Codex、Claude Code 与 OpenCode 理解 `.yan`
 
-`yanshu-mcp` 把正式 Reader、Parser、类型/效果分析、formatter 和 Rust 风格审查投影暴露成三个只读工具。Agent 先用自己的文件读取能力取得当前 `.yan` 文本，再把完整快照传给工具；server 本身不接收路径，也不读取或写入工作区。
+`yanshu-mcp` 是一个本地只读 MCP server。它让编程 Agent 调用 Yanshu 的正式 Parser、类型/效果分析、formatter 和 Rust 风格审查视图，而不是靠模型猜测 Lisp 语义。
 
-这和 [AI Agent Backend](/development/ai-agents) 是两条互补路径：Agent Backend 让宿主启动 Agent 去编辑一次性候选目录；MCP 则让已经在仓库里工作的 Codex、Claude Code 或 OpenCode 随时调用 Yanshu 的权威语言工具。
+Agent 先读取当前 `.yan` 文件，再把完整源码快照交给 MCP。server 本身不接收文件路径，也不读取或写入工作区。
 
-## 从发布包安装（无需 Rust）
+## 安装 `yanshu-mcp`
 
-合并本发布链变更后创建的后续 GitHub Release，会在每个平台 ZIP 中同时提供 `yanshu` 和 `yanshu-mcp`。历史 Release 不会被静默改写；下载时应确认归档内确实存在 MCP 可执行文件。
+从 [GitHub Release v0.12.0](https://github.com/Yukk1o/yanshu/releases/tag/v0.12.0) 下载与你平台匹配的 ZIP：
 
-Windows 示例：
+- Windows x86-64：`yanshu-v0.12.0-x86_64-pc-windows-msvc.zip`；
+- Linux x86-64：`yanshu-v0.12.0-x86_64-unknown-linux-gnu.zip`。
+
+v0.12.0 的每个平台 ZIP 都包含 `yanshu` CLI、`yanshu-mcp` 和 `yanshu-lsp`。下载后先验证来源，再解压：
 
 ```powershell
-$yanshuTag = "<版本标签>"
-gh release download $yanshuTag --repo Yukk1o/yanshu --pattern "yanshu-*-x86_64-pc-windows-msvc.zip"
-$yanshuArchive = Get-ChildItem -File "yanshu-*-x86_64-pc-windows-msvc.zip" | Select-Object -First 1
-gh attestation verify $yanshuArchive.FullName --repo Yukk1o/yanshu
-Expand-Archive $yanshuArchive.FullName -DestinationPath C:\Tools
+gh release download v0.12.0 --repo Yukk1o/yanshu --pattern "yanshu-v0.12.0-x86_64-pc-windows-msvc.zip"
+gh attestation verify .\yanshu-v0.12.0-x86_64-pc-windows-msvc.zip --repo Yukk1o/yanshu
+Expand-Archive .\yanshu-v0.12.0-x86_64-pc-windows-msvc.zip -DestinationPath C:\Tools
 ```
 
-完整下载全部资产后，还可以运行 `node scripts/verify-release.mjs <下载目录>`，检查 schema v2 manifest、两个程序的构建记录、CLI/MCP 各自的 SBOM 和 `SHA256SUMS` 闭包。校验和不能替代上面的来源证明，详见[可验证发布](/development/releases)。
-
-解压后的 server 路径类似：
+解压后的路径类似：
 
 ```text
-C:\Tools\yanshu-vVERSION-x86_64-pc-windows-msvc\yanshu-mcp.exe
+C:\Tools\yanshu-v0.12.0-x86_64-pc-windows-msvc\yanshu-mcp.exe
 ```
 
-Linux 归档同样把 `yanshu` 与 `yanshu-mcp` 放在一个版本目录中。配置 Agent 时使用解压后的绝对路径，避免启动目录变化后找不到 server。
+Linux 使用同名的无 `.exe` 可执行文件。后面的配置都建议填写绝对路径。
 
-## 从源码构建
+发布清单使用 schema v3，并附带 CLI、MCP、LSP、VS Code 四份 CycloneDX SBOM。需要验证整套下载时，参见 [下载与验证 v0.12.0](/development/releases)。
+
+如果你正在开发 Yanshu 本身，也可以从源码构建：
 
 ```powershell
 cargo build --locked --release -p yanshu-mcp
 ```
 
-Windows 产物是 `target\release\yanshu-mcp.exe`，Linux 产物是 `target/release/yanshu-mcp`。源码构建同样应在 Agent 配置中使用绝对路径。
-
-## 三个工具
-
-| 工具 | 返回 | 不会做什么 |
-| --- | --- | --- |
-| `yanshu.inspect_source` | AST inspection；v4 还返回类型、效果与 capability 闭包 | 不执行 guest，不读取路径 |
-| `yanshu.format_source` | `formattedSource`、`changed`、formatter 版本 | 不覆盖文件，不跳过重解析与语义复核 |
-| `yanshu.review_source` | 机器分析和 `rust-readonly-v3` 审查文档 | 不把审查文本当 Rust 或 `.yan` 输入 |
-
-每个工具都声明 `readOnlyHint: true`、`destructiveHint: false`、`idempotentHint: true` 和 `openWorldHint: false`。成功与语言诊断都同时返回 `structuredContent` 和兼容的 JSON 文本；未知工具或畸形 JSON-RPC 是协议错误，Parser、类型或 formatter 失败是 `isError: true` 的可修复工具结果。
-
 ## 连接 Codex
 
-按 [Codex 官方 MCP 文档](https://developers.openai.com/codex/mcp/) 可以直接用 CLI 添加本地 stdio server：
+用 Codex CLI 注册本地 stdio server：
 
 ```powershell
-codex mcp add yanshu -- C:\Tools\yanshu-vVERSION-x86_64-pc-windows-msvc\yanshu-mcp.exe
+codex mcp add yanshu -- C:\Tools\yanshu-v0.12.0-x86_64-pc-windows-msvc\yanshu-mcp.exe
 codex mcp list
 ```
 
-也可以写入用户级或可信项目级 `config.toml`：
+也可以在 Codex 的 `config.toml` 中配置：
 
 ```toml
 [mcp_servers.yanshu]
-command = "C:\\Tools\\yanshu-vVERSION-x86_64-pc-windows-msvc\\yanshu-mcp.exe"
+command = "C:\\Tools\\yanshu-v0.12.0-x86_64-pc-windows-msvc\\yanshu-mcp.exe"
 enabled_tools = [
   "yanshu.inspect_source",
   "yanshu.format_source",
@@ -67,23 +56,23 @@ enabled_tools = [
 ]
 ```
 
-Codex CLI、IDE 扩展和同一宿主上的 ChatGPT 桌面端共享这份 MCP 配置。连接后可用 `/mcp` 查看状态。
+连接后可以让 Codex：“读取 `policy.yan`，把完整文本交给 `yanshu.inspect_source`，根据诊断修改后再用 `yanshu.review_source` 复核 capability。”
 
 ## 连接 Claude Code
 
-按 [Claude Code 官方 MCP 文档](https://code.claude.com/docs/en/mcp) 添加本地、当前项目私有的 stdio server：
+把 server 加到当前项目的本地配置：
 
 ```powershell
 claude mcp add --transport stdio --scope local yanshu -- `
-  C:\Tools\yanshu-vVERSION-x86_64-pc-windows-msvc\yanshu-mcp.exe
+  C:\Tools\yanshu-v0.12.0-x86_64-pc-windows-msvc\yanshu-mcp.exe
 claude mcp list
 ```
 
-需要与团队共享时可以改用 `--scope project`，但不要提交只在一台机器成立的绝对路径；应先约定安装位置或用文档化的环境变量展开。Claude Code 中使用 `/mcp` 查看连接和工具数。
+在 Claude Code 中可用 `/mcp` 查看连接状态。若团队要共享项目配置，不要提交只在某一台电脑成立的绝对路径；先约定安装目录。
 
 ## 连接 OpenCode
 
-当前 [OpenCode v2 官方文档](https://opencode.ai/v2/docs/mcp-servers) 把本地 server 放在 `mcp.servers` 下。`opencode.json` 示例：
+在 `opencode.json` 中注册本地 server：
 
 ```json
 {
@@ -93,7 +82,7 @@ claude mcp list
       "yanshu": {
         "type": "local",
         "command": [
-          "C:\\Tools\\yanshu-vVERSION-x86_64-pc-windows-msvc\\yanshu-mcp.exe"
+          "C:\\Tools\\yanshu-v0.12.0-x86_64-pc-windows-msvc\\yanshu-mcp.exe"
         ]
       }
     }
@@ -101,30 +90,27 @@ claude mcp list
 }
 ```
 
-运行 `opencode mcp list` 检查状态。OpenCode v1 与 v2 配置形状不同，不要把旧版顶层 `mcp.<name>` 示例混进 v2 配置。
+运行 `opencode mcp list` 检查状态。不同 OpenCode 大版本的配置结构可能不同；若命令不能识别配置，请以你安装版本的官方文档为准。
 
-## 建议给 Agent 的用法
+## 三个可用工具
 
-可以直接要求：
+| 工具 | 用途 | 返回后由谁应用 |
+| --- | --- | --- |
+| `yanshu.inspect_source` | 解析源码，报告 AST、类型、效果与 capability 闭包 | Agent 根据稳定诊断修改源码 |
+| `yanshu.format_source` | 生成经过重解析和语义复核的格式化源码 | Agent 或人审查 diff 后写回 |
+| `yanshu.review_source` | 生成机器分析和 `rust-readonly-v3` 审查文档 | 人与 Agent 只读检查 |
 
-```text
-读取 policy.yan，把当前完整文本交给 yanshu.inspect_source。
-若有诊断，依据稳定错误码修复；再调用 yanshu.format_source，
-展示 diff 后应用 formattedSource，最后用 yanshu.review_source 复核效果和 capability。
-```
+MCP 不会替 Agent 保存文件。你也可以自己完成小改动，再让 Agent 调用这些工具复核，不必让模型每次重写整份程序。
 
-MCP 不会替 Agent 应用格式化结果。小改动仍可由人直接编辑 `.yan`，随后调用工具复核；不必每次都让模型重新生成整份程序。
+## 必须知道的安全边界
 
-## 协议与资源边界
+`yanshu-mcp`：
 
-- stdio 只输出一行一个 UTF-8 JSON-RPC 对象，stdout 不混入日志；
-- 同时支持 MCP `2026-07-28` 的 `server/discover` 无握手协议，以及 `2025-11-25`、`2025-06-18`、`2025-03-26`、`2024-11-05` 的 `initialize` 兼容路径；
-- 单条输入最多 4 MiB，单条输出最多 32 MiB；
-- 工具源码最多 512 KiB，仍受 Reader 的 token、节点数和深度限制；
-- formatter 输出最多 512 KiB，审查文本最多 4 MiB，结构化 payload 最多 8 MiB；
-- 调用顺序串行，因此同一进程没有并发分析风暴；
-- server 不读环境凭据、不访问文件或网络、不调用 LLM/provider、不运行 guest，也不提供写工具。
+- 不运行 guest 程序，也不调用其中的 capability；
+- 不接收路径，不自行读取、创建、覆盖或删除工作区文件；
+- 不访问网络、不调用 LLM/provider，也不读取环境凭据；
+- 只返回源码分析、候选格式化文本和只读审查视图；
+- 对输入、输出、源码和审查文本都有硬大小上限；
+- 把格式化或语言错误作为结构化结果返回，不用宿主堆栈代替诊断。
 
-512 KiB 是 Agent 工具入口的主动收紧，不改变 CLI/Reader 对规范源码的 4 MiB 总上限。输入 JSON 最坏六倍转义和输出的结构化/文本兼容副本都有编译期上界，并在序列化后再次检查实际字节数。
-
-实现入口：[stdio framing](/source/rust/crates/yanshu-mcp/src/protocol.rs.txt)、[协议分派](/source/rust/crates/yanshu-mcp/src/server.rs.txt)、[只读工具](/source/rust/crates/yanshu-mcp/src/tools.rs.txt)。完整契约见 [v0.12 规格](/source/docs/specs/v0.12.md.txt)。
+因此 MCP 是 Agent 的语言工具，不是执行沙箱，也不是自动批准 AI 改动的机制。最终 `.yan` 仍需经过 Parser、类型/效果检查、fuel、测试和项目自己的审查流程。

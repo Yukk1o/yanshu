@@ -196,4 +196,4 @@ fn audit(value: Int) -> Int {
 4. VS Code 面板无 `TextDocument`、无脚本、无执行或保存入口；
 5. 仍以 `.yan` AST、测试和宿主策略作为执行真相。
 
-当前还没有 route/schema/错误码的结构化差异视图，也没有从投影回写 AST 的编辑协议。它的价值是降低审查门槛，不是创建第二门可执行语言。路线位置见 [Rust 宿主与生态路线](/development/rust-roadmap)。
+当前还没有 route/schema/错误码的结构化差异视图，也没有从投影回写 AST 的编辑协议。它的价值是降低审查门槛，不是创建第二门可执行语言。实际使用方式见 [VS Code 使用指南](/development/vscode)。

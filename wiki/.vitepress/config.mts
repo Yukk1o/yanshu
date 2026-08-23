@@ -3,75 +3,84 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   base: process.env.YANSHU_DOCS_BASE || '/',
   lang: 'zh-CN',
-  title: '衍术 · Yanshu Wiki',
-  description: '让程序成为 AI 可理解、可验证、可继续演化的数据',
-  appearance: 'force-dark',
+  title: '衍术 Yanshu',
+  description: '衍术语言的学习指南、工具与 API 参考',
+  appearance: true,
   cleanUrls: true,
   srcExclude: ['README.md'],
   lastUpdated: true,
   head: [
-    ['meta', { name: 'theme-color', content: '#071017' }],
+    ['meta', { name: 'theme-color', content: '#3451b2' }],
     ['meta', { name: 'viewport', content: 'width=device-width, initial-scale=1.0' }]
   ],
   markdown: {
     lineNumbers: true
   },
   themeConfig: {
-    siteTitle: '衍术 / 语言观测台',
+    siteTitle: '衍术 Yanshu',
     nav: [
-      { text: '语言概览', link: '/guide/what-is' },
-      { text: '语法', link: '/language/syntax' },
-      { text: '数据模型', link: '/language/data-model' },
-      { text: 'Web DSL', link: '/backend/web' },
-      { text: 'AI 演化', link: '/evolution/lifecycle' },
-      { text: '安全', link: '/evolution/security' }
+      { text: '快速开始', link: '/guide/quickstart' },
+      { text: '语言指南', link: '/language/syntax' },
+      { text: '构建应用', link: '/backend/web' },
+      { text: '工具', link: '/development/vscode' },
+      { text: 'CLI 参考', link: '/reference/cli' }
     ],
     sidebar: [
       {
-        text: '认识衍术',
+        text: '1. 认识衍术',
         items: [
           { text: '语言是什么', link: '/guide/what-is' },
-          { text: '5 分钟上手', link: '/guide/quickstart' },
-          { text: '语言范式', link: '/language/paradigms' }
+          { text: '安装与 5 分钟上手', link: '/guide/quickstart' }
         ]
       },
       {
-        text: '语言手册',
+        text: '2. 语法与数据',
         items: [
           { text: '语法入门', link: '/language/syntax' },
           { text: '数据模型', link: '/language/data-model' },
+          { text: '函数、控制流与 Result', link: '/language/functions-results' }
+        ]
+      },
+      {
+        text: '3. 组织与安全边界',
+        items: [
           { text: '模块、数据类型与 Bundle', link: '/language/modules-bundles' },
-          { text: '类型、效果与只读审查', link: '/language/types-effects-review' },
-          { text: '内容寻址包与锁文件', link: '/language/packages-lockfiles' },
-          { text: 'fuel 字节码与 WASM', link: '/language/bytecode-wasm' },
-          { text: 'Schema 与统一错误', link: '/backend/schema-errors' },
-          { text: '标准库与 Library Backend', link: '/language/standard-library' },
+          { text: '能力与副作用', link: '/language/capabilities' },
+          { text: '类型、效果与只读审查', link: '/language/types-effects-review' }
+        ]
+      },
+      {
+        text: '4. 工具与编辑器',
+        items: [
+          { text: 'VS Code 扩展', link: '/development/vscode' },
+          { text: '格式化与代码导航', link: '/development/formatter' },
+          { text: '其他编辑器接入 LSP', link: '/development/lsp' },
+          { text: 'Codex / Claude / OpenCode', link: '/development/mcp' }
+        ]
+      },
+      {
+        text: '5. 构建真实应用',
+        items: [
+          { text: 'Schema 与业务错误', link: '/backend/schema-errors' },
+          { text: '费用审批实战', link: '/guide/expense-app' },
           { text: 'Web DSL 与路由', link: '/backend/web' }
         ]
       },
       {
-        text: 'AI 演化与安全',
+        text: '6. 参考与进阶',
         items: [
-          { text: '候选、验证、晋升与回滚', link: '/evolution/lifecycle' },
-          { text: '安全模型与能力边界', link: '/evolution/security' },
-          { text: '如何审查 AI 生成的改动', link: '/evolution/review-ai-change' }
+          { text: 'CLI 参考', link: '/reference/cli' },
+          { text: '标准库', link: '/language/standard-library' },
+          { text: '包与锁文件', link: '/language/packages-lockfiles' },
+          { text: '字节码与 WASM', link: '/language/bytecode-wasm' },
+          { text: 'AI 候选、审查与晋升', link: '/evolution/lifecycle' }
         ]
       },
       {
-        text: '实现与工具',
+        text: '贡献者',
+        collapsed: true,
         items: [
-          { text: '实现架构', link: '/guide/architecture' },
-          { text: 'CLI 参考', link: '/reference/cli' },
-          { text: 'Formatter 与稳定节点 ID', link: '/development/formatter' },
-          { text: '最小 LSP Server', link: '/development/lsp' },
-          { text: 'Tree-sitter 展示语法', link: '/development/tree-sitter' },
-          { text: 'VS Code 扩展', link: '/development/vscode' },
-          { text: 'Codex / Claude / OpenCode MCP', link: '/development/mcp' },
-          { text: '源码地图', link: '/reference/source-map' },
-          { text: 'AI Agent Backend', link: '/development/ai-agents' },
-          { text: 'Rust 宿主与生态路线', link: '/development/rust-roadmap' },
-          { text: '可验证发布', link: '/development/releases' },
-          { text: 'Git 分支工作流', link: '/development/git-workflow' }
+          { text: '参与语言开发', link: '/development/contributing' }
         ]
       }
     ],
@@ -95,7 +104,7 @@ export default defineConfig({
     lightModeSwitchTitle: '切换到浅色模式',
     darkModeSwitchTitle: '切换到深色模式',
     footer: {
-      message: 'AI 负责提出候选，语言门禁负责决定什么能够运行。',
+      message: '当前为实验性 v0.12.0；请先在非生产环境评估。',
       copyright: 'Yanshu language documentation'
     }
   }
