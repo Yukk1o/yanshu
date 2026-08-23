@@ -1,154 +1,113 @@
-# 5 分钟上手
+# 安装与 5 分钟上手
 
-这一页只使用当前 Rust 工具链：先解析一个 `.yan` 程序，再运行完整业务场景，最后启动活动版本 JSON API。所有命令都在仓库根目录执行。
+这一页只做三件事：安装 CLI，写一个函数，运行它。不需要先了解仓库结构或完整语言实现。
 
-## 1. 检查工具链
+## 1. 安装 CLI
 
-workspace 声明的最低 Rust 版本是 1.97：
+从 [Yanshu v0.12.0 Release](https://github.com/Yukk1o/yanshu/releases/tag/v0.12.0) 下载系统对应的压缩包：
 
-```powershell
-rustc --version
-cargo --version
-```
+- Windows x64：`yanshu-v0.12.0-x86_64-pc-windows-msvc.zip`
+- Linux x64：`yanshu-v0.12.0-x86_64-unknown-linux-gnu.zip`
 
-如果本机尚未安装 Rust，请通过官方 rustup 安装符合版本要求的稳定工具链。
+解压后的 `yanshu.exe` / `yanshu` 是 CLI，同目录还有编辑器和 Agent 可使用的 `yanshu-lsp` 与 `yanshu-mcp`。
 
-## 2. 让 Parser 读取程序
+Windows PowerShell：
 
 ```powershell
-cargo run --quiet --locked -p yanshu-cli -- `
-  inspect examples\discount\v2.yan
+Set-Location C:\path\to\yanshu-v0.12.0-x86_64-pc-windows-msvc
+.\yanshu.exe
 ```
 
-输出是 JSON，不是简单回显：
+Linux：
+
+```bash
+cd /path/to/yanshu-v0.12.0-x86_64-unknown-linux-gnu
+./yanshu
+```
+
+没有参数时，CLI 会返回 `CLI_USAGE` 和非零退出码；这表示可执行文件已能正常启动。
+
+::: tip 从源码运行
+如果你已经 clone 仓库并安装 Rust 1.97，可以把下面命令中的 `.\yanshu.exe` 替换为 `cargo run --quiet --locked -p yanshu-cli --`。
+:::
+
+## 2. 创建 `hello.yan`
+
+```lisp
+(program
+  (name hello)
+  (version 4)
+  (capabilities)
+
+  (signature greet (fn (string) string))
+  (def greet
+    (fn (name)
+      (string-append "你好，" name)))
+
+  (export greet))
+```
+
+这个程序声明了一个不需要副作用的导出函数 `greet`。它接收字符串，返回字符串。
+
+先让 Parser 和 v4 类型/效果分析器检查文件：
+
+```powershell
+.\yanshu.exe check hello.yan
+```
+
+成功时返回 JSON，顶层包含 `"ok": true`，并列出 `greet` 的类型与空 capability 集合。
+
+## 3. 准备参数
+
+导出函数的参数使用 JSON 数组传给 CLI。创建 `arguments.json`：
+
+```json
+["世界"]
+```
+
+## 4. 编译并运行
+
+```powershell
+.\yanshu.exe compile-bytecode hello.yan hello.ybc.json
+.\yanshu.exe run-bytecode hello.yan hello.ybc.json greet arguments.json
+```
+
+第二条命令的结果中包含：
 
 ```json
 {
   "ok": true,
-  "program": {
-    "name": "discount",
-    "version": 1,
-    "exports": ["calculate-discount"]
-  }
+  "result": "你好，世界"
 }
 ```
 
-`program` 字段包含 Parser 看到的 AST 摘要。命令实现见 [yanshu-cli](/source/rust/crates/yanshu-cli/src/main.rs.txt)，示例源码见 [discount/v2.yan](/source/examples/discount/v2.yan.txt)。
+实际输出还会包含内容哈希、`logEvents` 和 fuel 消耗报告。字节码在运行时会与 `hello.yan` 重新校验；修改源码后应重新编译。
 
-## 3. 运行语言与业务验证
+## 5. 安装 VS Code 扩展
 
-先运行 Rust workspace 测试：
+从同一 Release 下载与平台匹配的 VSIX：
 
-```powershell
-cargo test --workspace --locked
-```
-
-再运行可移植语言语料与任务业务场景：
+- Windows x64：`yanshu-vscode-0.12.0-win32-x64.vsix`
+- Linux x64：`yanshu-vscode-0.12.0-linux-x64.vsix`
 
 ```powershell
-cargo run --quiet --locked -p yanshu-cli -- `
-  conformance conformance\v1\manifest.json
-
-cargo run --quiet --locked -p yanshu-cli -- `
-  test-service `
-  examples\tasks\service.yan `
-  examples\tasks\scenarios.json
+code --install-extension .\yanshu-vscode-0.12.0-win32-x64.vsix
 ```
 
-第二个命令使用内存事务和固定时钟顺序执行 11 个场景，包括非法 body、默认值、创建、重复冲突、列表、读取、更新、删除与删除后 404。任何场景失败时输出 `ok: false` 并返回非零退出码。
-
-## 4. 启动活动版本 API
-
-```powershell
-.\scripts\serve-tasks.ps1
-```
-
-脚本会先运行完整场景，只有全部通过才注册并晋升版本；随后在 `127.0.0.1:8081` 启动 JSON API。另开 PowerShell：
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8081/tasks
-```
-
-当前入口提供 JSON API，不包含静态网页。按 `Ctrl+C` 停止服务；任务数据与代码版本分别位于 `.runtime/tasks/store.json` 和 `.runtime/tasks/code`。
-
-## 5. 验证 Bearer 认证
-
-server 始终拒绝非 loopback 地址。要启用本地单 token 认证，终端 1 安全输入 token：
-
-```powershell
-$secret = Read-Host "Local Bearer token" -AsSecureString
-$env:YANSHU_HTTP_BEARER_TOKEN = `
-  [Net.NetworkCredential]::new("", $secret).Password
-.\scripts\serve-tasks.ps1
-```
-
-环境变量不会跨 PowerShell 进程共享，所以终端 2 必须再次输入**同一个** token：
-
-```powershell
-$secret = Read-Host "Same local Bearer token" -AsSecureString
-$env:YANSHU_HTTP_BEARER_TOKEN = `
-  [Net.NetworkCredential]::new("", $secret).Password
-$headers = @{ Authorization = "Bearer $env:YANSHU_HTTP_BEARER_TOKEN" }
-$response = Invoke-WebRequest `
-  -Headers $headers `
-  -Uri http://127.0.0.1:8081/tasks
-$response.StatusCode
-$response.Headers["X-Request-Id"]
-```
-
-不设置 `YANSHU_HTTP_BEARER_TOKEN` 时认证关闭，但 loopback 限制仍然存在。客户端传入的 `x-request-id`、`authorization`、`cookie`、`proxy-authorization` 和 `x-api-key` 不会进入 `.yan` request headers。
-
-## 6. 查看脱敏观测
-
-每个已识别请求会追加一条 JSONL：
-
-```powershell
-Get-Content .runtime\tasks\store.json.observations.jsonl
-```
-
-记录只包含 schema version、时间、宿主 request ID、method、status、duration、handler、固定到该请求的源码 hash 和 error code。它不记录 path、query、headers、body、凭据或内部诊断。
-
-这是本地审计证据，尚不包含轮转、保留期、聚合、告警或生产访问控制。
-
-## 7. 修改一个候选但不直接上线
-
-先复制示例到自己的工作分支并修改，再检查和运行完整 suite：
-
-```powershell
-cargo run --quiet --locked -p yanshu-cli -- `
-  check examples\tasks\service.yan
-
-cargo run --quiet --locked -p yanshu-cli -- `
-  test-service `
-  examples\tasks\service.yan `
-  examples\tasks\scenarios.json
-```
-
-需要进入版本库时使用 `deploy-service`；它只会在场景全通过后晋升：
-
-```powershell
-cargo run --quiet --locked -p yanshu-cli -- `
-  deploy-service `
-  examples\tasks\service.yan `
-  examples\tasks\scenarios.json `
-  .runtime\tasks\code
-```
-
-AI 候选应先执行不带 `--promote` 的 `evolve-service`，让候选保持 staged；详见 [AI 演化生命周期](/evolution/lifecycle)。
+重新打开 `hello.yan`后，你应该能看到语法高亮、诊断、hover、补全、定义/引用、重命名和格式化。编辑器标题栏的预览命令会打开 Rust 风格只读审查视图；它不是 Rust 源码，也不能保存回 `.yan`。
 
 ## 常见问题
 
-### Rust 版本过低
+### `PROGRAM_FEATURE_REQUIRES_VERSION`
 
-确认 `rustc --version` 满足 workspace 的 `rust-version = "1.97"`，再更新稳定工具链。
+源码使用了当前 `(version ...)` 不支持的 form。新程序请使用 `(version 4)`；升级旧程序时也要补齐 v4 的导出 `signature`。
 
-### 8081 端口被占用
+### `TYPE_*` 或 `EFFECT_*`
 
-```powershell
-$env:YANSHU_HTTP_BIND = "127.0.0.1:9001"
-.\scripts\serve-tasks.ps1
-```
+v4 会在运行前检查参数、返回值和 capability 闭包。先看 JSON 中的稳定 `code` 和 source span，不要只搜索终端文案。
 
-### 服务启动前退出
+### Windows 报“无法运行此应用”
 
-查看 CLI 的结构化 JSON。最常见原因是 `.yan` 解析失败、11 个业务场景未全部通过、活动版本损坏或 bind 地址不是 loopback。
+确认下载的是 `x86_64-pc-windows-msvc` 压缩包，不是 Linux 产物。当前正式 Release 尚未提供 macOS 或 Arm 构建。
+
+下一步阅读[语法入门](/language/syntax)，或直接跟随[费用审批实战](/guide/expense-app)。

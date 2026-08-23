@@ -1,117 +1,77 @@
-# Yanshu 是什么语言
+# 衍术是什么
 
-Yanshu 是一门把程序当作**可验证数据**的实验性通用语言。它不复制 Rust 的系统编程定位；目标是让 AI 可以持续生成应用代码，同时让候选容易理解、容易验证，又不能绕过测试和发布边界直接进入运行时。
+衍术（Yanshu）是一门实验性、函数式优先的受限通用语言内核。它的目标不是让 AI 可以直接改写正在运行的代码，而是让人类和 AI 都能编写、审查和验证同一份结构化程序。
 
-它的核心承诺是：**AI 有提案权，语言宿主保留解释权、验证权和发布权。**
+一句话概括：**AI 可以提交候选程序，只有语言门禁和人类授权能让它生效。**
 
-## 一眼看懂一个程序
+## 它能做什么
+
+当前 v0.12.0 最适合这些场景：
+
+- 折扣、资格、审批、风控等可测试业务规则；
+- 通过 Schema 验证 JSON 输入的本地 API 原型；
+- 通过显式 KV、clock 和 log 能力实现小型有状态服务；
+- 将 AI 修复放进“候选 → 测试 → 审查 → 晋升”的可回滚流程；
+- 研究可定位 AST、类型/效果分析和可复现受限执行。
+
+仓库中的[费用审批实战](/guide/expense-app)展示了条件、集合、Schema、Result、用户定义数据与模式匹配如何配合。
+
+## 一个程序长什么样
 
 ```lisp
 (program
-  (name discount)
-  (version 1)
+  (name price-rule)
+  (version 4)
   (capabilities)
-  (def calculate-discount
-    (fn (price user-type)
-      (if (= user-type "vip")
-          (- price (quotient price 10))
-          price)))
-  (export calculate-discount))
+
+  (signature classify (fn (integer) string))
+  (def classify
+    (fn (amount)
+      (cond
+        ((< amount 0) "invalid")
+        ((>= amount 1000) "review")
+        (else "approved"))))
+
+  (export classify))
 ```
 
-括号只是表面形式。解析后它是一棵明确的 `Program` / `Expression` 树，近似下面的 Rust 数据：
-
-```rust
-Program {
-    name: "discount",
-    capabilities: [],
-    definitions: [Definition {
-        name: "calculate-discount",
-        value: Expr::Function { /* ... */ },
-    }],
-    exports: ["calculate-discount"],
-}
-```
-
-这就是“代码即数据”：模型可以生成完整程序，工具可以比较 AST，解释器只执行语言允许的节点。源码示例见 [discount/v2.yan](/source/examples/discount/v2.yan.txt)，结构定义见 [yanshu-syntax AST](/source/rust/crates/yanshu-syntax/src/ast.rs.txt)。
-
-## 语言为 AI 做了哪些取舍
-
-| 取舍 | 对 AI 和审查者的价值 |
-| --- | --- |
-| S 表达式对应 AST | 少一层复杂语法，结构边界明显 |
-| 小而封闭的 form 集合 | 模型不能凭空发明宿主语法 |
-| 函数式默认、不可变值 | 行为更容易重放、比较和测试 |
-| Schema、route、capability 是语言结构 | API、数据与权限变化可以结构化审查 |
-| 稳定诊断 code + JSON 输出 | 工具不必解析人类终端文案 |
-| fuel、深度和输入上限 | 候选不能无限消耗解释器资源 |
-| 模块 hash + 密封 Bundle | 多文件仍然形成一个可验证、可回滚的依赖闭包 |
-| package hash + 精确 lock | 跨包复用不会退回开发路径或漂移依赖 |
-| 内容哈希版本 + 显式晋升 | “生成成功”不会自动变成“正在运行” |
-
-## 语言由哪些部分组成
-
-```text
-.yan 源码
-   │
-   ▼
-受限 Reader ──► Parser ──► AST
-                           │
-               ┌───────────┴───────────┐
-               ▼                       ▼
-        有界解释器               结构化检查 / diff
-               │
-       ┌───────┼────────┐
-       ▼       ▼        ▼
-   纯函数    Web DSL   版本化标准库
-               │
-               ▼
-      显式 capability 与事务
-```
-
-- **语言前端**只接受一个有边界的 S 表达式，验证程序、Schema、路由和导出。
-- **解释器**执行自己的 AST，不执行任意宿主源码；fuel 和调用深度构成硬预算。
-- **数据模型**包含任意精度整数、字符串、布尔、List、Map、Result 和闭包。
-- **Web DSL**把 route、request、response、Schema 和统一错误变成语言契约。
-- **Library Backend**用版本化 portable API 连接可信实现，不让 guest 任意加载包。
-- **演化控制面**把候选、测试报告、内容哈希、active 指针和回滚分开。
-
-## 当前适合做什么
-
-当前最合适的场景是小型、可测试、契约清楚的业务逻辑：
-
-- 价格、折扣、资格、路由等纯规则；
-- 带 Schema 的 JSON API handler；
-- 使用事务 KV 的小型 CRUD 服务；
-- 需要模型提出候选、由完整场景验证后再晋升的程序；
-- 研究 AST patch、结构化 diff 和只读审查视图。
-
-完整案例包括覆盖 11 个有状态场景的[任务 CRUD 服务](/source/examples/tasks/service.yan.txt)，验证 v2 条件、集合、enum/union、校验成本和业务 Result 的[费用审批服务](/source/examples/expenses/service.yan.txt)，以及验证 v3 模块、封闭数据、模式匹配和内容密封的[多模块费用审批 Bundle](/language/modules-bundles)。这些是通用语言内核的验收程序，不是最终应用边界。
-
-## 通用语言目标与当前边界
-
-Yanshu v0.12 已有用户模块、typed 封闭数据、模式匹配、密封 Bundle、导出签名、静态 capability 闭包、Rust 风格只读审查、内容寻址包/锁文件、可替换 Rust Library Backend、fuel 字节码 VM 与可实例化 WASM ABI，以及 formatter、LSP/MCP、Tree-sitter 和平台 VSIX，但仍处于通用语言的安全内核阶段，还不是通用系统语言或公网生产框架。它尚无原生 WASM lowering、并发、浮点数及通用文件/网络 API；宿主侧也仍缺少独立进程沙箱、正式数据库/PITR、异地备份、指标告警和 canary 自动化。
-
-这些既是阶段性功能缺口，也是不可绕过的设计约束。新能力必须通过版本化语义、密封 Bundle 和明确 capability/effect 引入，不能让模型靠调用未知宿主函数越过边界。目标是安全的通用应用语言，而不是拥有环境权限和任意 `unsafe` 的系统语言。
-
-## 人类怎样阅读它
-
-不需要先成为 Lisp 专家。先记住：左括号后第一个词是操作，其余是参数。
+只需先记住一条阅读规则：左括号后的第一个词是操作，后面是参数。
 
 ```lisp
-(if (= role "admin")
-    (api-response 200 data)
-    (api-error 403 "FORBIDDEN" "access denied"))
+(>= amount 1000)
 ```
 
-可以直接读成：
+可以直接读成 Rust/Go 风格的 `amount >= 1000`。S 表达式让语法树边界稳定，但你不需要会 Lisp 才能开始。
 
-```rust
-if role == "admin" {
-    api_response(200, data)
-} else {
-    api_error(403, "FORBIDDEN", "access denied")
-}
-```
+## 和普通应用语言有什么不同
 
-下一步读[语言范式](/language/paradigms)建立心智模型，或直接进入[语法入门](/language/syntax)。
+| 设计 | 开发者看到的效果 |
+| --- | --- |
+| 不可变值与词法作用域 | 无共享可变全局状态，规则更容易重放 |
+| 显式 `Result` | 校验失败、业务拒绝与系统故障分开 |
+| 显式 capability | 源码可直接看出是否读写 KV、时钟或日志 |
+| fuel 和输入上限 | 死循环、过深数据和超大输出会失败关闭 |
+| v4 类型/效果分析 | 导出 API 和可达副作用在运行前检查 |
+| 密封 Bundle 和内容哈希 | 多文件程序仍然有一个精确、可回滚的依赖闭包 |
+
+## 不会隐式获得宿主权限
+
+衍术程序默认不能读文件、连网、查看环境变量、启动线程、加载动态库或运行任意宿主代码。声明 `(capabilities log)` 只表示请求日志能力；宿主仍需要显式注入它。
+
+这个边界不会使程序自动正确，也不代替业务测试；它只把候选代码能做的事限定在宿主明确提供的窄接口内。详见[能力与副作用](/language/capabilities)。
+
+## 当前不适合什么
+
+当前版本不适合：
+
+- 操作系统、驱动、游戏引擎等系统编程；
+- 需要浮点、原生线程、通用文件/网络 API 的应用；
+- 不经隔离就暴露公网的生产服务；
+- 依赖 Marketplace、macOS/Arm 预构建包或审查视图双向回写的工作流；
+- 将“AI 说已修复”当成可以发布的证据。
+
+::: warning 实验性软件
+本项目的代码由 AI 编程代理大量协助生成，可能存在大量 Bug，尚未生产就绪。请在隔离的非生产环境评估。
+:::
+
+接下来跟随[安装与 5 分钟上手](/guide/quickstart)运行第一个程序。

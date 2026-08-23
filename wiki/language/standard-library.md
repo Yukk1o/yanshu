@@ -110,4 +110,4 @@ trait LibraryBackend: Send {
 5. 外部 backend 先运行在可终止的进程或 WASM 沙箱，再考虑进程内动态加载；
 6. 所有新库都必须有预算、确定性、portable value 和供应链审查。
 
-继续阅读 [安全模型](/evolution/security) 和 [Rust 宿主与生态路线](/development/rust-roadmap)。
+继续阅读 [安全模型](/evolution/security) 和 [能力与副作用](/language/capabilities)。

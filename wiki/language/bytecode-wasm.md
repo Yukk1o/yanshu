@@ -83,4 +83,4 @@ yanshu_run(export_index: i32, arguments_handle: i32, fuel: i64) -> result_handle
 v0.10 已有可实例化 WASM ABI 与完整 fuel 字节码语义，但尚未做原生 WASM 指令级 lowering。这个边界是有意保留的：优化后端必须先证明不会破坏 BigInt、truthiness、效果和 fuel。
 :::
 
-完整契约见 [v0.10 规格](/source/docs/specs/v0.10.md.txt)，实现入口见 [编译器与 VM 源码地图](/reference/source-map#编译器与-wasm)。
+完整语义契约见 [v0.10 规格](/source/docs/specs/v0.10.md.txt)，命令参数见 [CLI 参考](/reference/cli)。
