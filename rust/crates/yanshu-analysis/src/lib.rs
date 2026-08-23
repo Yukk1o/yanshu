@@ -300,4 +300,56 @@ mod tests {
             assert_eq!(diagnostic.code, "TYPE_ARITY", "call: {call}");
         }
     }
+
+    #[test]
+    fn versioned_library_contracts_drive_calls_and_first_class_function_types() {
+        let program = require(load_program_source(
+            r#"(program
+                (name text-v2-types)
+                (version 4)
+                (libraries (text 2))
+                (signature split (fn (string) (list string)))
+                (def split (fn (value) (text/split (text/trim value) ",")))
+                (signature lower-all (fn ((list string)) (list string)))
+                (def lower-all (fn (values) (list-map text/lowercase values)))
+                (export split lower-all))"#,
+        ));
+        let report = require(analyze_program(&program));
+        assert!(report.capability_closure.is_empty());
+        assert_eq!(
+            report
+                .definitions
+                .iter()
+                .find(|definition| definition.name == "split")
+                .map(|definition| definition.inferred_type.clone()),
+            Some(Type::Function {
+                parameters: vec![Type::String],
+                result: Box::new(Type::List(Box::new(Type::String))),
+            })
+        );
+
+        let wrong_list = require(load_program_source(
+            r#"(program
+                (name text-v2-wrong-list)
+                (version 4)
+                (libraries (text 2))
+                (signature run (fn () string))
+                (def run (fn () (text/join (list 1 2) ",")))
+                (export run))"#,
+        ));
+        let diagnostic = require_error(analyze_program(&wrong_list));
+        assert_eq!(diagnostic.code, "TYPE_MISMATCH");
+
+        let v1 = require(load_program_source(
+            r#"(program
+                (name text-v1-boundary)
+                (version 4)
+                (libraries (text 1))
+                (signature run (fn (string) string))
+                (def run (fn (value) (text/trim value)))
+                (export run))"#,
+        ));
+        let diagnostic = require_error(analyze_program(&v1));
+        assert_eq!(diagnostic.code, "TYPE_UNBOUND_NAME");
+    }
 }

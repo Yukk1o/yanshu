@@ -2,7 +2,6 @@
   (name unknown-library)
   (version 1)
   (capabilities)
-  (libraries (text 2))
+  (libraries (text 99))
   (def run (fn () #t))
   (export run))
-

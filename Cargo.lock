@@ -1625,6 +1625,7 @@ version = "0.12.0"
 dependencies = [
  "serde_json",
  "yanshu-diagnostic",
+ "yanshu-library",
  "yanshu-syntax",
 ]
 
@@ -1728,6 +1729,7 @@ name = "yanshu-library"
 version = "0.12.0"
 dependencies = [
  "num-bigint",
+ "num-traits",
  "serde_json",
  "yanshu-diagnostic",
 ]

@@ -475,6 +475,18 @@ fn fuel_description(model: FuelModel) -> String {
         FuelModel::TextReplace { base, block_size } => {
             format!("{base} + ceil(text/replacement work and output bytes / {block_size})")
         }
+        FuelModel::TextCase {
+            base, block_size, ..
+        } => format!("{base} + ceil(Unicode case work and output bytes / {block_size})"),
+        FuelModel::TextSplit { base, block_size } => {
+            format!("{base} + ceil(split scan, output bytes, and segments / {block_size})")
+        }
+        FuelModel::TextJoin { base, block_size } => {
+            format!("{base} + ceil(join input, output bytes, and item count / {block_size})")
+        }
+        FuelModel::TextSubstring { base, block_size } => {
+            format!("{base} + ceil(scalar scan and output bytes / {block_size})")
+        }
     }
 }
 
@@ -631,6 +643,26 @@ mod tests {
             Some("let binding · lexical scope")
         );
         assert_eq!(&SOURCE[result.replace_start..result.replace_end], "target");
+    }
+
+    #[test]
+    fn completion_uses_the_declared_text_contract_version() {
+        let source = r#"(program
+          (name completion-text-v2)
+          (version 4)
+          (libraries (text 2))
+          (signature run (fn (string) string))
+          (def run (fn (value) (text/lo value)))
+          (export run))"#;
+        let result = result_at(source, "text/lo", "text/lo".len());
+        assert_eq!(labels(&result), ["text/lowercase"]);
+        let candidate = result
+            .candidates
+            .first()
+            .unwrap_or_else(|| panic!("text@2 completion missing"));
+        assert!(candidate.detail.contains("fn(String) -> String"));
+        assert!(candidate.detail.contains("text@2"));
+        assert!(candidate.documentation.contains("Unicode case work"));
     }
 
     #[test]

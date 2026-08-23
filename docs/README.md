@@ -7,7 +7,7 @@
 | 目录 | 内容 | 权威性 |
 | --- | --- | --- |
 | [`ai-agent-guide.md`](ai-agent-guide.md) | Codex、Claude Code、OpenCode 与其他代理的共享仓库契约 | 当前、强制 |
-| [`specs/`](specs/) | v0.6 至 v0.12 的语言与里程碑契约、审计收口 | 当前规格 |
+| [`specs/`](specs/) | v0.6 至 v0.13 的语言与里程碑契约、审计收口 | 当前规格 |
 | [`engineering/`](engineering/) | safe Rust、依赖、发布供应链、Git 与 VersionStore 设计 | 当前工程契约 |
 | [`operations/`](operations/) | Provider、影子运行、备份与恢复 | 当前操作边界 |
 | [`guides/`](guides/) | 迁移类指南 | 当前指导 |
