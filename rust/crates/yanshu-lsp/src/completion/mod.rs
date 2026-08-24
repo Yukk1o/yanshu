@@ -496,6 +496,9 @@ fn fuel_description(model: FuelModel) -> String {
         FuelModel::IntegerGcd { base, block_size } => {
             format!("{base} + product of integer magnitude blocks of {block_size} bits")
         }
+        FuelModel::Utf8Bytes { base, block_size } => {
+            format!("{base} + ceil(total UTF-8 input bytes / {block_size})")
+        }
     }
 }
 
@@ -692,6 +695,26 @@ mod tests {
         assert!(candidate.detail.contains("fn(Int, Int) -> Int"));
         assert!(candidate.detail.contains("math@1"));
         assert!(candidate.documentation.contains("magnitude blocks"));
+    }
+
+    #[test]
+    fn completion_uses_the_declared_digest_contract() {
+        let source = r#"(program
+          (name completion-digest-v1)
+          (version 4)
+          (libraries (digest 1))
+          (signature run (fn (string) string))
+          (def run (fn (value) (digest/sha256-t value)))
+          (export run))"#;
+        let result = result_at(source, "digest/sha256-t", "digest/sha256-t".len());
+        assert_eq!(labels(&result), ["digest/sha256-text"]);
+        let candidate = result
+            .candidates
+            .first()
+            .unwrap_or_else(|| panic!("digest@1 completion missing"));
+        assert!(candidate.detail.contains("fn(String) -> String"));
+        assert!(candidate.detail.contains("digest@1"));
+        assert!(candidate.documentation.contains("UTF-8 input bytes"));
     }
 
     #[test]

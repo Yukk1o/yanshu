@@ -134,18 +134,46 @@ Yanshu 的标准库是纯函数、确定性且有 fuel 计量的 API。程序必
 
 可运行示例：[math@1 示例](/source/examples/libraries/math.yan.txt)
 
+## digest@1
+
+`digest@1` 用于对文本生成确定性内容摘要：
+
+| 函数 | 参数 | 结果 |
+| --- | --- | --- |
+| `digest/sha256-text` | String | 64 字符的小写 SHA-256 十六进制 String |
+| `digest/sha512-text` | String | 128 字符的小写 SHA-512 十六进制 String |
+
+程序需要显式声明：
+
+```lisp
+(libraries (digest 1))
+```
+
+函数名中的 `text` 表示输入按 UTF-8 编码后再计算摘要：
+
+```lisp
+(digest/sha256-text "abc")
+; => "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+```
+
+编码是契约的一部分，同一文本不会受操作系统或 locale 影响。未来即使语言加入 `Bytes`，这两个函数也仍只处理 UTF-8 文本，不会改变旧程序语义。
+
+SHA 摘要不能替代密码哈希、MAC 或数字签名：不要用它保存用户密码，也不要用无密钥摘要判断消息是否来自可信发送者。
+
+可运行示例：[digest@1 示例](/source/examples/libraries/digest.yan.txt)
+
 ## 资源与失败边界
 
 标准库调用与普通表达式共享 guest fuel。每个操作的计费模型属于版本化契约；输入越长、输出越大或列表项越多，消耗越高。
 
-文本结果最多 1 MiB。split 结果还受 10,000 个 portable 节点上限约束。后端在分配放大结果前检查上限，失败时返回稳定诊断，而不是继续占用宿主内存。
+文本结果最多 1 MiB。split 结果还受 10,000 个 portable 节点上限约束。摘要按输入 UTF-8 字节数计费，输出固定为 64 或 128 个 ASCII 字符。后端在分配放大结果前检查上限，失败时返回稳定诊断，而不是继续占用宿主内存。
 
 ## Library 与 capability
 
 | | Library | Capability |
 | --- | --- | --- |
 | 用途 | 纯文本、编码、确定性算法 | KV、clock、log 等外部效果 |
-| 声明 | `(libraries (text 2) (math 1))` | `(capabilities kv clock)` |
+| 声明 | `(libraries (text 2) (math 1) (digest 1))` | `(capabilities kv clock)` |
 | 宿主状态 | 不接触 | 通过窄接口显式接触 |
 | 效果闭包 | 不进入 | 进入静态 capability 闭包 |
 

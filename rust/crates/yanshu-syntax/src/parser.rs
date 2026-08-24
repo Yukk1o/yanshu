@@ -2152,7 +2152,7 @@ mod tests {
 
     #[test]
     fn definitions_cannot_shadow_language_forms_or_builtins() {
-        for name in ["map", "log", "if", "math/gcd"] {
+        for name in ["map", "log", "if", "math/gcd", "digest/sha256-text"] {
             let source = format!(
                 "(program (name reserved) (version 1) (def {name} (fn () 1)) (export {name}))"
             );

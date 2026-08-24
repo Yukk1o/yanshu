@@ -325,6 +325,9 @@ fn fuel_description(model: FuelModel) -> String {
         FuelModel::IntegerGcd { base, block_size } => {
             format!("{base} + product of integer magnitude blocks of {block_size} bits")
         }
+        FuelModel::Utf8Bytes { base, block_size } => {
+            format!("{base} + ceil(total UTF-8 input bytes / {block_size})")
+        }
     }
 }
 
@@ -357,6 +360,12 @@ fn library_summary(library: &str, operation: &str) -> &'static str {
         ("math", "max") => "Returns the larger of two arbitrary-precision integers.",
         ("math", "clamp") => "Clamps a value to an explicitly ordered inclusive range.",
         ("math", "gcd") => "Returns the non-negative greatest common divisor; gcd(0, 0) is 0.",
+        ("digest", "sha256-text") => {
+            "Returns the lowercase SHA-256 digest of the string's UTF-8 encoding."
+        }
+        ("digest", "sha512-text") => {
+            "Returns the lowercase SHA-512 digest of the string's UTF-8 encoding."
+        }
         _ => "Invokes one operation from a trusted versioned Library Backend contract.",
     }
 }
@@ -548,6 +557,23 @@ mod tests {
         assert!(hover.contains("library: math@1 (declared)"));
         assert!(hover.contains("greatest common divisor"));
         assert!(hover.contains("product of integer magnitude blocks"));
+    }
+
+    #[test]
+    fn renders_digest_v1_contract_encoding_and_fuel() {
+        let source = r#"(program
+          (name hover-digest-v1)
+          (version 4)
+          (libraries (digest 1))
+          (signature run (fn (string) string))
+          (def run (fn (value) (digest/sha256-text value)))
+          (export run))"#;
+        let hover = text_at(source, marker(source, "digest/sha256-text"))
+            .unwrap_or_else(|| panic!("digest@1 hover missing"));
+        assert!(hover.contains("type: fn(String) -> String"));
+        assert!(hover.contains("library: digest@1 (declared)"));
+        assert!(hover.contains("string's UTF-8 encoding"));
+        assert!(hover.contains("UTF-8 input bytes"));
     }
 
     #[test]

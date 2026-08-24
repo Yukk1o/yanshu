@@ -1731,6 +1731,7 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "serde_json",
+ "sha2",
  "yanshu-diagnostic",
 ]
 
