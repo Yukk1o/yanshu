@@ -1,0 +1,12 @@
+(program
+  (name digest-example)
+  (version 4)
+  (capabilities)
+  (libraries (digest 1))
+
+  (signature content-digests (fn (string) map))
+
+  (def content-digests
+    (fn (text) (map "sha256" (digest/sha256-text text) "sha512" (digest/sha512-text text))))
+
+  (export content-digests))

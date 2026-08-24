@@ -2324,6 +2324,70 @@ mod tests {
         assert_eq!(exhausted.code, "RUNTIME_FUEL_EXHAUSTED");
     }
 
+    #[test]
+    fn digest_v1_matches_compiled_execution_and_charges_utf8_byte_fuel() {
+        let program = require(load_program_source(
+            r#"(program
+                (name digest-v1-runtime)
+                (version 4)
+                (libraries (digest 1))
+                (signature hashes (fn (string) map))
+                (def hashes
+                  (fn (value)
+                    (map "sha256" (digest/sha256-text value)
+                         "sha512" (digest/sha512-text value))))
+                (export hashes))"#,
+        ));
+        let input = vec![Value::String("abc".to_owned())];
+        let interpreted = require(execute_export(
+            &program,
+            "hashes",
+            input.clone(),
+            ExecutionOptions::default(),
+        ));
+        let artifact = require(compile_bytecode(&program));
+        let compiled = require(execute_compiled_export(
+            &artifact,
+            "hashes",
+            input,
+            ExecutionOptions::default(),
+        ));
+        assert_eq!(compiled, interpreted);
+        assert_eq!(
+            interpreted,
+            Value::Map(BTreeMap::from([
+                (
+                    MapKey::String("sha256".to_owned()),
+                    Value::String(
+                        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+                            .to_owned(),
+                    ),
+                ),
+                (
+                    MapKey::String("sha512".to_owned()),
+                    Value::String(
+                        concat!(
+                            "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a",
+                            "2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
+                        )
+                        .to_owned(),
+                    ),
+                ),
+            ]))
+        );
+
+        let exhausted = require_error(execute_export(
+            &program,
+            "hashes",
+            vec![Value::String("x".repeat(10_000))],
+            ExecutionOptions {
+                fuel: 10,
+                ..ExecutionOptions::default()
+            },
+        ));
+        assert_eq!(exhausted.code, "RUNTIME_FUEL_EXHAUSTED");
+    }
+
     struct CountingTextBackend {
         calls: Arc<AtomicUsize>,
     }

@@ -378,5 +378,31 @@ mod tests {
         ));
         let diagnostic = require_error(analyze_program(&wrong_math));
         assert_eq!(diagnostic.code, "TYPE_MISMATCH");
+
+        let digest = require(load_program_source(
+            r#"(program
+                (name digest-v1-types)
+                (version 4)
+                (libraries (digest 1))
+                (signature hashes (fn ((list string)) (list string)))
+                (def hashes (fn (values) (list-map digest/sha256-text values)))
+                (signature hash-one (fn (string) string))
+                (def hash-one (fn (value) (digest/sha512-text value)))
+                (export hashes hash-one))"#,
+        ));
+        let report = require(analyze_program(&digest));
+        assert!(report.capability_closure.is_empty());
+
+        let wrong_digest = require(load_program_source(
+            r#"(program
+                (name digest-v1-wrong-type)
+                (version 4)
+                (libraries (digest 1))
+                (signature run (fn (integer) string))
+                (def run (fn (value) (digest/sha256-text value)))
+                (export run))"#,
+        ));
+        let diagnostic = require_error(analyze_program(&wrong_digest));
+        assert_eq!(diagnostic.code, "TYPE_MISMATCH");
     }
 }

@@ -1,0 +1,12 @@
+(program
+  (name conformance-digest-v1)
+  (version 4)
+  (capabilities)
+  (libraries (digest 1))
+
+  (signature hashes (fn (string) map))
+
+  (def hashes
+    (fn (value) (map "sha256" (digest/sha256-text value) "sha512" (digest/sha512-text value))))
+
+  (export hashes))

@@ -107,6 +107,10 @@ pub enum FuelModel {
         base: u64,
         block_size: u64,
     },
+    Utf8Bytes {
+        base: u64,
+        block_size: u64,
+    },
 }
 
 impl FuelModel {
@@ -248,6 +252,15 @@ impl FuelModel {
                 let left_blocks = integer_blocks(left, block_size)?;
                 let right_blocks = integer_blocks(right, block_size)?;
                 Ok(base.saturating_add(left_blocks.saturating_mul(right_blocks)))
+            }
+            Self::Utf8Bytes { base, block_size } => {
+                let bytes = arguments.iter().try_fold(0_u64, |total, value| {
+                    let LibraryValue::String(value) = value else {
+                        return Err(invalid_fuel_arguments("UTF-8 bytes"));
+                    };
+                    Ok(total.saturating_add(u64::try_from(value.len()).unwrap_or(u64::MAX)))
+                })?;
+                scaled_cost(base, block_size, bytes)
             }
         }
     }
@@ -611,7 +624,34 @@ pub const MATH_V1: LibraryContract = LibraryContract {
     operations: MATH_V1_OPERATIONS,
 };
 
-const TRUSTED_CONTRACTS: &[LibraryContract] = &[TEXT_V1, TEXT_V2, MATH_V1];
+const DIGEST_V1_OPERATIONS: &[OperationContract] = &[
+    OperationContract {
+        name: "sha256-text",
+        parameters: STRING,
+        result: LibraryType::String,
+        fuel: FuelModel::Utf8Bytes {
+            base: 1,
+            block_size: 64,
+        },
+    },
+    OperationContract {
+        name: "sha512-text",
+        parameters: STRING,
+        result: LibraryType::String,
+        fuel: FuelModel::Utf8Bytes {
+            base: 1,
+            block_size: 64,
+        },
+    },
+];
+
+pub const DIGEST_V1: LibraryContract = LibraryContract {
+    name: "digest",
+    version: 1,
+    operations: DIGEST_V1_OPERATIONS,
+};
+
+const TRUSTED_CONTRACTS: &[LibraryContract] = &[TEXT_V1, TEXT_V2, MATH_V1, DIGEST_V1];
 
 #[must_use]
 pub fn trusted_contract(name: &str, version: u16) -> Option<LibraryContract> {

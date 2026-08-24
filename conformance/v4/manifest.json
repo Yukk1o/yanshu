@@ -148,6 +148,34 @@
         "message": "math/clamp minimum cannot exceed maximum",
         "details": {}
       }
+    },
+    {
+      "name": "v4-digest-v1-reference-semantics",
+      "phase": "run",
+      "source": "programs/digest-v1.yan",
+      "entry": "hashes",
+      "args": ["abc"],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "sha512": "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
+        }
+      }
+    },
+    {
+      "name": "v4-digest-v1-bytecode-matches-interpreter",
+      "phase": "run-compiled",
+      "source": "programs/digest-v1.yan",
+      "entry": "hashes",
+      "args": ["abc"],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "sha512": "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
+        }
+      }
     }
   ]
 }

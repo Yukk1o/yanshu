@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod contract;
+mod digest;
 mod math;
 mod registry;
 mod text;
@@ -9,9 +10,10 @@ mod value;
 use yanshu_diagnostic::YanshuResult;
 
 pub use contract::{
-    FuelModel, LibraryContract, LibraryType, MATH_V1, OperationContract, TEXT_V1, TEXT_V2,
-    is_trusted_operation_name, trusted_contract,
+    DIGEST_V1, FuelModel, LibraryContract, LibraryType, MATH_V1, OperationContract, TEXT_V1,
+    TEXT_V2, is_trusted_operation_name, trusted_contract,
 };
+pub use digest::RustDigestBackend;
 pub use math::{MAXIMUM_MATH_INTEGER_BITS, RustMathBackend};
 pub use registry::{BackendDescriptor, LibraryInvocation, LibraryRegistry};
 pub use text::{RustTextBackend, RustTextV2Backend};
@@ -361,6 +363,65 @@ mod tests {
                 .is_some()
         );
         assert!(trusted_contract("math", 2).is_none());
+    }
+
+    #[test]
+    fn digest_v1_has_standard_utf8_vectors_and_byte_fuel() {
+        let mut registry = LibraryRegistry::rust_standard();
+        let sha256 = registry
+            .invoke(
+                "digest",
+                1,
+                "sha256-text",
+                &[LibraryValue::String("abc".to_owned())],
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(
+            sha256.value,
+            LibraryValue::String(
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".to_owned()
+            )
+        );
+
+        let sha512 = registry
+            .invoke(
+                "digest",
+                1,
+                "sha512-text",
+                &[LibraryValue::String("abc".to_owned())],
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(
+            sha512.value,
+            LibraryValue::String(
+                concat!(
+                    "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a",
+                    "2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
+                )
+                .to_owned()
+            )
+        );
+
+        let ascii_fuel = registry
+            .call_fuel(
+                "digest",
+                1,
+                "sha256-text",
+                &[LibraryValue::String("x".repeat(64))],
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        let unicode_fuel = registry
+            .call_fuel(
+                "digest",
+                1,
+                "sha256-text",
+                &[LibraryValue::String("语".repeat(22))],
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(ascii_fuel, 2);
+        assert_eq!(unicode_fuel, 3);
+        assert!(trusted_contract("digest", 1).is_some());
+        assert!(trusted_contract("digest", 2).is_none());
     }
 
     #[test]
