@@ -89,6 +89,65 @@
         "kind": "value",
         "value": ["ai", "i̇stanbul"]
       }
+    },
+    {
+      "name": "v4-math-v1-reference-semantics",
+      "phase": "run",
+      "source": "programs/math-v1.yan",
+      "entry": "summarize",
+      "args": [
+        {"$int": "-42"},
+        {"$int": "-10"},
+        {"$int": "10"},
+        {"$int": "30"}
+      ],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "abs": {"$int": "42"},
+          "sign": {"$int": "-1"},
+          "minimum": {"$int": "-42"},
+          "maximum": {"$int": "30"},
+          "clamped": {"$int": "-10"},
+          "gcd": {"$int": "6"}
+        }
+      }
+    },
+    {
+      "name": "v4-math-v1-bytecode-matches-interpreter",
+      "phase": "run-compiled",
+      "source": "programs/math-v1.yan",
+      "entry": "summarize",
+      "args": [
+        {"$int": "-42"},
+        {"$int": "-10"},
+        {"$int": "10"},
+        {"$int": "30"}
+      ],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "abs": {"$int": "42"},
+          "sign": {"$int": "-1"},
+          "minimum": {"$int": "-42"},
+          "maximum": {"$int": "30"},
+          "clamped": {"$int": "-10"},
+          "gcd": {"$int": "6"}
+        }
+      }
+    },
+    {
+      "name": "v4-math-v1-invalid-clamp-range",
+      "phase": "run-compiled",
+      "source": "programs/math-v1.yan",
+      "entry": "invalid-range",
+      "args": [{"$int": "0"}],
+      "expect": {
+        "kind": "diagnostic",
+        "code": "RUNTIME_LIBRARY_ARGUMENT",
+        "message": "math/clamp minimum cannot exceed maximum",
+        "details": {}
+      }
     }
   ]
 }

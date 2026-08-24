@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod contract;
+mod math;
 mod registry;
 mod text;
 mod value;
@@ -8,8 +9,10 @@ mod value;
 use yanshu_diagnostic::YanshuResult;
 
 pub use contract::{
-    FuelModel, LibraryContract, LibraryType, OperationContract, TEXT_V1, TEXT_V2, trusted_contract,
+    FuelModel, LibraryContract, LibraryType, MATH_V1, OperationContract, TEXT_V1, TEXT_V2,
+    is_trusted_operation_name, trusted_contract,
 };
+pub use math::{MAXIMUM_MATH_INTEGER_BITS, RustMathBackend};
 pub use registry::{BackendDescriptor, LibraryInvocation, LibraryRegistry};
 pub use text::{RustTextBackend, RustTextV2Backend};
 pub use value::{LibraryKey, LibraryValue};
@@ -22,6 +25,7 @@ pub trait LibraryBackend: Send {
 
 #[cfg(test)]
 mod tests {
+    use num_bigint::BigInt;
     use yanshu_diagnostic::{Diagnostic, YanshuResult};
 
     use crate::{
@@ -253,6 +257,110 @@ mod tests {
             ],
         ));
         assert_eq!(oversized_join.code, "RUNTIME_LIBRARY_RESULT_LIMIT");
+    }
+
+    #[test]
+    fn math_v1_has_stable_integer_semantics_and_magnitude_fuel() {
+        let mut registry = LibraryRegistry::rust_standard();
+        let abs = registry
+            .invoke("math", 1, "abs", &[LibraryValue::Int(BigInt::from(-42_i8))])
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(abs.value, LibraryValue::Int(BigInt::from(42_u8)));
+
+        let sign = registry
+            .invoke("math", 1, "sign", &[LibraryValue::Int(BigInt::ZERO)])
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(sign.value, LibraryValue::Int(BigInt::ZERO));
+
+        let clamp = registry
+            .invoke(
+                "math",
+                1,
+                "clamp",
+                &[
+                    LibraryValue::Int(BigInt::from(-42_i8)),
+                    LibraryValue::Int(BigInt::from(-10_i8)),
+                    LibraryValue::Int(BigInt::from(10_u8)),
+                ],
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(clamp.value, LibraryValue::Int(BigInt::from(-10_i8)));
+
+        let gcd = registry
+            .invoke(
+                "math",
+                1,
+                "gcd",
+                &[
+                    LibraryValue::Int(BigInt::from(-42_i8)),
+                    LibraryValue::Int(BigInt::from(30_u8)),
+                ],
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(gcd.value, LibraryValue::Int(BigInt::from(6_u8)));
+
+        let zero_gcd = registry
+            .invoke(
+                "math",
+                1,
+                "gcd",
+                &[
+                    LibraryValue::Int(BigInt::ZERO),
+                    LibraryValue::Int(BigInt::ZERO),
+                ],
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(zero_gcd.value, LibraryValue::Int(BigInt::ZERO));
+
+        let small_fuel = registry
+            .call_fuel(
+                "math",
+                1,
+                "gcd",
+                &[
+                    LibraryValue::Int(BigInt::from(12_u8)),
+                    LibraryValue::Int(BigInt::from(18_u8)),
+                ],
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        let large = BigInt::from(1_u8) << 4095_usize;
+        let large_fuel = registry
+            .call_fuel(
+                "math",
+                1,
+                "gcd",
+                &[LibraryValue::Int(large.clone()), LibraryValue::Int(large)],
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert!(large_fuel > small_fuel);
+    }
+
+    #[test]
+    fn math_v1_rejects_invalid_bounds_and_oversized_inputs_before_backend_work() {
+        let mut registry = LibraryRegistry::rust_standard();
+        let invalid_bounds = require_error(registry.invoke(
+            "math",
+            1,
+            "clamp",
+            &[
+                LibraryValue::Int(BigInt::ZERO),
+                LibraryValue::Int(BigInt::from(2_u8)),
+                LibraryValue::Int(BigInt::from(1_u8)),
+            ],
+        ));
+        assert_eq!(invalid_bounds.code, "RUNTIME_LIBRARY_ARGUMENT");
+
+        let oversized = BigInt::from(1_u8) << 65_536_usize;
+        let oversized_input =
+            require_error(registry.invoke("math", 1, "abs", &[LibraryValue::Int(oversized)]));
+        assert_eq!(oversized_input.code, "RUNTIME_LIBRARY_ARGUMENT");
+
+        assert!(
+            trusted_contract("math", 1)
+                .and_then(|contract| contract.operation("gcd"))
+                .is_some()
+        );
+        assert!(trusted_contract("math", 2).is_none());
     }
 
     #[test]

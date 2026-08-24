@@ -6,7 +6,7 @@ use num_bigint::BigInt;
 use num_traits::{ToPrimitive, Zero};
 use serde_json::json;
 use yanshu_diagnostic::{Diagnostic, YanshuResult};
-use yanshu_library::trusted_contract;
+use yanshu_library::{is_trusted_operation_name, trusted_contract};
 
 use crate::{
     Binding, CondClause, DataField, DataTypeDefinition, Datum, DatumKind, Definition, Expression,
@@ -19,7 +19,7 @@ const SUPPORTED_METHODS: &[&str] = &["GET", "POST", "PUT", "PATCH", "DELETE"];
 const EXPRESSION_KEYWORDS: &[&str] = &[
     "quote", "if", "and", "or", "cond", "match", "let", "fn", "do",
 ];
-const RESERVED_SCHEMA_NAMES: &[&str] = &[
+const CORE_RESERVED_BINDING_NAMES: &[&str] = &[
     "+",
     "-",
     "*",
@@ -70,17 +70,6 @@ const RESERVED_SCHEMA_NAMES: &[&str] = &[
     "kv-put",
     "kv-delete",
     "kv-list",
-    "text/length",
-    "text/starts-with?",
-    "text/ends-with?",
-    "text/contains?",
-    "text/replace",
-    "text/trim",
-    "text/lowercase",
-    "text/uppercase",
-    "text/split",
-    "text/join",
-    "text/substring",
 ];
 const MAXIMUM_SCHEMAS: usize = 64;
 const MAXIMUM_SCHEMA_DEPTH: usize = 16;
@@ -332,7 +321,7 @@ pub fn parse_program(datum: &Datum, source: &str) -> YanshuResult<Program> {
                     .at(form_datum.span));
                 }
                 for variant in &definition.variants {
-                    if RESERVED_SCHEMA_NAMES.contains(&variant.name.as_str())
+                    if is_reserved_binding_name(&variant.name)
                         || EXPRESSION_KEYWORDS.contains(&variant.name.as_str())
                     {
                         return Err(Diagnostic::new(
@@ -400,7 +389,7 @@ pub fn parse_program(datum: &Datum, source: &str) -> YanshuResult<Program> {
                     .at(form_datum.span));
                 }
                 let schema_name = form[1].symbol().unwrap_or_default().to_owned();
-                if RESERVED_SCHEMA_NAMES.contains(&schema_name.as_str()) {
+                if is_reserved_binding_name(&schema_name) {
                     return Err(Diagnostic::new(
                         "PROGRAM_SCHEMA_RESERVED_NAME",
                         "schema name conflicts with a language or capability binding",
@@ -500,7 +489,7 @@ pub fn parse_program(datum: &Datum, source: &str) -> YanshuResult<Program> {
                     ));
                 }
                 let definition_name = form[1].symbol().unwrap_or_default().to_owned();
-                if RESERVED_SCHEMA_NAMES.contains(&definition_name.as_str())
+                if is_reserved_binding_name(&definition_name)
                     || EXPRESSION_KEYWORDS.contains(&definition_name.as_str())
                 {
                     return Err(Diagnostic::new(
@@ -805,6 +794,10 @@ pub fn parse_program(datum: &Datum, source: &str) -> YanshuResult<Program> {
         exports,
         source: source.to_owned(),
     })
+}
+
+fn is_reserved_binding_name(name: &str) -> bool {
+    CORE_RESERVED_BINDING_NAMES.contains(&name) || is_trusted_operation_name(name)
 }
 
 fn parse_data_type(form: &[Datum], datum: &Datum) -> YanshuResult<DataTypeDefinition> {
@@ -2159,7 +2152,7 @@ mod tests {
 
     #[test]
     fn definitions_cannot_shadow_language_forms_or_builtins() {
-        for name in ["map", "log", "if"] {
+        for name in ["map", "log", "if", "math/gcd"] {
             let source = format!(
                 "(program (name reserved) (version 1) (def {name} (fn () 1)) (export {name}))"
             );

@@ -9,8 +9,8 @@ use serde_json::json;
 use yanshu_diagnostic::{Diagnostic, YanshuResult};
 
 use crate::{
-    LibraryBackend, LibraryContract, LibraryValue, RustTextBackend, RustTextV2Backend,
-    trusted_contract,
+    LibraryBackend, LibraryContract, LibraryValue, RustMathBackend, RustTextBackend,
+    RustTextV2Backend, trusted_contract,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,6 +53,13 @@ impl LibraryRegistry {
             RegisteredBackend {
                 provider: "rust-std".to_owned(),
                 backend: Box::<RustTextV2Backend>::default(),
+            },
+        );
+        registry.backends.insert(
+            ("math".to_owned(), 1),
+            RegisteredBackend {
+                provider: "rust-std".to_owned(),
+                backend: Box::<RustMathBackend>::default(),
             },
         );
         registry

@@ -351,5 +351,32 @@ mod tests {
         ));
         let diagnostic = require_error(analyze_program(&v1));
         assert_eq!(diagnostic.code, "TYPE_UNBOUND_NAME");
+
+        let math = require(load_program_source(
+            r#"(program
+                (name math-v1-types)
+                (version 4)
+                (libraries (math 1))
+                (signature magnitudes (fn ((list integer)) (list integer)))
+                (def magnitudes (fn (values) (list-map math/abs values)))
+                (signature bounded (fn (integer integer integer) integer))
+                (def bounded (fn (value minimum maximum)
+                  (math/clamp value minimum maximum)))
+                (export magnitudes bounded))"#,
+        ));
+        let report = require(analyze_program(&math));
+        assert!(report.capability_closure.is_empty());
+
+        let wrong_math = require(load_program_source(
+            r#"(program
+                (name math-v1-wrong-type)
+                (version 4)
+                (libraries (math 1))
+                (signature run (fn (string) integer))
+                (def run (fn (value) (math/abs value)))
+                (export run))"#,
+        ));
+        let diagnostic = require_error(analyze_program(&wrong_math));
+        assert_eq!(diagnostic.code, "TYPE_MISMATCH");
     }
 }

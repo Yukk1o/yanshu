@@ -1,0 +1,23 @@
+(program
+  (name conformance-math-v1)
+  (version 4)
+  (capabilities)
+  (libraries (math 1))
+
+  (signature summarize (fn (integer integer integer integer) map))
+
+  (def summarize
+    (fn (value minimum maximum other)
+      (map
+        "abs" (math/abs value)
+        "sign" (math/sign value)
+        "minimum" (math/min value other)
+        "maximum" (math/max value other)
+        "clamped" (math/clamp value minimum maximum)
+        "gcd" (math/gcd value other))))
+
+  (signature invalid-range (fn (integer) integer))
+
+  (def invalid-range (fn (value) (math/clamp value 5 -5)))
+
+  (export summarize invalid-range))

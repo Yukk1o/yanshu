@@ -91,6 +91,49 @@ Yanshu 的标准库是纯函数、确定性且有 fuel 计量的 API。程序必
 - [text@1 示例](/source/examples/libraries/text.yan.txt)
 - [text@2 示例](/source/examples/libraries/text-v2.yan.txt)
 
+## math@1
+
+`math@1` 面向任意精度整数，所有函数都是确定性纯函数：
+
+| 函数 | 参数 | 结果 |
+| --- | --- | --- |
+| `math/abs` | Int | 非负绝对值 |
+| `math/sign` | Int | `-1`、`0` 或 `1` |
+| `math/min` | Int, Int | 较小的 Int |
+| `math/max` | Int, Int | 较大的 Int |
+| `math/clamp` | Int, Int, Int | 钳制到闭区间的 Int |
+| `math/gcd` | Int, Int | 非负最大公约数 |
+
+程序需要显式声明：
+
+```lisp
+(libraries (math 1))
+```
+
+常见业务用法：
+
+```lisp
+(math/clamp 135 0 100)
+; => 100
+
+(math/abs -42)
+; => 42
+
+(math/sign -42)
+; => -1
+
+(math/gcd -42 30)
+; => 6
+```
+
+`math/clamp` 的参数顺序是 `value, minimum, maximum`，并要求 `minimum <= maximum`。非法区间返回 `RUNTIME_LIBRARY_ARGUMENT`，不会悄悄交换边界。
+
+`math/gcd` 始终返回非负值，`(math/gcd 0 0)` 返回 `0`。它按照两个整数的 magnitude block 乘积计量，因此大整数不会以接近常数的 fuel 运行。
+
+`math@1` 暂不提供 `pow` 和 `lcm`：它们可能显著放大 BigInt，必须先具备可精确预检、预扣 fuel、再分配结果的调用契约，不能把保守误拒绝永久写进 v1。
+
+可运行示例：[math@1 示例](/source/examples/libraries/math.yan.txt)
+
 ## 资源与失败边界
 
 标准库调用与普通表达式共享 guest fuel。每个操作的计费模型属于版本化契约；输入越长、输出越大或列表项越多，消耗越高。
@@ -102,7 +145,7 @@ Yanshu 的标准库是纯函数、确定性且有 fuel 计量的 API。程序必
 | | Library | Capability |
 | --- | --- | --- |
 | 用途 | 纯文本、编码、确定性算法 | KV、clock、log 等外部效果 |
-| 声明 | `(libraries (text 2))` | `(capabilities kv clock)` |
+| 声明 | `(libraries (text 2) (math 1))` | `(capabilities kv clock)` |
 | 宿主状态 | 不接触 | 通过窄接口显式接触 |
 | 效果闭包 | 不进入 | 进入静态 capability 闭包 |
 
