@@ -304,16 +304,34 @@ fn fuel_description(model: FuelModel) -> String {
         FuelModel::TextReplace { base, block_size } => {
             format!("{base} + ceil(text/replacement work and output bytes / {block_size})")
         }
+        FuelModel::TextCase {
+            base, block_size, ..
+        } => format!("{base} + ceil(Unicode case work and output bytes / {block_size})"),
+        FuelModel::TextSplit { base, block_size } => {
+            format!("{base} + ceil(split scan, output bytes, and segments / {block_size})")
+        }
+        FuelModel::TextJoin { base, block_size } => {
+            format!("{base} + ceil(join input, output bytes, and item count / {block_size})")
+        }
+        FuelModel::TextSubstring { base, block_size } => {
+            format!("{base} + ceil(scalar scan and output bytes / {block_size})")
+        }
     }
 }
 
 fn library_summary(operation: &str) -> &'static str {
     match operation {
         "length" => "Counts Unicode scalar values rather than UTF-8 bytes.",
-        "starts-with?" => "Tests a Unicode string prefix through the declared text@1 backend.",
-        "ends-with?" => "Tests a Unicode string suffix through the declared text@1 backend.",
-        "contains?" => "Tests substring containment through the declared text@1 backend.",
+        "starts-with?" => "Tests a Unicode string prefix through the declared text backend.",
+        "ends-with?" => "Tests a Unicode string suffix through the declared text backend.",
+        "contains?" => "Tests substring containment through the declared text backend.",
         "replace" => "Replaces all matches after checking bounded output amplification.",
+        "trim" => "Removes Unicode whitespace from both ends of a string.",
+        "lowercase" => "Applies deterministic, locale-independent Unicode lowercase mapping.",
+        "uppercase" => "Applies deterministic, locale-independent Unicode uppercase mapping.",
+        "split" => "Splits on a non-empty literal separator and preserves empty segments.",
+        "join" => "Joins a list of strings with bounded output amplification.",
+        "substring" => "Selects a half-open range using Unicode scalar indexes.",
         _ => "Invokes one operation from a trusted versioned Library Backend contract.",
     }
 }
@@ -471,6 +489,23 @@ mod tests {
         assert!(user.contains("kind: function definition"));
         assert!(user.contains("type: fn(Int) -> Int"));
         assert!(user.contains("effects: log"));
+    }
+
+    #[test]
+    fn renders_text_v2_contract_types_semantics_and_fuel() {
+        let source = r#"(program
+          (name hover-text-v2)
+          (version 4)
+          (libraries (text 2))
+          (signature run (fn (string) string))
+          (def run (fn (value) (text/substring value 0 1)))
+          (export run))"#;
+        let hover = text_at(source, marker(source, "text/substring"))
+            .unwrap_or_else(|| panic!("text@2 hover missing"));
+        assert!(hover.contains("type: fn(String, Int, Int) -> String"));
+        assert!(hover.contains("library: text@2 (declared)"));
+        assert!(hover.contains("half-open range"));
+        assert!(hover.contains("scalar scan and output bytes"));
     }
 
     #[test]

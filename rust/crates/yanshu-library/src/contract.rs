@@ -4,7 +4,10 @@ use serde_json::json;
 use yanshu_diagnostic::{Diagnostic, YanshuResult};
 
 use crate::LibraryValue;
-use crate::text::checked_replace_output_bytes;
+use crate::text::{
+    checked_case_output_bytes, checked_join_output_bytes, checked_replace_output_bytes,
+    checked_split_result, checked_substring_byte_range,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LibraryType {
@@ -15,6 +18,7 @@ pub enum LibraryType {
     String,
     Symbol,
     List,
+    StringList,
     Map,
     Result,
     Variant,
@@ -31,6 +35,7 @@ impl LibraryType {
             Self::String => "String",
             Self::Symbol => "Symbol",
             Self::List => "List",
+            Self::StringList => "List<String>",
             Self::Map => "Map",
             Self::Result => "Result",
             Self::Variant => "Variant",
@@ -47,6 +52,13 @@ impl LibraryType {
             Self::String => matches!(value, LibraryValue::String(_)),
             Self::Symbol => matches!(value, LibraryValue::Symbol(_)),
             Self::List => matches!(value, LibraryValue::Nil | LibraryValue::List(_)),
+            Self::StringList => match value {
+                LibraryValue::Nil => true,
+                LibraryValue::List(values) => values
+                    .iter()
+                    .all(|value| matches!(value, LibraryValue::String(_))),
+                _ => false,
+            },
             Self::Map => matches!(value, LibraryValue::Map(_)),
             Self::Result => matches!(value, LibraryValue::Ok(_) | LibraryValue::Err(_)),
             Self::Variant => matches!(value, LibraryValue::Variant { .. }),
@@ -57,8 +69,31 @@ impl LibraryType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FuelModel {
     Fixed(u64),
-    TextCharacters { base: u64, block_size: u64 },
-    TextReplace { base: u64, block_size: u64 },
+    TextCharacters {
+        base: u64,
+        block_size: u64,
+    },
+    TextReplace {
+        base: u64,
+        block_size: u64,
+    },
+    TextCase {
+        base: u64,
+        block_size: u64,
+        uppercase: bool,
+    },
+    TextSplit {
+        base: u64,
+        block_size: u64,
+    },
+    TextJoin {
+        base: u64,
+        block_size: u64,
+    },
+    TextSubstring {
+        base: u64,
+        block_size: u64,
+    },
 }
 
 impl FuelModel {
@@ -66,12 +101,6 @@ impl FuelModel {
         match self {
             Self::Fixed(value) => Ok(value),
             Self::TextCharacters { base, block_size } => {
-                if block_size == 0 {
-                    return Err(Diagnostic::simple(
-                        "RUNTIME_LIBRARY_CONTRACT_FAILURE",
-                        "library fuel block size cannot be zero",
-                    ));
-                }
                 let characters = arguments.iter().try_fold(0_u64, |total, value| {
                     let LibraryValue::String(text) = value else {
                         return Err(Diagnostic::simple(
@@ -82,15 +111,9 @@ impl FuelModel {
                     Ok(total
                         .saturating_add(u64::try_from(text.chars().count()).unwrap_or(u64::MAX)))
                 })?;
-                Ok(base.saturating_add(characters.saturating_add(block_size - 1) / block_size))
+                scaled_cost(base, block_size, characters)
             }
             Self::TextReplace { base, block_size } => {
-                if block_size == 0 {
-                    return Err(Diagnostic::simple(
-                        "RUNTIME_LIBRARY_CONTRACT_FAILURE",
-                        "library fuel block size cannot be zero",
-                    ));
-                }
                 let [
                     LibraryValue::String(input),
                     LibraryValue::String(pattern),
@@ -113,9 +136,101 @@ impl FuelModel {
                     .saturating_add(pattern_characters)
                     .saturating_add(replacement_characters)
                     .saturating_add(output_bytes);
-                Ok(base.saturating_add(work.saturating_add(block_size - 1) / block_size))
+                scaled_cost(base, block_size, work)
+            }
+            Self::TextCase {
+                base,
+                block_size,
+                uppercase,
+            } => {
+                let [LibraryValue::String(input)] = arguments else {
+                    return Err(invalid_fuel_arguments("text case conversion"));
+                };
+                let input_characters = u64::try_from(input.chars().count()).unwrap_or(u64::MAX);
+                let output_bytes =
+                    u64::try_from(checked_case_output_bytes(input, uppercase)?).unwrap_or(u64::MAX);
+                scaled_cost(
+                    base,
+                    block_size,
+                    input_characters.saturating_add(output_bytes),
+                )
+            }
+            Self::TextSplit { base, block_size } => {
+                let [LibraryValue::String(input), LibraryValue::String(separator)] = arguments
+                else {
+                    return Err(invalid_fuel_arguments("text split"));
+                };
+                let metrics = checked_split_result(input, separator)?;
+                let work = u64::try_from(input.chars().count())
+                    .unwrap_or(u64::MAX)
+                    .saturating_add(u64::try_from(separator.chars().count()).unwrap_or(u64::MAX))
+                    .saturating_add(u64::try_from(metrics.output_bytes).unwrap_or(u64::MAX))
+                    .saturating_add(u64::try_from(metrics.segments).unwrap_or(u64::MAX));
+                scaled_cost(base, block_size, work)
+            }
+            Self::TextJoin { base, block_size } => {
+                let [values, LibraryValue::String(separator)] = arguments else {
+                    return Err(invalid_fuel_arguments("text join"));
+                };
+                let values = string_list(values)
+                    .ok_or_else(|| invalid_fuel_arguments("text join string list"))?;
+                let output_bytes = checked_join_output_bytes(values, separator)?;
+                let item_characters = values.iter().fold(0_u64, |total, value| {
+                    let LibraryValue::String(value) = value else {
+                        return u64::MAX;
+                    };
+                    total.saturating_add(u64::try_from(value.chars().count()).unwrap_or(u64::MAX))
+                });
+                let work = item_characters
+                    .saturating_add(u64::try_from(separator.chars().count()).unwrap_or(u64::MAX))
+                    .saturating_add(u64::try_from(output_bytes).unwrap_or(u64::MAX))
+                    .saturating_add(u64::try_from(values.len()).unwrap_or(u64::MAX));
+                scaled_cost(base, block_size, work)
+            }
+            Self::TextSubstring { base, block_size } => {
+                let [
+                    LibraryValue::String(input),
+                    LibraryValue::Int(start),
+                    LibraryValue::Int(end),
+                ] = arguments
+                else {
+                    return Err(invalid_fuel_arguments("text substring"));
+                };
+                let range = checked_substring_byte_range(input, start, end)?;
+                let work = u64::try_from(input.chars().count())
+                    .unwrap_or(u64::MAX)
+                    .saturating_add(
+                        u64::try_from(range.end.saturating_sub(range.start)).unwrap_or(u64::MAX),
+                    );
+                scaled_cost(base, block_size, work)
             }
         }
+    }
+}
+
+fn scaled_cost(base: u64, block_size: u64, work: u64) -> YanshuResult<u64> {
+    if block_size == 0 {
+        return Err(Diagnostic::simple(
+            "RUNTIME_LIBRARY_CONTRACT_FAILURE",
+            "library fuel block size cannot be zero",
+        ));
+    }
+    Ok(base.saturating_add(work.saturating_add(block_size - 1) / block_size))
+}
+
+fn invalid_fuel_arguments(operation: &str) -> Diagnostic {
+    Diagnostic::new(
+        "RUNTIME_LIBRARY_CONTRACT_FAILURE",
+        "library fuel model received invalid arguments",
+        json!({ "operation": operation }),
+    )
+}
+
+fn string_list(value: &LibraryValue) -> Option<&[LibraryValue]> {
+    match value {
+        LibraryValue::Nil => Some(&[]),
+        LibraryValue::List(values) => Some(values),
+        _ => None,
     }
 }
 
@@ -202,6 +317,8 @@ impl LibraryContract {
 
 const STRING: &[LibraryType] = &[LibraryType::String];
 const STRING_STRING: &[LibraryType] = &[LibraryType::String, LibraryType::String];
+const STRING_LIST_STRING: &[LibraryType] = &[LibraryType::StringList, LibraryType::String];
+const STRING_INT_INT: &[LibraryType] = &[LibraryType::String, LibraryType::Int, LibraryType::Int];
 const THREE_STRINGS: &[LibraryType] = &[
     LibraryType::String,
     LibraryType::String,
@@ -262,10 +379,121 @@ pub const TEXT_V1: LibraryContract = LibraryContract {
     operations: TEXT_OPERATIONS,
 };
 
+const TEXT_V2_OPERATIONS: &[OperationContract] = &[
+    OperationContract {
+        name: "length",
+        parameters: STRING,
+        result: LibraryType::Int,
+        fuel: FuelModel::TextCharacters {
+            base: 1,
+            block_size: 64,
+        },
+    },
+    OperationContract {
+        name: "starts-with?",
+        parameters: STRING_STRING,
+        result: LibraryType::Bool,
+        fuel: FuelModel::TextCharacters {
+            base: 1,
+            block_size: 64,
+        },
+    },
+    OperationContract {
+        name: "ends-with?",
+        parameters: STRING_STRING,
+        result: LibraryType::Bool,
+        fuel: FuelModel::TextCharacters {
+            base: 1,
+            block_size: 64,
+        },
+    },
+    OperationContract {
+        name: "contains?",
+        parameters: STRING_STRING,
+        result: LibraryType::Bool,
+        fuel: FuelModel::TextCharacters {
+            base: 1,
+            block_size: 64,
+        },
+    },
+    OperationContract {
+        name: "replace",
+        parameters: THREE_STRINGS,
+        result: LibraryType::String,
+        fuel: FuelModel::TextReplace {
+            base: 1,
+            block_size: 64,
+        },
+    },
+    OperationContract {
+        name: "trim",
+        parameters: STRING,
+        result: LibraryType::String,
+        fuel: FuelModel::TextCharacters {
+            base: 1,
+            block_size: 64,
+        },
+    },
+    OperationContract {
+        name: "lowercase",
+        parameters: STRING,
+        result: LibraryType::String,
+        fuel: FuelModel::TextCase {
+            base: 1,
+            block_size: 64,
+            uppercase: false,
+        },
+    },
+    OperationContract {
+        name: "uppercase",
+        parameters: STRING,
+        result: LibraryType::String,
+        fuel: FuelModel::TextCase {
+            base: 1,
+            block_size: 64,
+            uppercase: true,
+        },
+    },
+    OperationContract {
+        name: "split",
+        parameters: STRING_STRING,
+        result: LibraryType::StringList,
+        fuel: FuelModel::TextSplit {
+            base: 1,
+            block_size: 64,
+        },
+    },
+    OperationContract {
+        name: "join",
+        parameters: STRING_LIST_STRING,
+        result: LibraryType::String,
+        fuel: FuelModel::TextJoin {
+            base: 1,
+            block_size: 64,
+        },
+    },
+    OperationContract {
+        name: "substring",
+        parameters: STRING_INT_INT,
+        result: LibraryType::String,
+        fuel: FuelModel::TextSubstring {
+            base: 1,
+            block_size: 64,
+        },
+    },
+];
+
+pub const TEXT_V2: LibraryContract = LibraryContract {
+    name: "text",
+    version: 2,
+    operations: TEXT_V2_OPERATIONS,
+};
+
 #[must_use]
 pub fn trusted_contract(name: &str, version: u16) -> Option<LibraryContract> {
     match (name, version) {
         ("text", 1) => Some(TEXT_V1),
+        ("text", 2) => Some(TEXT_V2),
         _ => None,
     }
 }

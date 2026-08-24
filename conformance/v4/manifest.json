@@ -33,6 +33,62 @@
         "kind": "value",
         "value": {"status": "rejected", "reason": "negative"}
       }
+    },
+    {
+      "name": "v4-text-v2-reference-semantics",
+      "phase": "run",
+      "source": "programs/text-v2.yan",
+      "entry": "normalize",
+      "args": ["  Straße,语言,AI  "],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "trimmed": "Straße,语言,AI",
+          "lowercase": "straße,语言,ai",
+          "uppercase": "STRASSE,语言,AI",
+          "parts": ["Straße", "语言", "AI"],
+          "joined": "Straße·语言·AI"
+        }
+      }
+    },
+    {
+      "name": "v4-text-v2-bytecode-matches-interpreter",
+      "phase": "run-compiled",
+      "source": "programs/text-v2.yan",
+      "entry": "normalize",
+      "args": ["  Straße,语言,AI  "],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "trimmed": "Straße,语言,AI",
+          "lowercase": "straße,语言,ai",
+          "uppercase": "STRASSE,语言,AI",
+          "parts": ["Straße", "语言", "AI"],
+          "joined": "Straße·语言·AI"
+        }
+      }
+    },
+    {
+      "name": "v4-text-v2-unicode-scalar-substring",
+      "phase": "run-compiled",
+      "source": "programs/text-v2.yan",
+      "entry": "slice",
+      "args": ["A语言🦀Z", {"$int": "1"}, {"$int": "4"}],
+      "expect": {
+        "kind": "value",
+        "value": "语言🦀"
+      }
+    },
+    {
+      "name": "v4-text-v2-first-class-operation",
+      "phase": "run-compiled",
+      "source": "programs/text-v2.yan",
+      "entry": "lower-all",
+      "args": [["AI", "İSTANBUL"]],
+      "expect": {
+        "kind": "value",
+        "value": ["ai", "i̇stanbul"]
+      }
     }
   ]
 }

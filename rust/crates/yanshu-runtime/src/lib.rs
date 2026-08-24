@@ -2212,6 +2212,47 @@ mod tests {
         assert_eq!(unavailable.code, "RUNTIME_LIBRARY_UNAVAILABLE");
     }
 
+    #[test]
+    fn text_v2_matches_compiled_execution_and_obeys_fuel() {
+        let program = require(load_program_source(
+            r#"(program
+                (name text-v2-runtime)
+                (version 4)
+                (libraries (text 2))
+                (signature run (fn (string) string))
+                (def run (fn (value)
+                  (text/join (text/split (text/trim value) ",") "·")))
+                (export run))"#,
+        ));
+        let input = vec![Value::String("  AI,语言,🦀  ".to_owned())];
+        let interpreted = require(execute_export(
+            &program,
+            "run",
+            input.clone(),
+            ExecutionOptions::default(),
+        ));
+        let artifact = require(compile_bytecode(&program));
+        let compiled = require(execute_compiled_export(
+            &artifact,
+            "run",
+            input,
+            ExecutionOptions::default(),
+        ));
+        assert_eq!(interpreted, Value::String("AI·语言·🦀".to_owned()));
+        assert_eq!(compiled, interpreted);
+
+        let exhausted = require_error(execute_export(
+            &program,
+            "run",
+            vec![Value::String("x,".repeat(10_000))],
+            ExecutionOptions {
+                fuel: 10,
+                ..ExecutionOptions::default()
+            },
+        ));
+        assert_eq!(exhausted.code, "RUNTIME_FUEL_EXHAUSTED");
+    }
+
     struct CountingTextBackend {
         calls: Arc<AtomicUsize>,
     }

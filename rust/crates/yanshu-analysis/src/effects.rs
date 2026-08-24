@@ -472,6 +472,12 @@ fn is_primitive(name: &str) -> bool {
         "text/ends-with?",
         "text/contains?",
         "text/replace",
+        "text/trim",
+        "text/lowercase",
+        "text/uppercase",
+        "text/split",
+        "text/join",
+        "text/substring",
     ];
     PRIMITIVES.contains(&name)
 }

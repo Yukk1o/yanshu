@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::json;
 use yanshu_diagnostic::{Diagnostic, Span, YanshuResult};
+use yanshu_library::{LibraryType, OperationContract, trusted_contract};
 use yanshu_syntax::{
     Datum, DatumKind, Expression, ExpressionKind, Pattern, PatternKind, Program, SchemaKind,
 };
@@ -18,7 +19,7 @@ struct Inferencer {
     next_variable: u32,
     substitutions: BTreeMap<u32, Type>,
     guest_bindings: BTreeSet<String>,
-    text_library: bool,
+    libraries: BTreeMap<String, u16>,
 }
 
 impl Inferencer {
@@ -42,10 +43,11 @@ impl Inferencer {
             next_variable: 0,
             substitutions: BTreeMap::new(),
             guest_bindings,
-            text_library: program
+            libraries: program
                 .libraries
                 .iter()
-                .any(|library| library.name == "text" && library.version == 1),
+                .map(|library| (library.name.clone(), library.version))
+                .collect(),
         }
     }
 
@@ -331,6 +333,19 @@ impl Inferencer {
             .iter()
             .map(|argument| self.infer_expression(argument, environment))
             .collect::<YanshuResult<Vec<_>>>()?;
+        if let Some(operation) = self.library_operation(name) {
+            require_arity(
+                name,
+                arguments.len(),
+                operation.parameters.len(),
+                Some(operation.parameters.len()),
+                span,
+            )?;
+            for (expected, actual) in operation.parameters.iter().zip(&argument_types) {
+                self.unify(library_type(*expected), actual.clone(), span)?;
+            }
+            return Ok(library_type(operation.result));
+        }
         match name {
             "+" | "*" => {
                 self.require_each(name, &argument_types, Type::Integer, span)?;
@@ -598,21 +613,6 @@ impl Inferencer {
                 require_arity(name, arguments.len(), 1, Some(1), span)?;
                 Ok(Type::List(Box::new(Type::Any)))
             }
-            "text/length" => {
-                require_arity(name, arguments.len(), 1, Some(1), span)?;
-                self.unify(Type::String, argument_types[0].clone(), span)?;
-                Ok(Type::Integer)
-            }
-            "text/starts-with?" | "text/ends-with?" | "text/contains?" => {
-                require_arity(name, arguments.len(), 2, Some(2), span)?;
-                self.require_each(name, &argument_types, Type::String, span)?;
-                Ok(Type::Boolean)
-            }
-            "text/replace" => {
-                require_arity(name, arguments.len(), 3, Some(3), span)?;
-                self.require_each(name, &argument_types, Type::String, span)?;
-                Ok(Type::String)
-            }
             _ => Err(Diagnostic::new(
                 "TYPE_UNKNOWN_PRIMITIVE",
                 "static analysis has no contract for a primitive",
@@ -636,6 +636,16 @@ impl Inferencer {
     }
 
     fn primitive_value_type(&mut self, name: &str) -> Option<Type> {
+        if let Some(operation) = self.library_operation(name) {
+            return Some(Type::Function {
+                parameters: operation
+                    .parameters
+                    .iter()
+                    .map(|parameter| library_type(*parameter))
+                    .collect(),
+                result: Box::new(library_type(operation.result)),
+            });
+        }
         let unary = |parameter, result| Type::Function {
             parameters: vec![parameter],
             result: Box::new(result),
@@ -704,16 +714,13 @@ impl Inferencer {
             "kv-delete",
             "kv-list",
         ];
-        CORE.contains(&name)
-            || (self.text_library
-                && matches!(
-                    name,
-                    "text/length"
-                        | "text/starts-with?"
-                        | "text/ends-with?"
-                        | "text/contains?"
-                        | "text/replace"
-                ))
+        CORE.contains(&name) || self.library_operation(name).is_some()
+    }
+
+    fn library_operation(&self, public_name: &str) -> Option<OperationContract> {
+        let (library, operation) = public_name.split_once('/')?;
+        let version = *self.libraries.get(library)?;
+        trusted_contract(library, version)?.operation(operation)
     }
 
     fn resolve(&self, value: Type) -> Type {
@@ -808,6 +815,25 @@ impl Inferencer {
             )
             .at(span)),
         }
+    }
+}
+
+fn library_type(value: LibraryType) -> Type {
+    match value {
+        LibraryType::Any => Type::Any,
+        LibraryType::Nil => Type::Nil,
+        LibraryType::Bool => Type::Boolean,
+        LibraryType::Int => Type::Integer,
+        LibraryType::String => Type::String,
+        LibraryType::Symbol => Type::Symbol,
+        LibraryType::List => Type::List(Box::new(Type::Any)),
+        LibraryType::StringList => Type::List(Box::new(Type::String)),
+        LibraryType::Map => Type::Map,
+        LibraryType::Result => Type::Result {
+            success: Box::new(Type::Any),
+            error: Box::new(Type::Any),
+        },
+        LibraryType::Variant => Type::Any,
     }
 }
 

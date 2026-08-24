@@ -234,9 +234,8 @@
         "kind": "diagnostic",
         "code": "PROGRAM_UNKNOWN_LIBRARY",
         "message": "program declares an unsupported library contract",
-        "details": {"library": "text", "version": 2}
+        "details": {"library": "text", "version": 99}
       }
     }
   ]
 }
-

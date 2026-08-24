@@ -1,0 +1,28 @@
+(program
+  (name conformance-text-v2)
+  (version 4)
+  (capabilities)
+  (libraries (text 2))
+
+  (signature normalize (fn (string) map))
+  (def normalize
+    (fn (value)
+      (let ((trimmed (text/trim value))
+            (parts (text/split trimmed ",")))
+        (map "trimmed" trimmed
+             "lowercase" (text/lowercase trimmed)
+             "uppercase" (text/uppercase trimmed)
+             "parts" parts
+             "joined" (text/join parts "·")))))
+
+  (signature slice (fn (string integer integer) string))
+  (def slice
+    (fn (value start end)
+      (text/substring value start end)))
+
+  (signature lower-all (fn ((list string)) (list string)))
+  (def lower-all
+    (fn (values)
+      (list-map text/lowercase values)))
+
+  (export normalize slice lower-all))

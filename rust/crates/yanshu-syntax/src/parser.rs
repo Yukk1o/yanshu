@@ -75,6 +75,12 @@ const RESERVED_SCHEMA_NAMES: &[&str] = &[
     "text/ends-with?",
     "text/contains?",
     "text/replace",
+    "text/trim",
+    "text/lowercase",
+    "text/uppercase",
+    "text/split",
+    "text/join",
+    "text/substring",
 ];
 const MAXIMUM_SCHEMAS: usize = 64;
 const MAXIMUM_SCHEMA_DEPTH: usize = 16;
@@ -1902,7 +1908,7 @@ mod tests {
         );
         assert_eq!(
             diagnostic.details.as_ref(),
-            &json!({ "library": "text", "version": 2 })
+            &json!({ "library": "text", "version": 99 })
         );
     }
 
