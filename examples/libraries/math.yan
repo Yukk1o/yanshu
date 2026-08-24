@@ -1,0 +1,23 @@
+(program
+  (name math-demo)
+  (version 4)
+  (capabilities)
+  (libraries (math 1))
+  ; Keep a user-provided score inside the accepted business range.
+
+  (signature normalize-score (fn (integer) map))
+
+  (def normalize-score
+    (fn (score)
+      (map
+        "original" score
+        "normalized" (math/clamp score 0 100)
+        "magnitude" (math/abs score)
+        "sign" (math/sign score))))
+  ; A non-negative common divisor is useful for exact batch sizing.
+
+  (signature common-batch-size (fn (integer integer) integer))
+
+  (def common-batch-size (fn (left right) (math/gcd left right)))
+
+  (export normalize-score common-batch-size))

@@ -2253,6 +2253,77 @@ mod tests {
         assert_eq!(exhausted.code, "RUNTIME_FUEL_EXHAUSTED");
     }
 
+    #[test]
+    fn math_v1_matches_compiled_execution_and_charges_magnitude_fuel() {
+        let program = require(load_program_source(
+            r#"(program
+                (name math-v1-runtime)
+                (version 4)
+                (libraries (math 1))
+                (signature summarize (fn (integer integer integer integer) map))
+                (def summarize
+                  (fn (value minimum maximum other)
+                    (map "abs" (math/abs value)
+                         "sign" (math/sign value)
+                         "minimum" (math/min value other)
+                         "maximum" (math/max value other)
+                         "clamped" (math/clamp value minimum maximum)
+                         "gcd" (math/gcd value other))))
+                (signature common (fn (integer integer) integer))
+                (def common (fn (left right) (math/gcd left right)))
+                (export summarize common))"#,
+        ));
+        let input = vec![
+            Value::Int((-42).into()),
+            Value::Int((-10).into()),
+            Value::Int(10.into()),
+            Value::Int(30.into()),
+        ];
+        let interpreted = require(execute_export(
+            &program,
+            "summarize",
+            input.clone(),
+            ExecutionOptions::default(),
+        ));
+        let artifact = require(compile_bytecode(&program));
+        let compiled = require(execute_compiled_export(
+            &artifact,
+            "summarize",
+            input,
+            ExecutionOptions::default(),
+        ));
+        assert_eq!(compiled, interpreted);
+        assert_eq!(
+            interpreted,
+            Value::Map(BTreeMap::from([
+                (MapKey::String("abs".to_owned()), Value::Int(42.into())),
+                (
+                    MapKey::String("clamped".to_owned()),
+                    Value::Int((-10).into()),
+                ),
+                (MapKey::String("gcd".to_owned()), Value::Int(6.into())),
+                (MapKey::String("maximum".to_owned()), Value::Int(30.into()),),
+                (
+                    MapKey::String("minimum".to_owned()),
+                    Value::Int((-42).into()),
+                ),
+                (MapKey::String("sign".to_owned()), Value::Int((-1).into())),
+            ]))
+        );
+
+        let large = (BigInt::from(1_u8) << 4095_usize) - BigInt::from(1_u8);
+        let exhausted = require_error(execute_export(
+            &program,
+            "common",
+            vec![Value::Int(large.clone()), Value::Int(large)],
+            ExecutionOptions {
+                fuel: 10,
+                ..ExecutionOptions::default()
+            },
+        ));
+        assert_eq!(exhausted.code, "RUNTIME_FUEL_EXHAUSTED");
+    }
+
     struct CountingTextBackend {
         calls: Arc<AtomicUsize>,
     }

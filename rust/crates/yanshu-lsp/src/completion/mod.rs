@@ -487,6 +487,15 @@ fn fuel_description(model: FuelModel) -> String {
         FuelModel::TextSubstring { base, block_size } => {
             format!("{base} + ceil(scalar scan and output bytes / {block_size})")
         }
+        FuelModel::IntegerLinear { base, block_size } => {
+            format!("{base} + total ceil(integer magnitude bits / {block_size})")
+        }
+        FuelModel::IntegerClamp { base, block_size } => {
+            format!("{base} + ordered clamp bounds and total integer blocks of {block_size} bits")
+        }
+        FuelModel::IntegerGcd { base, block_size } => {
+            format!("{base} + product of integer magnitude blocks of {block_size} bits")
+        }
     }
 }
 
@@ -663,6 +672,26 @@ mod tests {
         assert!(candidate.detail.contains("fn(String) -> String"));
         assert!(candidate.detail.contains("text@2"));
         assert!(candidate.documentation.contains("Unicode case work"));
+    }
+
+    #[test]
+    fn completion_uses_the_declared_math_contract() {
+        let source = r#"(program
+          (name completion-math-v1)
+          (version 4)
+          (libraries (math 1))
+          (signature run (fn (integer integer) integer))
+          (def run (fn (left right) (math/g left right)))
+          (export run))"#;
+        let result = result_at(source, "math/g", "math/g".len());
+        assert_eq!(labels(&result), ["math/gcd"]);
+        let candidate = result
+            .candidates
+            .first()
+            .unwrap_or_else(|| panic!("math@1 completion missing"));
+        assert!(candidate.detail.contains("fn(Int, Int) -> Int"));
+        assert!(candidate.detail.contains("math@1"));
+        assert!(candidate.documentation.contains("magnitude blocks"));
     }
 
     #[test]

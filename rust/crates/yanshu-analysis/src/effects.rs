@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::json;
 use yanshu_diagnostic::{Diagnostic, YanshuResult};
+use yanshu_library::is_trusted_operation_name;
 use yanshu_syntax::{Expression, ExpressionKind, Program};
 
 use crate::{AnalysisReport, DefinitionAnalysis, Type};
@@ -467,19 +468,8 @@ fn is_primitive(name: &str) -> bool {
         "kv-put",
         "kv-delete",
         "kv-list",
-        "text/length",
-        "text/starts-with?",
-        "text/ends-with?",
-        "text/contains?",
-        "text/replace",
-        "text/trim",
-        "text/lowercase",
-        "text/uppercase",
-        "text/split",
-        "text/join",
-        "text/substring",
     ];
-    PRIMITIVES.contains(&name)
+    PRIMITIVES.contains(&name) || is_trusted_operation_name(name)
 }
 
 fn collect_pattern_bindings(pattern: &yanshu_syntax::Pattern, bindings: &mut BTreeSet<String>) {

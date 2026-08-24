@@ -47,6 +47,7 @@ const publishedFiles = [
   'examples/libraries/tests.json',
   'examples/libraries/text.yan',
   'examples/libraries/text-v2.yan',
+  'examples/libraries/math.yan',
   'examples/tasks/scenarios.json',
   'examples/tasks/service.yan',
   'examples/expenses/scenarios.json',

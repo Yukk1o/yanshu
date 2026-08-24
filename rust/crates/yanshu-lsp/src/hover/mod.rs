@@ -289,7 +289,7 @@ fn render_library(
         contract.name,
         contract.version,
         fuel_description(operation.fuel),
-        library_summary(operation.name),
+        library_summary(contract.name, operation.name),
     );
     append_node(&mut text, node);
     text
@@ -316,22 +316,47 @@ fn fuel_description(model: FuelModel) -> String {
         FuelModel::TextSubstring { base, block_size } => {
             format!("{base} + ceil(scalar scan and output bytes / {block_size})")
         }
+        FuelModel::IntegerLinear { base, block_size } => {
+            format!("{base} + total ceil(integer magnitude bits / {block_size})")
+        }
+        FuelModel::IntegerClamp { base, block_size } => {
+            format!("{base} + ordered clamp bounds and total integer blocks of {block_size} bits")
+        }
+        FuelModel::IntegerGcd { base, block_size } => {
+            format!("{base} + product of integer magnitude blocks of {block_size} bits")
+        }
     }
 }
 
-fn library_summary(operation: &str) -> &'static str {
-    match operation {
-        "length" => "Counts Unicode scalar values rather than UTF-8 bytes.",
-        "starts-with?" => "Tests a Unicode string prefix through the declared text backend.",
-        "ends-with?" => "Tests a Unicode string suffix through the declared text backend.",
-        "contains?" => "Tests substring containment through the declared text backend.",
-        "replace" => "Replaces all matches after checking bounded output amplification.",
-        "trim" => "Removes Unicode whitespace from both ends of a string.",
-        "lowercase" => "Applies deterministic, locale-independent Unicode lowercase mapping.",
-        "uppercase" => "Applies deterministic, locale-independent Unicode uppercase mapping.",
-        "split" => "Splits on a non-empty literal separator and preserves empty segments.",
-        "join" => "Joins a list of strings with bounded output amplification.",
-        "substring" => "Selects a half-open range using Unicode scalar indexes.",
+fn library_summary(library: &str, operation: &str) -> &'static str {
+    match (library, operation) {
+        ("text", "length") => "Counts Unicode scalar values rather than UTF-8 bytes.",
+        ("text", "starts-with?") => {
+            "Tests a Unicode string prefix through the declared text backend."
+        }
+        ("text", "ends-with?") => {
+            "Tests a Unicode string suffix through the declared text backend."
+        }
+        ("text", "contains?") => "Tests substring containment through the declared text backend.",
+        ("text", "replace") => "Replaces all matches after checking bounded output amplification.",
+        ("text", "trim") => "Removes Unicode whitespace from both ends of a string.",
+        ("text", "lowercase") => {
+            "Applies deterministic, locale-independent Unicode lowercase mapping."
+        }
+        ("text", "uppercase") => {
+            "Applies deterministic, locale-independent Unicode uppercase mapping."
+        }
+        ("text", "split") => {
+            "Splits on a non-empty literal separator and preserves empty segments."
+        }
+        ("text", "join") => "Joins a list of strings with bounded output amplification.",
+        ("text", "substring") => "Selects a half-open range using Unicode scalar indexes.",
+        ("math", "abs") => "Returns the non-negative magnitude of an integer.",
+        ("math", "sign") => "Returns -1, 0, or 1 according to the integer sign.",
+        ("math", "min") => "Returns the smaller of two arbitrary-precision integers.",
+        ("math", "max") => "Returns the larger of two arbitrary-precision integers.",
+        ("math", "clamp") => "Clamps a value to an explicitly ordered inclusive range.",
+        ("math", "gcd") => "Returns the non-negative greatest common divisor; gcd(0, 0) is 0.",
         _ => "Invokes one operation from a trusted versioned Library Backend contract.",
     }
 }
@@ -506,6 +531,23 @@ mod tests {
         assert!(hover.contains("library: text@2 (declared)"));
         assert!(hover.contains("half-open range"));
         assert!(hover.contains("scalar scan and output bytes"));
+    }
+
+    #[test]
+    fn renders_math_v1_contract_types_semantics_and_fuel() {
+        let source = r#"(program
+          (name hover-math-v1)
+          (version 4)
+          (libraries (math 1))
+          (signature run (fn (integer integer) integer))
+          (def run (fn (left right) (math/gcd left right)))
+          (export run))"#;
+        let hover = text_at(source, marker(source, "math/gcd"))
+            .unwrap_or_else(|| panic!("math@1 hover missing"));
+        assert!(hover.contains("type: fn(Int, Int) -> Int"));
+        assert!(hover.contains("library: math@1 (declared)"));
+        assert!(hover.contains("greatest common divisor"));
+        assert!(hover.contains("product of integer magnitude blocks"));
     }
 
     #[test]

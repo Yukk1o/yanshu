@@ -4,6 +4,7 @@ use serde_json::json;
 use yanshu_diagnostic::{Diagnostic, YanshuResult};
 
 use crate::LibraryValue;
+use crate::math::{checked_clamp_bounds, checked_integer_bits};
 use crate::text::{
     checked_case_output_bytes, checked_join_output_bytes, checked_replace_output_bytes,
     checked_split_result, checked_substring_byte_range,
@@ -91,6 +92,18 @@ pub enum FuelModel {
         block_size: u64,
     },
     TextSubstring {
+        base: u64,
+        block_size: u64,
+    },
+    IntegerLinear {
+        base: u64,
+        block_size: u64,
+    },
+    IntegerClamp {
+        base: u64,
+        block_size: u64,
+    },
+    IntegerGcd {
         base: u64,
         block_size: u64,
     },
@@ -204,8 +217,51 @@ impl FuelModel {
                     );
                 scaled_cost(base, block_size, work)
             }
+            Self::IntegerLinear { base, block_size } => {
+                let blocks = arguments.iter().try_fold(0_u64, |total, value| {
+                    let LibraryValue::Int(value) = value else {
+                        return Err(invalid_fuel_arguments("integer linear"));
+                    };
+                    Ok(total.saturating_add(integer_blocks(value, block_size)?))
+                })?;
+                Ok(base.saturating_add(blocks))
+            }
+            Self::IntegerClamp { base, block_size } => {
+                let [
+                    LibraryValue::Int(value),
+                    LibraryValue::Int(minimum),
+                    LibraryValue::Int(maximum),
+                ] = arguments
+                else {
+                    return Err(invalid_fuel_arguments("math clamp"));
+                };
+                checked_clamp_bounds(minimum, maximum)?;
+                let blocks = integer_blocks(value, block_size)?
+                    .saturating_add(integer_blocks(minimum, block_size)?)
+                    .saturating_add(integer_blocks(maximum, block_size)?);
+                Ok(base.saturating_add(blocks))
+            }
+            Self::IntegerGcd { base, block_size } => {
+                let [LibraryValue::Int(left), LibraryValue::Int(right)] = arguments else {
+                    return Err(invalid_fuel_arguments("math gcd"));
+                };
+                let left_blocks = integer_blocks(left, block_size)?;
+                let right_blocks = integer_blocks(right, block_size)?;
+                Ok(base.saturating_add(left_blocks.saturating_mul(right_blocks)))
+            }
         }
     }
+}
+
+fn integer_blocks(value: &num_bigint::BigInt, block_size: u64) -> YanshuResult<u64> {
+    if block_size == 0 {
+        return Err(Diagnostic::simple(
+            "RUNTIME_LIBRARY_CONTRACT_FAILURE",
+            "library fuel block size cannot be zero",
+        ));
+    }
+    let bits = checked_integer_bits(value)?;
+    Ok(bits.div_ceil(block_size).max(1))
 }
 
 fn scaled_cost(base: u64, block_size: u64, work: u64) -> YanshuResult<u64> {
@@ -316,6 +372,9 @@ impl LibraryContract {
 }
 
 const STRING: &[LibraryType] = &[LibraryType::String];
+const INT: &[LibraryType] = &[LibraryType::Int];
+const INT_INT: &[LibraryType] = &[LibraryType::Int, LibraryType::Int];
+const INT_INT_INT: &[LibraryType] = &[LibraryType::Int, LibraryType::Int, LibraryType::Int];
 const STRING_STRING: &[LibraryType] = &[LibraryType::String, LibraryType::String];
 const STRING_LIST_STRING: &[LibraryType] = &[LibraryType::StringList, LibraryType::String];
 const STRING_INT_INT: &[LibraryType] = &[LibraryType::String, LibraryType::Int, LibraryType::Int];
@@ -489,11 +548,89 @@ pub const TEXT_V2: LibraryContract = LibraryContract {
     operations: TEXT_V2_OPERATIONS,
 };
 
+const MATH_V1_OPERATIONS: &[OperationContract] = &[
+    OperationContract {
+        name: "abs",
+        parameters: INT,
+        result: LibraryType::Int,
+        fuel: FuelModel::IntegerLinear {
+            base: 1,
+            block_size: 64,
+        },
+    },
+    OperationContract {
+        name: "sign",
+        parameters: INT,
+        result: LibraryType::Int,
+        fuel: FuelModel::IntegerLinear {
+            base: 1,
+            block_size: 64,
+        },
+    },
+    OperationContract {
+        name: "min",
+        parameters: INT_INT,
+        result: LibraryType::Int,
+        fuel: FuelModel::IntegerLinear {
+            base: 1,
+            block_size: 64,
+        },
+    },
+    OperationContract {
+        name: "max",
+        parameters: INT_INT,
+        result: LibraryType::Int,
+        fuel: FuelModel::IntegerLinear {
+            base: 1,
+            block_size: 64,
+        },
+    },
+    OperationContract {
+        name: "clamp",
+        parameters: INT_INT_INT,
+        result: LibraryType::Int,
+        fuel: FuelModel::IntegerClamp {
+            base: 1,
+            block_size: 64,
+        },
+    },
+    OperationContract {
+        name: "gcd",
+        parameters: INT_INT,
+        result: LibraryType::Int,
+        fuel: FuelModel::IntegerGcd {
+            base: 1,
+            block_size: 64,
+        },
+    },
+];
+
+pub const MATH_V1: LibraryContract = LibraryContract {
+    name: "math",
+    version: 1,
+    operations: MATH_V1_OPERATIONS,
+};
+
+const TRUSTED_CONTRACTS: &[LibraryContract] = &[TEXT_V1, TEXT_V2, MATH_V1];
+
 #[must_use]
 pub fn trusted_contract(name: &str, version: u16) -> Option<LibraryContract> {
-    match (name, version) {
-        ("text", 1) => Some(TEXT_V1),
-        ("text", 2) => Some(TEXT_V2),
-        _ => None,
-    }
+    TRUSTED_CONTRACTS
+        .iter()
+        .copied()
+        .find(|contract| contract.name == name && contract.version == version)
+}
+
+#[must_use]
+pub fn is_trusted_operation_name(public_name: &str) -> bool {
+    let Some((library, operation)) = public_name.split_once('/') else {
+        return false;
+    };
+    TRUSTED_CONTRACTS.iter().any(|contract| {
+        contract.name == library
+            && contract
+                .operations
+                .iter()
+                .any(|candidate| candidate.name == operation)
+    })
 }
