@@ -1,0 +1,15 @@
+(program
+  (name json-v1-conformance)
+  (version 4)
+  (capabilities)
+  (libraries (json 1))
+
+  (signature decode (fn (string) (result any any)))
+
+  (def decode (fn (source) (json/parse source)))
+
+  (signature encode (fn (map) (result any any)))
+
+  (def encode (fn (value) (json/stringify-canonical value)))
+
+  (export decode encode))

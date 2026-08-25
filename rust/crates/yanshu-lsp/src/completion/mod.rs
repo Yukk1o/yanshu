@@ -499,6 +499,12 @@ fn fuel_description(model: FuelModel) -> String {
         FuelModel::Utf8Bytes { base, block_size } => {
             format!("{base} + ceil(total UTF-8 input bytes / {block_size})")
         }
+        FuelModel::JsonParse { base, block_size } => {
+            format!("{base} + ceil(JSON UTF-8 input bytes / {block_size})")
+        }
+        FuelModel::JsonStringify { base, block_size } => {
+            format!("{base} + ceil(JSON value traversal and text bytes / {block_size})")
+        }
     }
 }
 
@@ -715,6 +721,26 @@ mod tests {
         assert!(candidate.detail.contains("fn(String) -> String"));
         assert!(candidate.detail.contains("digest@1"));
         assert!(candidate.documentation.contains("UTF-8 input bytes"));
+    }
+
+    #[test]
+    fn completion_uses_the_declared_json_contract() {
+        let source = r#"(program
+          (name completion-json-v1)
+          (version 4)
+          (libraries (json 1))
+          (signature run (fn (string) (result any any)))
+          (def run (fn (value) (json/pa value)))
+          (export run))"#;
+        let result = result_at(source, "json/pa", "json/pa".len());
+        assert_eq!(labels(&result), ["json/parse"]);
+        let candidate = result
+            .candidates
+            .first()
+            .unwrap_or_else(|| panic!("json@1 completion missing"));
+        assert!(candidate.detail.contains("fn(String) -> Result"));
+        assert!(candidate.detail.contains("json@1"));
+        assert!(candidate.documentation.contains("JSON UTF-8 input bytes"));
     }
 
     #[test]

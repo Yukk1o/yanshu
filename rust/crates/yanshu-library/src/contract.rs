@@ -4,6 +4,7 @@ use serde_json::json;
 use yanshu_diagnostic::{Diagnostic, YanshuResult};
 
 use crate::LibraryValue;
+use crate::json::stringify_fuel_work;
 use crate::math::{checked_clamp_bounds, checked_integer_bits};
 use crate::text::{
     checked_case_output_bytes, checked_join_output_bytes, checked_replace_output_bytes,
@@ -108,6 +109,14 @@ pub enum FuelModel {
         block_size: u64,
     },
     Utf8Bytes {
+        base: u64,
+        block_size: u64,
+    },
+    JsonParse {
+        base: u64,
+        block_size: u64,
+    },
+    JsonStringify {
         base: u64,
         block_size: u64,
     },
@@ -262,6 +271,22 @@ impl FuelModel {
                 })?;
                 scaled_cost(base, block_size, bytes)
             }
+            Self::JsonParse { base, block_size } => {
+                let [LibraryValue::String(value)] = arguments else {
+                    return Err(invalid_fuel_arguments("JSON parse"));
+                };
+                scaled_cost(
+                    base,
+                    block_size,
+                    u64::try_from(value.len()).unwrap_or(u64::MAX),
+                )
+            }
+            Self::JsonStringify { base, block_size } => {
+                let [value] = arguments else {
+                    return Err(invalid_fuel_arguments("JSON canonical stringify"));
+                };
+                scaled_cost(base, block_size, stringify_fuel_work(value))
+            }
         }
     }
 }
@@ -385,6 +410,7 @@ impl LibraryContract {
 }
 
 const STRING: &[LibraryType] = &[LibraryType::String];
+const ANY: &[LibraryType] = &[LibraryType::Any];
 const INT: &[LibraryType] = &[LibraryType::Int];
 const INT_INT: &[LibraryType] = &[LibraryType::Int, LibraryType::Int];
 const INT_INT_INT: &[LibraryType] = &[LibraryType::Int, LibraryType::Int, LibraryType::Int];
@@ -651,7 +677,34 @@ pub const DIGEST_V1: LibraryContract = LibraryContract {
     operations: DIGEST_V1_OPERATIONS,
 };
 
-const TRUSTED_CONTRACTS: &[LibraryContract] = &[TEXT_V1, TEXT_V2, MATH_V1, DIGEST_V1];
+const JSON_V1_OPERATIONS: &[OperationContract] = &[
+    OperationContract {
+        name: "parse",
+        parameters: STRING,
+        result: LibraryType::Result,
+        fuel: FuelModel::JsonParse {
+            base: 1,
+            block_size: 64,
+        },
+    },
+    OperationContract {
+        name: "stringify-canonical",
+        parameters: ANY,
+        result: LibraryType::Result,
+        fuel: FuelModel::JsonStringify {
+            base: 1,
+            block_size: 64,
+        },
+    },
+];
+
+pub const JSON_V1: LibraryContract = LibraryContract {
+    name: "json",
+    version: 1,
+    operations: JSON_V1_OPERATIONS,
+};
+
+const TRUSTED_CONTRACTS: &[LibraryContract] = &[TEXT_V1, TEXT_V2, MATH_V1, DIGEST_V1, JSON_V1];
 
 #[must_use]
 pub fn trusted_contract(name: &str, version: u16) -> Option<LibraryContract> {
