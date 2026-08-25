@@ -430,5 +430,31 @@ mod tests {
         ));
         let diagnostic = require_error(analyze_program(&wrong_json));
         assert_eq!(diagnostic.code, "TYPE_MISMATCH");
+
+        let decimal = require(load_program_source(
+            r#"(program
+                (name decimal-v1-types)
+                (version 4)
+                (libraries (decimal 1))
+                (signature parse (fn (string integer) (result any any)))
+                (def parse (fn (source scale) (decimal/parse-scaled source scale)))
+                (signature round (fn (integer integer integer string) (result any any)))
+                (def round (fn (value from to mode) (decimal/rescale value from to mode)))
+                (export parse round))"#,
+        ));
+        let report = require(analyze_program(&decimal));
+        assert!(report.capability_closure.is_empty());
+
+        let wrong_decimal = require(load_program_source(
+            r#"(program
+                (name decimal-v1-wrong-type)
+                (version 4)
+                (libraries (decimal 1))
+                (signature run (fn (string) (result any any)))
+                (def run (fn (value) (decimal/parse-scaled value "2")))
+                (export run))"#,
+        ));
+        let diagnostic = require_error(analyze_program(&wrong_decimal));
+        assert_eq!(diagnostic.code, "TYPE_MISMATCH");
     }
 }

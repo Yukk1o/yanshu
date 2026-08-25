@@ -4,6 +4,7 @@ use serde_json::json;
 use yanshu_diagnostic::{Diagnostic, YanshuResult};
 
 use crate::LibraryValue;
+use crate::decimal::{format_fuel_work, parse_fuel_work, rescale_fuel_work};
 use crate::json::stringify_fuel_work;
 use crate::math::{checked_clamp_bounds, checked_integer_bits};
 use crate::text::{
@@ -117,6 +118,18 @@ pub enum FuelModel {
         block_size: u64,
     },
     JsonStringify {
+        base: u64,
+        block_size: u64,
+    },
+    DecimalParse {
+        base: u64,
+        block_size: u64,
+    },
+    DecimalFormat {
+        base: u64,
+        block_size: u64,
+    },
+    DecimalRescale {
         base: u64,
         block_size: u64,
     },
@@ -287,6 +300,34 @@ impl FuelModel {
                 };
                 scaled_cost(base, block_size, stringify_fuel_work(value))
             }
+            Self::DecimalParse { base, block_size } => {
+                let [LibraryValue::String(input), LibraryValue::Int(scale)] = arguments else {
+                    return Err(invalid_fuel_arguments("decimal scaled parse"));
+                };
+                scaled_cost(base, block_size, parse_fuel_work(input, scale))
+            }
+            Self::DecimalFormat { base, block_size } => {
+                let [LibraryValue::Int(value), LibraryValue::Int(scale)] = arguments else {
+                    return Err(invalid_fuel_arguments("decimal scaled format"));
+                };
+                scaled_cost(base, block_size, format_fuel_work(value, scale))
+            }
+            Self::DecimalRescale { base, block_size } => {
+                let [
+                    LibraryValue::Int(value),
+                    LibraryValue::Int(from_scale),
+                    LibraryValue::Int(to_scale),
+                    LibraryValue::String(rounding),
+                ] = arguments
+                else {
+                    return Err(invalid_fuel_arguments("decimal rescale"));
+                };
+                scaled_cost(
+                    base,
+                    block_size,
+                    rescale_fuel_work(value, from_scale, to_scale, rounding),
+                )
+            }
         }
     }
 }
@@ -414,12 +455,19 @@ const ANY: &[LibraryType] = &[LibraryType::Any];
 const INT: &[LibraryType] = &[LibraryType::Int];
 const INT_INT: &[LibraryType] = &[LibraryType::Int, LibraryType::Int];
 const INT_INT_INT: &[LibraryType] = &[LibraryType::Int, LibraryType::Int, LibraryType::Int];
+const STRING_INT: &[LibraryType] = &[LibraryType::String, LibraryType::Int];
 const STRING_STRING: &[LibraryType] = &[LibraryType::String, LibraryType::String];
 const STRING_LIST_STRING: &[LibraryType] = &[LibraryType::StringList, LibraryType::String];
 const STRING_INT_INT: &[LibraryType] = &[LibraryType::String, LibraryType::Int, LibraryType::Int];
 const THREE_STRINGS: &[LibraryType] = &[
     LibraryType::String,
     LibraryType::String,
+    LibraryType::String,
+];
+const INT_INT_INT_STRING: &[LibraryType] = &[
+    LibraryType::Int,
+    LibraryType::Int,
+    LibraryType::Int,
     LibraryType::String,
 ];
 
@@ -704,7 +752,44 @@ pub const JSON_V1: LibraryContract = LibraryContract {
     operations: JSON_V1_OPERATIONS,
 };
 
-const TRUSTED_CONTRACTS: &[LibraryContract] = &[TEXT_V1, TEXT_V2, MATH_V1, DIGEST_V1, JSON_V1];
+const DECIMAL_V1_OPERATIONS: &[OperationContract] = &[
+    OperationContract {
+        name: "parse-scaled",
+        parameters: STRING_INT,
+        result: LibraryType::Result,
+        fuel: FuelModel::DecimalParse {
+            base: 1,
+            block_size: 64,
+        },
+    },
+    OperationContract {
+        name: "format-scaled",
+        parameters: INT_INT,
+        result: LibraryType::Result,
+        fuel: FuelModel::DecimalFormat {
+            base: 1,
+            block_size: 64,
+        },
+    },
+    OperationContract {
+        name: "rescale",
+        parameters: INT_INT_INT_STRING,
+        result: LibraryType::Result,
+        fuel: FuelModel::DecimalRescale {
+            base: 1,
+            block_size: 64,
+        },
+    },
+];
+
+pub const DECIMAL_V1: LibraryContract = LibraryContract {
+    name: "decimal",
+    version: 1,
+    operations: DECIMAL_V1_OPERATIONS,
+};
+
+const TRUSTED_CONTRACTS: &[LibraryContract] =
+    &[TEXT_V1, TEXT_V2, MATH_V1, DIGEST_V1, JSON_V1, DECIMAL_V1];
 
 #[must_use]
 pub fn trusted_contract(name: &str, version: u16) -> Option<LibraryContract> {

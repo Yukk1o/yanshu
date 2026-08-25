@@ -334,6 +334,15 @@ fn fuel_description(model: FuelModel) -> String {
         FuelModel::JsonStringify { base, block_size } => {
             format!("{base} + ceil(JSON value traversal and text bytes / {block_size})")
         }
+        FuelModel::DecimalParse { base, block_size } => {
+            format!("{base} + ceil(decimal input, scale, and padding work / {block_size})")
+        }
+        FuelModel::DecimalFormat { base, block_size } => {
+            format!("{base} + ceil(integer magnitude and decimal output work / {block_size})")
+        }
+        FuelModel::DecimalRescale { base, block_size } => {
+            format!("{base} + ceil(integer magnitude and scale delta work / {block_size})")
+        }
     }
 }
 
@@ -377,6 +386,15 @@ fn library_summary(library: &str, operation: &str) -> &'static str {
         }
         ("json", "stringify-canonical") => {
             "Serializes plain JSON data with sorted object keys and no insignificant whitespace."
+        }
+        ("decimal", "parse-scaled") => {
+            "Parses exact decimal text into an integer coefficient at an explicit scale."
+        }
+        ("decimal", "format-scaled") => {
+            "Formats an integer coefficient as canonical fixed-scale decimal text."
+        }
+        ("decimal", "rescale") => {
+            "Changes a coefficient scale using one explicit deterministic rounding mode."
         }
         _ => "Invokes one operation from a trusted versioned Library Backend contract.",
     }
@@ -603,6 +621,23 @@ mod tests {
         assert!(hover.contains("library: json@1 (declared)"));
         assert!(hover.contains("sorted object keys"));
         assert!(hover.contains("JSON value traversal and text bytes"));
+    }
+
+    #[test]
+    fn renders_decimal_v1_exact_scale_and_rounding_contract() {
+        let source = r#"(program
+          (name hover-decimal-v1)
+          (version 4)
+          (libraries (decimal 1))
+          (signature run (fn (integer) (result any any)))
+          (def run (fn (value) (decimal/rescale value 3 2 "half-even")))
+          (export run))"#;
+        let hover = text_at(source, marker(source, "decimal/rescale"))
+            .unwrap_or_else(|| panic!("decimal@1 hover missing"));
+        assert!(hover.contains("type: fn(Int, Int, Int, String) -> Result"));
+        assert!(hover.contains("library: decimal@1 (declared)"));
+        assert!(hover.contains("explicit deterministic rounding"));
+        assert!(hover.contains("scale delta work"));
     }
 
     #[test]

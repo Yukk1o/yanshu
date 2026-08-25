@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod contract;
+mod decimal;
 mod digest;
 mod json;
 mod math;
@@ -11,8 +12,12 @@ mod value;
 use yanshu_diagnostic::YanshuResult;
 
 pub use contract::{
-    DIGEST_V1, FuelModel, JSON_V1, LibraryContract, LibraryType, MATH_V1, OperationContract,
-    TEXT_V1, TEXT_V2, is_trusted_operation_name, trusted_contract,
+    DECIMAL_V1, DIGEST_V1, FuelModel, JSON_V1, LibraryContract, LibraryType, MATH_V1,
+    OperationContract, TEXT_V1, TEXT_V2, is_trusted_operation_name, trusted_contract,
+};
+pub use decimal::{
+    MAXIMUM_DECIMAL_INPUT_BYTES, MAXIMUM_DECIMAL_INTEGER_BITS, MAXIMUM_DECIMAL_OUTPUT_BYTES,
+    MAXIMUM_DECIMAL_SCALE, RustDecimalBackend,
 };
 pub use digest::RustDigestBackend;
 pub use json::{
@@ -39,7 +44,7 @@ mod tests {
 
     use crate::{
         BackendDescriptor, LibraryBackend, LibraryKey, LibraryRegistry, LibraryValue,
-        MAXIMUM_JSON_INPUT_BYTES, RustTextBackend, trusted_contract,
+        MAXIMUM_DECIMAL_INPUT_BYTES, MAXIMUM_JSON_INPUT_BYTES, RustTextBackend, trusted_contract,
     };
 
     fn require_error<T>(result: YanshuResult<T>) -> Diagnostic {
@@ -61,6 +66,13 @@ mod tests {
             panic!("expected a stable guest error code");
         };
         code
+    }
+
+    fn guest_ok(value: &LibraryValue) -> &LibraryValue {
+        let LibraryValue::Ok(value) = value else {
+            panic!("expected a guest Ok value");
+        };
+        value
     }
 
     struct InvalidBackend;
@@ -539,6 +551,214 @@ mod tests {
                 r#"{"control":"\u0001\n\"\\"}"#.to_owned()
             )))
         );
+    }
+
+    #[test]
+    fn decimal_v1_round_trips_exact_scaled_integers() {
+        let mut registry = LibraryRegistry::rust_standard();
+        for (input, scale, expected) in [
+            ("12.34", 2_u16, 1_234_i32),
+            ("-0.5", 2, -50),
+            ("1.2300", 2, 123),
+            ("0", 0, 0),
+        ] {
+            let parsed = registry
+                .invoke(
+                    "decimal",
+                    1,
+                    "parse-scaled",
+                    &[
+                        LibraryValue::String(input.to_owned()),
+                        LibraryValue::Int(BigInt::from(scale)),
+                    ],
+                )
+                .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+            assert_eq!(
+                guest_ok(&parsed.value),
+                &LibraryValue::Int(BigInt::from(expected))
+            );
+        }
+
+        for (value, scale, expected) in [
+            (1_234_i32, 2_u16, "12.34"),
+            (-5, 2, "-0.05"),
+            (12, 0, "12"),
+            (0, 3, "0.000"),
+        ] {
+            let formatted = registry
+                .invoke(
+                    "decimal",
+                    1,
+                    "format-scaled",
+                    &[
+                        LibraryValue::Int(BigInt::from(value)),
+                        LibraryValue::Int(BigInt::from(scale)),
+                    ],
+                )
+                .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+            assert_eq!(
+                guest_ok(&formatted.value),
+                &LibraryValue::String(expected.to_owned())
+            );
+        }
+        assert!(trusted_contract("decimal", 1).is_some());
+        assert!(trusted_contract("decimal", 2).is_none());
+    }
+
+    #[test]
+    fn decimal_v1_requires_explicit_deterministic_rounding() {
+        let mut registry = LibraryRegistry::rust_standard();
+        for (value, mode, expected) in [
+            (125_i32, "toward-zero", 12_i32),
+            (-125, "toward-zero", -12),
+            (-125, "floor", -13),
+            (-125, "ceiling", -12),
+            (125, "half-up", 13),
+            (-125, "half-up", -13),
+            (125, "half-even", 12),
+            (135, "half-even", 14),
+        ] {
+            let rounded = registry
+                .invoke(
+                    "decimal",
+                    1,
+                    "rescale",
+                    &[
+                        LibraryValue::Int(BigInt::from(value)),
+                        LibraryValue::Int(BigInt::from(2_u8)),
+                        LibraryValue::Int(BigInt::from(1_u8)),
+                        LibraryValue::String(mode.to_owned()),
+                    ],
+                )
+                .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+            assert_eq!(
+                guest_ok(&rounded.value),
+                &LibraryValue::Int(BigInt::from(expected))
+            );
+        }
+
+        let exact = registry
+            .invoke(
+                "decimal",
+                1,
+                "rescale",
+                &[
+                    LibraryValue::Int(BigInt::from(125_u16)),
+                    LibraryValue::Int(BigInt::from(2_u8)),
+                    LibraryValue::Int(BigInt::from(1_u8)),
+                    LibraryValue::String("exact".to_owned()),
+                ],
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(guest_error_code(&exact.value), "DECIMAL_ROUNDING_REQUIRED");
+
+        let expanded = registry
+            .invoke(
+                "decimal",
+                1,
+                "rescale",
+                &[
+                    LibraryValue::Int(BigInt::from(12_u8)),
+                    LibraryValue::Int(BigInt::from(1_u8)),
+                    LibraryValue::Int(BigInt::from(3_u8)),
+                    LibraryValue::String("exact".to_owned()),
+                ],
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(
+            guest_ok(&expanded.value),
+            &LibraryValue::Int(BigInt::from(1_200_u16))
+        );
+    }
+
+    #[test]
+    fn decimal_v1_returns_bounded_errors_and_scale_sensitive_fuel() {
+        let mut registry = LibraryRegistry::rust_standard();
+        for (input, scale, expected) in [
+            ("01.00".to_owned(), 2_u16, "DECIMAL_SYNTAX"),
+            ("1.234".to_owned(), 2, "DECIMAL_PRECISION_LOSS"),
+            (
+                "1".repeat(MAXIMUM_DECIMAL_INPUT_BYTES + 1),
+                2,
+                "DECIMAL_INPUT_LIMIT",
+            ),
+            ("1".to_owned(), 1_025, "DECIMAL_SCALE_LIMIT"),
+        ] {
+            let parsed = registry
+                .invoke(
+                    "decimal",
+                    1,
+                    "parse-scaled",
+                    &[
+                        LibraryValue::String(input),
+                        LibraryValue::Int(BigInt::from(scale)),
+                    ],
+                )
+                .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+            assert_eq!(guest_error_code(&parsed.value), expected);
+        }
+
+        let invalid_mode = registry
+            .invoke(
+                "decimal",
+                1,
+                "rescale",
+                &[
+                    LibraryValue::Int(BigInt::from(1_u8)),
+                    LibraryValue::Int(BigInt::from(1_u8)),
+                    LibraryValue::Int(BigInt::ZERO),
+                    LibraryValue::String("host-default".to_owned()),
+                ],
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(
+            guest_error_code(&invalid_mode.value),
+            "DECIMAL_INVALID_ROUNDING_MODE"
+        );
+
+        let maximum_magnitude = BigInt::from(1_u8) << 65_535_usize;
+        let amplified = registry
+            .invoke(
+                "decimal",
+                1,
+                "rescale",
+                &[
+                    LibraryValue::Int(maximum_magnitude),
+                    LibraryValue::Int(BigInt::ZERO),
+                    LibraryValue::Int(BigInt::from(1_u8)),
+                    LibraryValue::String("exact".to_owned()),
+                ],
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(guest_error_code(&amplified.value), "DECIMAL_INTEGER_LIMIT");
+
+        let small_fuel = registry
+            .call_fuel(
+                "decimal",
+                1,
+                "rescale",
+                &[
+                    LibraryValue::Int(BigInt::from(1_u8)),
+                    LibraryValue::Int(BigInt::ZERO),
+                    LibraryValue::Int(BigInt::from(2_u8)),
+                    LibraryValue::String("half-even".to_owned()),
+                ],
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        let large_fuel = registry
+            .call_fuel(
+                "decimal",
+                1,
+                "rescale",
+                &[
+                    LibraryValue::Int(BigInt::from(1_u8)),
+                    LibraryValue::Int(BigInt::ZERO),
+                    LibraryValue::Int(BigInt::from(1_024_u16)),
+                    LibraryValue::String("half-even".to_owned()),
+                ],
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert!(large_fuel > small_fuel);
     }
 
     #[test]
