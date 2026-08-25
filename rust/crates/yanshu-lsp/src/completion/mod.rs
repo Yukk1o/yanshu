@@ -505,6 +505,15 @@ fn fuel_description(model: FuelModel) -> String {
         FuelModel::JsonStringify { base, block_size } => {
             format!("{base} + ceil(JSON value traversal and text bytes / {block_size})")
         }
+        FuelModel::DecimalParse { base, block_size } => {
+            format!("{base} + ceil(decimal input, scale, and padding work / {block_size})")
+        }
+        FuelModel::DecimalFormat { base, block_size } => {
+            format!("{base} + ceil(integer magnitude and decimal output work / {block_size})")
+        }
+        FuelModel::DecimalRescale { base, block_size } => {
+            format!("{base} + ceil(integer magnitude and scale delta work / {block_size})")
+        }
     }
 }
 
@@ -741,6 +750,30 @@ mod tests {
         assert!(candidate.detail.contains("fn(String) -> Result"));
         assert!(candidate.detail.contains("json@1"));
         assert!(candidate.documentation.contains("JSON UTF-8 input bytes"));
+    }
+
+    #[test]
+    fn completion_uses_the_declared_decimal_contract() {
+        let source = r#"(program
+          (name completion-decimal-v1)
+          (version 4)
+          (libraries (decimal 1))
+          (signature run (fn (integer) (result any any)))
+          (def run (fn (value) (decimal/res value 3 2 "half-even")))
+          (export run))"#;
+        let result = result_at(source, "decimal/res", "decimal/res".len());
+        assert_eq!(labels(&result), ["decimal/rescale"]);
+        let candidate = result
+            .candidates
+            .first()
+            .unwrap_or_else(|| panic!("decimal@1 completion missing"));
+        assert!(
+            candidate
+                .detail
+                .contains("fn(Int, Int, Int, String) -> Result")
+        );
+        assert!(candidate.detail.contains("decimal@1"));
+        assert!(candidate.documentation.contains("scale delta work"));
     }
 
     #[test]

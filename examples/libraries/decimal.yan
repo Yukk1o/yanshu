@@ -1,0 +1,20 @@
+; Exact money conversion without floats or implicit host rounding.
+(program
+  (name decimal-library-example)
+  (version 4)
+  (capabilities)
+  (libraries (decimal 1))
+
+  (signature to-cents (fn (string) (result any any)))
+
+  (def to-cents (fn (text) (decimal/parse-scaled text 2)))
+
+  (signature display-cents (fn (integer) (result any any)))
+
+  (def display-cents (fn (cents) (decimal/format-scaled cents 2)))
+
+  (signature mills-to-cents (fn (integer string) (result any any)))
+
+  (def mills-to-cents (fn (mills mode) (decimal/rescale mills 3 2 mode)))
+
+  (export to-cents display-cents mills-to-cents))

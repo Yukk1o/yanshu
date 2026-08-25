@@ -2467,6 +2467,66 @@ mod tests {
         assert_eq!(exhausted.code, "RUNTIME_FUEL_EXHAUSTED");
     }
 
+    #[test]
+    fn decimal_v1_matches_compiled_execution_and_charges_scale_work() {
+        let program = require(load_program_source(
+            r#"(program
+                (name decimal-v1-runtime)
+                (version 4)
+                (libraries (decimal 1))
+                (signature parse (fn (string integer) (result any any)))
+                (def parse (fn (source scale) (decimal/parse-scaled source scale)))
+                (signature round (fn (integer integer integer string) (result any any)))
+                (def round (fn (value from to mode)
+                  (decimal/rescale value from to mode)))
+                (export parse round))"#,
+        ));
+        let interpreted = require(execute_export(
+            &program,
+            "parse",
+            vec![Value::String("12.340".to_owned()), Value::Int(2.into())],
+            ExecutionOptions::default(),
+        ));
+        let artifact = require(compile_bytecode(&program));
+        let compiled = require(execute_compiled_export(
+            &artifact,
+            "parse",
+            vec![Value::String("12.340".to_owned()), Value::Int(2.into())],
+            ExecutionOptions::default(),
+        ));
+        assert_eq!(compiled, interpreted);
+        assert_eq!(interpreted, Value::Ok(Box::new(Value::Int(1_234.into()))));
+
+        let rounded = require(execute_compiled_export(
+            &artifact,
+            "round",
+            vec![
+                Value::Int(125.into()),
+                Value::Int(2.into()),
+                Value::Int(1.into()),
+                Value::String("half-even".to_owned()),
+            ],
+            ExecutionOptions::default(),
+        ));
+        assert_eq!(rounded, Value::Ok(Box::new(Value::Int(12.into()))));
+
+        let exhausted = require_error(execute_export(
+            &program,
+            "round",
+            vec![
+                Value::Int(1.into()),
+                Value::Int(0.into()),
+                Value::Int(1_024.into()),
+                Value::String("exact".to_owned()),
+            ],
+            ExecutionOptions {
+                fuel: 10,
+                ..ExecutionOptions::default()
+            },
+        ));
+        assert_eq!(exhausted.code, "RUNTIME_FUEL_EXHAUSTED");
+    }
+
     struct CountingTextBackend {
         calls: Arc<AtomicUsize>,
     }

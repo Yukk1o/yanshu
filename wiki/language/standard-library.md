@@ -192,7 +192,7 @@ v1 故意不接受小数和指数：
 ; => (err (map "code" "JSON_NON_INTEGER_NUMBER" "offset" 1))
 ```
 
-这样不会暗中引入 IEEE-754 精度损失。需要金额时应使用整数最小货币单位；精确小数会由独立的版本化库提供。
+这样不会暗中引入 IEEE-754 精度损失。需要金额时可以直接使用整数最小货币单位，或使用下面的 `decimal@1` 在外部小数文本与整数系数之间转换。
 
 重复 object key 也会拒绝，包括 escape 后相同的键，例如 `"a"` 与 `"\u0061"`。它返回 `JSON_DUPLICATE_KEY`，不会依赖不同 JSON 库各自的 first-wins 或 last-wins 行为。
 
@@ -221,18 +221,87 @@ Symbol、Symbol key Map、Result 与用户 Variant 不是普通 JSON。序列化
 
 可运行示例：[json@1 示例](/source/examples/libraries/json.yan.txt)
 
+## decimal@1
+
+`decimal@1` 用“整数系数 + scale”表示精确小数，不使用浮点数。例如系数 `1234`、scale `2` 表示 `12.34`：
+
+| 函数 | 参数 | 结果 |
+| --- | --- | --- |
+| `decimal/parse-scaled` | String, Int | `Result<Int, Map>` |
+| `decimal/format-scaled` | Int, Int | `Result<String, Map>` |
+| `decimal/rescale` | Int, Int, Int, String | `Result<Int, Map>` |
+
+### 金额输入与显示
+
+下面的程序把接口文本精确转换为分，并在显示时补足两位小数：
+
+```lisp
+(libraries (decimal 1))
+
+(decimal/parse-scaled "12.34" 2)
+; => (ok 1234)
+
+(decimal/parse-scaled "-0.5" 2)
+; => (ok -50)
+
+(decimal/format-scaled -5 2)
+; => (ok "-0.05")
+```
+
+解析不接受空白、`+`、指数、千位分隔符或整数部分前导零。小数位少于 scale 时补零；超出的位只有全是 `0` 才能无损忽略：
+
+```lisp
+(decimal/parse-scaled "1.2300" 2)
+; => (ok 123)
+
+(decimal/parse-scaled "1.234" 2)
+; => (err (map "code" "DECIMAL_PRECISION_LOSS" "offset" 4))
+```
+
+### 舍入必须写出来
+
+把一个系数从旧 scale 转到新 scale 时，第四个参数必须显式选择舍入模式：
+
+```lisp
+(decimal/rescale 125 2 1 "half-up")
+; => (ok 13)
+
+(decimal/rescale 125 2 1 "half-even")
+; => (ok 12)
+
+(decimal/rescale 125 2 1 "exact")
+; => (err (map "code" "DECIMAL_ROUNDING_REQUIRED"))
+```
+
+可用模式如下：
+
+| 模式 | 行为 |
+| --- | --- |
+| `exact` | 不能整除就返回错误 |
+| `toward-zero` | 向零截断 |
+| `floor` | 向负无穷 |
+| `ceiling` | 向正无穷 |
+| `half-up` | 最近值，恰好一半时远离零 |
+| `half-even` | 最近值，恰好一半时选择偶数系数 |
+
+未知模式不会退回操作系统、数据库或 Rust 的默认规则，而是返回 `DECIMAL_INVALID_ROUNDING_MODE`。这使费用审批、税额和汇率规则在解释器、编译 VM 与不同宿主上保持一致。
+
+scale 必须在 `0..=1024`。输入、输出、整数系数和 scale 越界会返回带 `DECIMAL_*_LIMIT` code 的 `Err(Map)`；错误不会回显原始金额文本。
+
+可运行示例：[decimal@1 示例](/source/examples/libraries/decimal.yan.txt)
+
 ## 资源与失败边界
 
 标准库调用与普通表达式共享 guest fuel。每个操作的计费模型属于版本化契约；输入越长、输出越大或列表项越多，消耗越高。
 
-文本结果最多 1 MiB。split 结果还受 10,000 个 portable 节点上限约束。摘要按输入 UTF-8 字节数计费，输出固定为 64 或 128 个 ASCII 字符。JSON 输入、输出和单个字符串最多 1 MiB，最多 10,000 个节点、64 层和 65,536 位整数；解析与序列化都在昂贵工作前扣 fuel。后端在分配放大结果前检查上限，失败时返回稳定诊断或显式 Result，而不是继续占用宿主内存。
+文本结果最多 1 MiB。split 结果还受 10,000 个 portable 节点上限约束。摘要按输入 UTF-8 字节数计费，输出固定为 64 或 128 个 ASCII 字符。JSON 输入、输出和单个字符串最多 1 MiB，最多 10,000 个节点、64 层和 65,536 位整数；解析与序列化都在昂贵工作前扣 fuel。Decimal scale 最多 1,024，文本最多 20,002 bytes，系数最多 65,536 bits；重标度按 scale 差值计费，并在乘以十的幂之前预检结果。后端在分配放大结果前检查上限，失败时返回稳定诊断或显式 Result，而不是继续占用宿主内存。
 
 ## Library 与 capability
 
 | | Library | Capability |
 | --- | --- | --- |
 | 用途 | 纯文本、编码、确定性算法 | KV、clock、log 等外部效果 |
-| 声明 | `(libraries (text 2) (math 1) (digest 1) (json 1))` | `(capabilities kv clock)` |
+| 声明 | `(libraries (text 2) (math 1) (digest 1) (json 1) (decimal 1))` | `(capabilities kv clock)` |
 | 宿主状态 | 不接触 | 通过窄接口显式接触 |
 | 效果闭包 | 不进入 | 进入静态 capability 闭包 |
 

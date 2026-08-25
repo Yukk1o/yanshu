@@ -1,0 +1,20 @@
+; Exact fixed-point decimal semantics shared by the interpreter and compiled VM.
+(program
+  (name decimal-v1-conformance)
+  (version 4)
+  (capabilities)
+  (libraries (decimal 1))
+
+  (signature parse (fn (string integer) (result any any)))
+
+  (def parse (fn (source scale) (decimal/parse-scaled source scale)))
+
+  (signature format (fn (integer integer) (result any any)))
+
+  (def format (fn (value scale) (decimal/format-scaled value scale)))
+
+  (signature round (fn (integer integer integer string) (result any any)))
+
+  (def round (fn (value from-scale to-scale mode) (decimal/rescale value from-scale to-scale mode)))
+
+  (export parse format round))

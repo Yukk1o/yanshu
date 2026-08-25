@@ -246,6 +246,71 @@
           }
         }
       }
+    },
+    {
+      "name": "v4-decimal-v1-reference-exact-parse",
+      "phase": "run",
+      "source": "programs/decimal-v1.yan",
+      "entry": "parse",
+      "args": ["123.4500", {"$int": "2"}],
+      "expect": {
+        "kind": "value",
+        "value": {"$ok": {"$int": "12345"}}
+      }
+    },
+    {
+      "name": "v4-decimal-v1-compiled-parse-matches",
+      "phase": "run-compiled",
+      "source": "programs/decimal-v1.yan",
+      "entry": "parse",
+      "args": ["-0.05", {"$int": "2"}],
+      "expect": {
+        "kind": "value",
+        "value": {"$ok": {"$int": "-5"}}
+      }
+    },
+    {
+      "name": "v4-decimal-v1-fixed-scale-format",
+      "phase": "run-compiled",
+      "source": "programs/decimal-v1.yan",
+      "entry": "format",
+      "args": [{"$int": "-5"}, {"$int": "2"}],
+      "expect": {
+        "kind": "value",
+        "value": {"$ok": "-0.05"}
+      }
+    },
+    {
+      "name": "v4-decimal-v1-half-even-is-explicit",
+      "phase": "run-compiled",
+      "source": "programs/decimal-v1.yan",
+      "entry": "round",
+      "args": [
+        {"$int": "125"},
+        {"$int": "2"},
+        {"$int": "1"},
+        "half-even"
+      ],
+      "expect": {
+        "kind": "value",
+        "value": {"$ok": {"$int": "12"}}
+      }
+    },
+    {
+      "name": "v4-decimal-v1-exact-rejects-loss",
+      "phase": "run",
+      "source": "programs/decimal-v1.yan",
+      "entry": "round",
+      "args": [
+        {"$int": "125"},
+        {"$int": "2"},
+        {"$int": "1"},
+        "exact"
+      ],
+      "expect": {
+        "kind": "value",
+        "value": {"$err": {"code": "DECIMAL_ROUNDING_REQUIRED"}}
+      }
     }
   ]
 }
