@@ -328,6 +328,12 @@ fn fuel_description(model: FuelModel) -> String {
         FuelModel::Utf8Bytes { base, block_size } => {
             format!("{base} + ceil(total UTF-8 input bytes / {block_size})")
         }
+        FuelModel::JsonParse { base, block_size } => {
+            format!("{base} + ceil(JSON UTF-8 input bytes / {block_size})")
+        }
+        FuelModel::JsonStringify { base, block_size } => {
+            format!("{base} + ceil(JSON value traversal and text bytes / {block_size})")
+        }
     }
 }
 
@@ -365,6 +371,12 @@ fn library_summary(library: &str, operation: &str) -> &'static str {
         }
         ("digest", "sha512-text") => {
             "Returns the lowercase SHA-512 digest of the string's UTF-8 encoding."
+        }
+        ("json", "parse") => {
+            "Parses bounded JSON with integer-only numbers and rejects duplicate object keys."
+        }
+        ("json", "stringify-canonical") => {
+            "Serializes plain JSON data with sorted object keys and no insignificant whitespace."
         }
         _ => "Invokes one operation from a trusted versioned Library Backend contract.",
     }
@@ -574,6 +586,23 @@ mod tests {
         assert!(hover.contains("library: digest@1 (declared)"));
         assert!(hover.contains("string's UTF-8 encoding"));
         assert!(hover.contains("UTF-8 input bytes"));
+    }
+
+    #[test]
+    fn renders_json_v1_contract_canonical_semantics_and_fuel() {
+        let source = r#"(program
+          (name hover-json-v1)
+          (version 4)
+          (libraries (json 1))
+          (signature run (fn (map) (result any any)))
+          (def run (fn (value) (json/stringify-canonical value)))
+          (export run))"#;
+        let hover = text_at(source, marker(source, "json/stringify-canonical"))
+            .unwrap_or_else(|| panic!("json@1 hover missing"));
+        assert!(hover.contains("type: fn(Any) -> Result"));
+        assert!(hover.contains("library: json@1 (declared)"));
+        assert!(hover.contains("sorted object keys"));
+        assert!(hover.contains("JSON value traversal and text bytes"));
     }
 
     #[test]

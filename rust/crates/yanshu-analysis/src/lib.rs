@@ -404,5 +404,31 @@ mod tests {
         ));
         let diagnostic = require_error(analyze_program(&wrong_digest));
         assert_eq!(diagnostic.code, "TYPE_MISMATCH");
+
+        let json = require(load_program_source(
+            r#"(program
+                (name json-v1-types)
+                (version 4)
+                (libraries (json 1))
+                (signature parse-many (fn ((list string)) (list (result any any))))
+                (def parse-many (fn (values) (list-map json/parse values)))
+                (signature encode (fn (map) (result any any)))
+                (def encode (fn (value) (json/stringify-canonical value)))
+                (export parse-many encode))"#,
+        ));
+        let report = require(analyze_program(&json));
+        assert!(report.capability_closure.is_empty());
+
+        let wrong_json = require(load_program_source(
+            r#"(program
+                (name json-v1-wrong-type)
+                (version 4)
+                (libraries (json 1))
+                (signature run (fn (integer) (result any any)))
+                (def run (fn (value) (json/parse value)))
+                (export run))"#,
+        ));
+        let diagnostic = require_error(analyze_program(&wrong_json));
+        assert_eq!(diagnostic.code, "TYPE_MISMATCH");
     }
 }

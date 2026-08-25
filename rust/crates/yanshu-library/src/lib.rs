@@ -2,6 +2,7 @@
 
 mod contract;
 mod digest;
+mod json;
 mod math;
 mod registry;
 mod text;
@@ -10,10 +11,14 @@ mod value;
 use yanshu_diagnostic::YanshuResult;
 
 pub use contract::{
-    DIGEST_V1, FuelModel, LibraryContract, LibraryType, MATH_V1, OperationContract, TEXT_V1,
-    TEXT_V2, is_trusted_operation_name, trusted_contract,
+    DIGEST_V1, FuelModel, JSON_V1, LibraryContract, LibraryType, MATH_V1, OperationContract,
+    TEXT_V1, TEXT_V2, is_trusted_operation_name, trusted_contract,
 };
 pub use digest::RustDigestBackend;
+pub use json::{
+    MAXIMUM_JSON_DEPTH, MAXIMUM_JSON_INPUT_BYTES, MAXIMUM_JSON_INTEGER_BITS, MAXIMUM_JSON_NODES,
+    MAXIMUM_JSON_OUTPUT_BYTES, MAXIMUM_JSON_STRING_BYTES, RustJsonBackend,
+};
 pub use math::{MAXIMUM_MATH_INTEGER_BITS, RustMathBackend};
 pub use registry::{BackendDescriptor, LibraryInvocation, LibraryRegistry};
 pub use text::{RustTextBackend, RustTextV2Backend};
@@ -27,12 +32,14 @@ pub trait LibraryBackend: Send {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use num_bigint::BigInt;
     use yanshu_diagnostic::{Diagnostic, YanshuResult};
 
     use crate::{
-        BackendDescriptor, LibraryBackend, LibraryRegistry, LibraryValue, RustTextBackend,
-        trusted_contract,
+        BackendDescriptor, LibraryBackend, LibraryKey, LibraryRegistry, LibraryValue,
+        MAXIMUM_JSON_INPUT_BYTES, RustTextBackend, trusted_contract,
     };
 
     fn require_error<T>(result: YanshuResult<T>) -> Diagnostic {
@@ -40,6 +47,20 @@ mod tests {
             Err(diagnostic) => diagnostic,
             Ok(_) => panic!("expected a diagnostic"),
         }
+    }
+
+    fn guest_error_code(value: &LibraryValue) -> &str {
+        let LibraryValue::Err(error) = value else {
+            panic!("expected a guest Err value");
+        };
+        let LibraryValue::Map(fields) = error.as_ref() else {
+            panic!("expected a structured guest error");
+        };
+        let Some(LibraryValue::String(code)) = fields.get(&LibraryKey::String("code".to_owned()))
+        else {
+            panic!("expected a stable guest error code");
+        };
+        code
     }
 
     struct InvalidBackend;
@@ -422,6 +443,102 @@ mod tests {
         assert_eq!(unicode_fuel, 3);
         assert!(trusted_contract("digest", 1).is_some());
         assert!(trusted_contract("digest", 2).is_none());
+    }
+
+    #[test]
+    fn json_v1_parses_integer_only_data_and_writes_canonical_text() {
+        let mut registry = LibraryRegistry::rust_standard();
+        let input = r#"{"z":2,"a":[true,null,"\u0041\uD83E\uDD80"],"negative":-42}"#;
+        let parsed = registry
+            .invoke(
+                "json",
+                1,
+                "parse",
+                &[LibraryValue::String(input.to_owned())],
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        let LibraryValue::Ok(value) = parsed.value else {
+            panic!("valid JSON must parse");
+        };
+        let encoded = registry
+            .invoke("json", 1, "stringify-canonical", &[(*value).clone()])
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(
+            encoded.value,
+            LibraryValue::Ok(Box::new(LibraryValue::String(
+                r#"{"a":[true,null,"A🦀"],"negative":-42,"z":2}"#.to_owned()
+            )))
+        );
+        assert_eq!(parsed.fuel, 2);
+        assert!(encoded.fuel > 1);
+        assert!(trusted_contract("json", 1).is_some());
+        assert!(trusted_contract("json", 2).is_none());
+    }
+
+    #[test]
+    fn json_v1_returns_bounded_machine_readable_guest_errors() {
+        let mut registry = LibraryRegistry::rust_standard();
+        for (input, expected) in [
+            (r#"{"a":1,"a":2}"#.to_owned(), "JSON_DUPLICATE_KEY"),
+            (r#"{"a":1,"\u0061":2}"#.to_owned(), "JSON_DUPLICATE_KEY"),
+            ("1.5".to_owned(), "JSON_NON_INTEGER_NUMBER"),
+            ("1e3".to_owned(), "JSON_NON_INTEGER_NUMBER"),
+            ("01".to_owned(), "JSON_SYNTAX"),
+            (r#""\uD800""#.to_owned(), "JSON_SYNTAX"),
+            ("[1,]".to_owned(), "JSON_SYNTAX"),
+            (
+                format!("{}null{}", "[".repeat(64), "]".repeat(64)),
+                "JSON_DEPTH_LIMIT",
+            ),
+            (
+                format!("[{}]", vec!["null"; 10_000].join(",")),
+                "JSON_NODE_LIMIT",
+            ),
+            (" ".repeat(MAXIMUM_JSON_INPUT_BYTES + 1), "JSON_INPUT_LIMIT"),
+        ] {
+            let parsed = registry
+                .invoke("json", 1, "parse", &[LibraryValue::String(input)])
+                .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+            assert_eq!(guest_error_code(&parsed.value), expected);
+        }
+
+        let symbol = registry
+            .invoke(
+                "json",
+                1,
+                "stringify-canonical",
+                &[LibraryValue::Symbol("not-json".to_owned())],
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(guest_error_code(&symbol.value), "JSON_UNSUPPORTED_VALUE");
+
+        let amplified = registry
+            .invoke(
+                "json",
+                1,
+                "stringify-canonical",
+                &[LibraryValue::String("\u{0001}".repeat(200_000))],
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(guest_error_code(&amplified.value), "JSON_OUTPUT_LIMIT");
+
+        let escaped = registry
+            .invoke(
+                "json",
+                1,
+                "stringify-canonical",
+                &[LibraryValue::Map(BTreeMap::from([(
+                    LibraryKey::String("control".to_owned()),
+                    LibraryValue::String("\u{0001}\n\"\\".to_owned()),
+                )]))],
+            )
+            .unwrap_or_else(|diagnostic| panic!("{diagnostic}"));
+        assert_eq!(
+            escaped.value,
+            LibraryValue::Ok(Box::new(LibraryValue::String(
+                r#"{"control":"\u0001\n\"\\"}"#.to_owned()
+            )))
+        );
     }
 
     #[test]

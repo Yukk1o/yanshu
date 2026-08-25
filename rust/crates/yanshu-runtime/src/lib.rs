@@ -2388,6 +2388,85 @@ mod tests {
         assert_eq!(exhausted.code, "RUNTIME_FUEL_EXHAUSTED");
     }
 
+    #[test]
+    fn json_v1_matches_compiled_execution_and_charges_bounded_work() {
+        let program = require(load_program_source(
+            r#"(program
+                (name json-v1-runtime)
+                (version 4)
+                (libraries (json 1))
+                (signature decode (fn (string) (result any any)))
+                (def decode (fn (source) (json/parse source)))
+                (signature encode (fn (map) (result any any)))
+                (def encode (fn (value) (json/stringify-canonical value)))
+                (export decode encode))"#,
+        ));
+        let source = r#"{"z":2,"a":[true,null]}"#;
+        let input = vec![Value::String(source.to_owned())];
+        let interpreted = require(execute_export(
+            &program,
+            "decode",
+            input.clone(),
+            ExecutionOptions::default(),
+        ));
+        let artifact = require(compile_bytecode(&program));
+        let compiled = require(execute_compiled_export(
+            &artifact,
+            "decode",
+            input,
+            ExecutionOptions::default(),
+        ));
+        assert_eq!(compiled, interpreted);
+        assert_eq!(
+            interpreted,
+            Value::Ok(Box::new(Value::Map(BTreeMap::from([
+                (
+                    MapKey::String("a".to_owned()),
+                    Value::List(vec![Value::Bool(true), Value::Nil]),
+                ),
+                (MapKey::String("z".to_owned()), Value::Int(2.into())),
+            ]))))
+        );
+
+        let value = Value::Map(BTreeMap::from([
+            (MapKey::String("z".to_owned()), Value::Int(2.into())),
+            (
+                MapKey::String("a".to_owned()),
+                Value::List(vec![Value::Bool(true), Value::Nil]),
+            ),
+        ]));
+        let interpreted_encoding = require(execute_export(
+            &program,
+            "encode",
+            vec![value.clone()],
+            ExecutionOptions::default(),
+        ));
+        let compiled_encoding = require(execute_compiled_export(
+            &artifact,
+            "encode",
+            vec![value],
+            ExecutionOptions::default(),
+        ));
+        assert_eq!(compiled_encoding, interpreted_encoding);
+        assert_eq!(
+            interpreted_encoding,
+            Value::Ok(Box::new(Value::String(
+                r#"{"a":[true,null],"z":2}"#.to_owned()
+            )))
+        );
+
+        let exhausted = require_error(execute_export(
+            &program,
+            "decode",
+            vec![Value::String(" ".repeat(10_000))],
+            ExecutionOptions {
+                fuel: 10,
+                ..ExecutionOptions::default()
+            },
+        ));
+        assert_eq!(exhausted.code, "RUNTIME_FUEL_EXHAUSTED");
+    }
+
     struct CountingTextBackend {
         calls: Arc<AtomicUsize>,
     }

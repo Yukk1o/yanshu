@@ -162,18 +162,77 @@ SHA 摘要不能替代密码哈希、MAC 或数字签名：不要用它保存用
 
 可运行示例：[digest@1 示例](/source/examples/libraries/digest.yan.txt)
 
+## json@1
+
+`json@1` 用于 AI、接口 adapter 和业务系统之间交换普通 JSON。解析失败是可恢复的 Result，不会让一条坏数据直接打穿整个 guest 请求：
+
+| 函数 | 参数 | 结果 |
+| --- | --- | --- |
+| `json/parse` | String | `Result<Any, Map>` |
+| `json/stringify-canonical` | Any | `Result<String, Map>` |
+
+```lisp
+(libraries (json 1))
+
+(let ((decoded (json/parse "{\"amount\":42,\"tags\":[\"AI\"]}")))
+  (if (ok? decoded)
+      (result-value decoded)
+      (map "status" "invalid-json"
+           "issue" (result-value decoded))))
+```
+
+类型按直觉映射：JSON `null` 是 Nil，boolean 是 Bool，整数是 Int，string 是 String，array 是 List，object 是只含 String key 的 Map。
+
+### 严格解析
+
+v1 故意不接受小数和指数：
+
+```lisp
+(json/parse "1.5")
+; => (err (map "code" "JSON_NON_INTEGER_NUMBER" "offset" 1))
+```
+
+这样不会暗中引入 IEEE-754 精度损失。需要金额时应使用整数最小货币单位；精确小数会由独立的版本化库提供。
+
+重复 object key 也会拒绝，包括 escape 后相同的键，例如 `"a"` 与 `"\u0061"`。它返回 `JSON_DUPLICATE_KEY`，不会依赖不同 JSON 库各自的 first-wins 或 last-wins 行为。
+
+### 规范序列化
+
+```lisp
+(json/stringify-canonical (map "z" 2 "a" (list #t '())))
+; => (ok "{\"a\":[true,null],\"z\":2}")
+```
+
+对象键按稳定顺序排列，不输出缩进或无意义空白，整数和 escape 使用固定形式。因此相同 guest 数据总能得到相同文本，适合摘要、缓存键、测试快照和内容寻址。
+
+Symbol、Symbol key Map、Result 与用户 Variant 不是普通 JSON。序列化这些值会返回带 `JSON_UNSUPPORTED_VALUE` 的 Err，不会擅自发明一种以后无法兼容的标签格式。
+
+常见错误码包括：
+
+| code | 含义 |
+| --- | --- |
+| `JSON_SYNTAX` | JSON 语法或 escape 非法 |
+| `JSON_NON_INTEGER_NUMBER` | 出现小数或指数 number |
+| `JSON_DUPLICATE_KEY` | object 解码后存在重复键 |
+| `JSON_*_LIMIT` | 输入、输出、字符串、节点、深度或整数越界 |
+| `JSON_UNSUPPORTED_VALUE` | guest 值不能无损表示为普通 JSON |
+
+错误 Map 不回显原始输入。解析位置 `offset` 使用 UTF-8 byte offset，适合代理和宿主稳定消费。
+
+可运行示例：[json@1 示例](/source/examples/libraries/json.yan.txt)
+
 ## 资源与失败边界
 
 标准库调用与普通表达式共享 guest fuel。每个操作的计费模型属于版本化契约；输入越长、输出越大或列表项越多，消耗越高。
 
-文本结果最多 1 MiB。split 结果还受 10,000 个 portable 节点上限约束。摘要按输入 UTF-8 字节数计费，输出固定为 64 或 128 个 ASCII 字符。后端在分配放大结果前检查上限，失败时返回稳定诊断，而不是继续占用宿主内存。
+文本结果最多 1 MiB。split 结果还受 10,000 个 portable 节点上限约束。摘要按输入 UTF-8 字节数计费，输出固定为 64 或 128 个 ASCII 字符。JSON 输入、输出和单个字符串最多 1 MiB，最多 10,000 个节点、64 层和 65,536 位整数；解析与序列化都在昂贵工作前扣 fuel。后端在分配放大结果前检查上限，失败时返回稳定诊断或显式 Result，而不是继续占用宿主内存。
 
 ## Library 与 capability
 
 | | Library | Capability |
 | --- | --- | --- |
 | 用途 | 纯文本、编码、确定性算法 | KV、clock、log 等外部效果 |
-| 声明 | `(libraries (text 2) (math 1) (digest 1))` | `(capabilities kv clock)` |
+| 声明 | `(libraries (text 2) (math 1) (digest 1) (json 1))` | `(capabilities kv clock)` |
 | 宿主状态 | 不接触 | 通过窄接口显式接触 |
 | 效果闭包 | 不进入 | 进入静态 capability 闭包 |
 

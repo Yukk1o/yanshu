@@ -1,0 +1,23 @@
+; Strict, deterministic JSON for AI and service boundaries.
+(program
+  (name json-library-example)
+  (version 4)
+  (capabilities)
+  (libraries (json 1))
+
+  (signature decode (fn (string) (result any any)))
+
+  (def decode (fn (source) (json/parse source)))
+
+  (signature encode (fn (map) (result any any)))
+
+  (def encode (fn (value) (json/stringify-canonical value)))
+
+  (signature normalize (fn (string) (result any any)))
+
+  (def normalize
+    (fn (source)
+      (let ((decoded (json/parse source)))
+        (if (ok? decoded) (json/stringify-canonical (result-value decoded)) decoded))))
+
+  (export decode encode normalize))

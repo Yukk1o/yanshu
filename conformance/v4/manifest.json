@@ -176,6 +176,76 @@
           "sha512": "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
         }
       }
+    },
+    {
+      "name": "v4-json-v1-reference-parse",
+      "phase": "run",
+      "source": "programs/json-v1.yan",
+      "entry": "decode",
+      "args": ["{\"z\":2,\"a\":[true,null,\"\\u0041\\uD83E\\uDD80\"]}"],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "$ok": {
+            "a": [true, {"$nil": true}, "A🦀"],
+            "z": {"$int": "2"}
+          }
+        }
+      }
+    },
+    {
+      "name": "v4-json-v1-compiled-parse-matches",
+      "phase": "run-compiled",
+      "source": "programs/json-v1.yan",
+      "entry": "decode",
+      "args": ["{\"z\":2,\"a\":[true,null,\"\\u0041\\uD83E\\uDD80\"]}"],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "$ok": {
+            "a": [true, {"$nil": true}, "A🦀"],
+            "z": {"$int": "2"}
+          }
+        }
+      }
+    },
+    {
+      "name": "v4-json-v1-reference-canonical-stringify",
+      "phase": "run",
+      "source": "programs/json-v1.yan",
+      "entry": "encode",
+      "args": [{"z": {"$int": "2"}, "a": [true, null, "A🦀"]}],
+      "expect": {
+        "kind": "value",
+        "value": {"$ok": "{\"a\":[true,null,\"A🦀\"],\"z\":2}"}
+      }
+    },
+    {
+      "name": "v4-json-v1-compiled-canonical-stringify-matches",
+      "phase": "run-compiled",
+      "source": "programs/json-v1.yan",
+      "entry": "encode",
+      "args": [{"z": {"$int": "2"}, "a": [true, null, "A🦀"]}],
+      "expect": {
+        "kind": "value",
+        "value": {"$ok": "{\"a\":[true,null,\"A🦀\"],\"z\":2}"}
+      }
+    },
+    {
+      "name": "v4-json-v1-duplicate-key-is-recoverable",
+      "phase": "run-compiled",
+      "source": "programs/json-v1.yan",
+      "entry": "decode",
+      "args": ["{\"a\":1,\"a\":2}"],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "$err": {
+            "code": "JSON_DUPLICATE_KEY",
+            "offset": {"$int": "7"}
+          }
+        }
+      }
     }
   ]
 }
