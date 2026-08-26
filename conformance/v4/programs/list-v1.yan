@@ -1,0 +1,27 @@
+; Immutable structural list operations with recoverable index and range errors.
+(program
+  (name list-v1-conformance)
+  (version 4)
+  (capabilities)
+  (libraries (list 1))
+
+  (signature summarize (fn ((list integer)) map))
+
+  (def summarize
+    (fn (values)
+      (map
+        "reverse" (list/reverse values)
+        "append" (list/append values (list 4 5))
+        "contains" (list/contains? values 2)
+        "take" (list/take values 2)
+        "drop" (list/drop values 2))))
+
+  (signature get-at (fn ((list integer) integer) (result any any)))
+
+  (def get-at (fn (values index) (list/get values index)))
+
+  (signature slice-range (fn ((list integer) integer integer) (result any any)))
+
+  (def slice-range (fn (values start end) (list/slice values start end)))
+
+  (export summarize get-at slice-range))

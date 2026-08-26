@@ -311,6 +311,101 @@
         "kind": "value",
         "value": {"$err": {"code": "DECIMAL_ROUNDING_REQUIRED"}}
       }
+    },
+    {
+      "name": "v4-list-v1-reference-structural-operations",
+      "phase": "run",
+      "source": "programs/list-v1.yan",
+      "entry": "summarize",
+      "args": [[{"$int": "1"}, {"$int": "2"}, {"$int": "3"}]],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "reverse": [{"$int": "3"}, {"$int": "2"}, {"$int": "1"}],
+          "append": [
+            {"$int": "1"}, {"$int": "2"}, {"$int": "3"},
+            {"$int": "4"}, {"$int": "5"}
+          ],
+          "contains": true,
+          "take": {"$ok": [{"$int": "1"}, {"$int": "2"}]},
+          "drop": {"$ok": [{"$int": "3"}]}
+        }
+      }
+    },
+    {
+      "name": "v4-list-v1-bytecode-matches-structural-operations",
+      "phase": "run-compiled",
+      "source": "programs/list-v1.yan",
+      "entry": "summarize",
+      "args": [[{"$int": "1"}, {"$int": "2"}, {"$int": "3"}]],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "reverse": [{"$int": "3"}, {"$int": "2"}, {"$int": "1"}],
+          "append": [
+            {"$int": "1"}, {"$int": "2"}, {"$int": "3"},
+            {"$int": "4"}, {"$int": "5"}
+          ],
+          "contains": true,
+          "take": {"$ok": [{"$int": "1"}, {"$int": "2"}]},
+          "drop": {"$ok": [{"$int": "3"}]}
+        }
+      }
+    },
+    {
+      "name": "v4-list-v1-get-success",
+      "phase": "run-compiled",
+      "source": "programs/list-v1.yan",
+      "entry": "get-at",
+      "args": [[{"$int": "10"}, {"$int": "20"}], {"$int": "1"}],
+      "expect": {"kind": "value", "value": {"$ok": {"$int": "20"}}}
+    },
+    {
+      "name": "v4-list-v1-get-error-is-recoverable",
+      "phase": "run",
+      "source": "programs/list-v1.yan",
+      "entry": "get-at",
+      "args": [[{"$int": "10"}], {"$int": "2"}],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "$err": {
+            "code": "LIST_INDEX_OUT_OF_BOUNDS",
+            "length": {"$int": "1"}
+          }
+        }
+      }
+    },
+    {
+      "name": "v4-list-v1-slice-success",
+      "phase": "run-compiled",
+      "source": "programs/list-v1.yan",
+      "entry": "slice-range",
+      "args": [
+        [{"$int": "1"}, {"$int": "2"}, {"$int": "3"}, {"$int": "4"}],
+        {"$int": "1"},
+        {"$int": "3"}
+      ],
+      "expect": {
+        "kind": "value",
+        "value": {"$ok": [{"$int": "2"}, {"$int": "3"}]}
+      }
+    },
+    {
+      "name": "v4-list-v1-invalid-range-is-recoverable",
+      "phase": "run-compiled",
+      "source": "programs/list-v1.yan",
+      "entry": "slice-range",
+      "args": [[{"$int": "1"}, {"$int": "2"}], {"$int": "2"}, {"$int": "1"}],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "$err": {
+            "code": "LIST_RANGE_OUT_OF_BOUNDS",
+            "length": {"$int": "2"}
+          }
+        }
+      }
     }
   ]
 }

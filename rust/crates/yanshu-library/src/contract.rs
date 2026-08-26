@@ -6,6 +6,7 @@ use yanshu_diagnostic::{Diagnostic, YanshuResult};
 use crate::LibraryValue;
 use crate::decimal::{format_fuel_work, parse_fuel_work, rescale_fuel_work};
 use crate::json::stringify_fuel_work;
+use crate::list::{ListOperation, list_fuel_work};
 use crate::math::{checked_clamp_bounds, checked_integer_bits};
 use crate::text::{
     checked_case_output_bytes, checked_join_output_bytes, checked_replace_output_bytes,
@@ -132,6 +133,11 @@ pub enum FuelModel {
     DecimalRescale {
         base: u64,
         block_size: u64,
+    },
+    ListStructural {
+        base: u64,
+        block_size: u64,
+        operation: ListOperation,
     },
 }
 
@@ -328,6 +334,11 @@ impl FuelModel {
                     rescale_fuel_work(value, from_scale, to_scale, rounding),
                 )
             }
+            Self::ListStructural {
+                base,
+                block_size,
+                operation,
+            } => scaled_cost(base, block_size, list_fuel_work(operation, arguments)?),
         }
     }
 }
@@ -470,6 +481,11 @@ const INT_INT_INT_STRING: &[LibraryType] = &[
     LibraryType::Int,
     LibraryType::String,
 ];
+const LIST: &[LibraryType] = &[LibraryType::List];
+const LIST_LIST: &[LibraryType] = &[LibraryType::List, LibraryType::List];
+const LIST_ANY: &[LibraryType] = &[LibraryType::List, LibraryType::Any];
+const LIST_INT: &[LibraryType] = &[LibraryType::List, LibraryType::Int];
+const LIST_INT_INT: &[LibraryType] = &[LibraryType::List, LibraryType::Int, LibraryType::Int];
 
 const TEXT_OPERATIONS: &[OperationContract] = &[
     OperationContract {
@@ -788,8 +804,88 @@ pub const DECIMAL_V1: LibraryContract = LibraryContract {
     operations: DECIMAL_V1_OPERATIONS,
 };
 
-const TRUSTED_CONTRACTS: &[LibraryContract] =
-    &[TEXT_V1, TEXT_V2, MATH_V1, DIGEST_V1, JSON_V1, DECIMAL_V1];
+const LIST_V1_OPERATIONS: &[OperationContract] = &[
+    OperationContract {
+        name: "reverse",
+        parameters: LIST,
+        result: LibraryType::List,
+        fuel: FuelModel::ListStructural {
+            base: 1,
+            block_size: 64,
+            operation: ListOperation::Reverse,
+        },
+    },
+    OperationContract {
+        name: "append",
+        parameters: LIST_LIST,
+        result: LibraryType::List,
+        fuel: FuelModel::ListStructural {
+            base: 1,
+            block_size: 64,
+            operation: ListOperation::Append,
+        },
+    },
+    OperationContract {
+        name: "contains?",
+        parameters: LIST_ANY,
+        result: LibraryType::Bool,
+        fuel: FuelModel::ListStructural {
+            base: 1,
+            block_size: 64,
+            operation: ListOperation::Contains,
+        },
+    },
+    OperationContract {
+        name: "get",
+        parameters: LIST_INT,
+        result: LibraryType::Result,
+        fuel: FuelModel::ListStructural {
+            base: 1,
+            block_size: 64,
+            operation: ListOperation::Get,
+        },
+    },
+    OperationContract {
+        name: "take",
+        parameters: LIST_INT,
+        result: LibraryType::Result,
+        fuel: FuelModel::ListStructural {
+            base: 1,
+            block_size: 64,
+            operation: ListOperation::Take,
+        },
+    },
+    OperationContract {
+        name: "drop",
+        parameters: LIST_INT,
+        result: LibraryType::Result,
+        fuel: FuelModel::ListStructural {
+            base: 1,
+            block_size: 64,
+            operation: ListOperation::Drop,
+        },
+    },
+    OperationContract {
+        name: "slice",
+        parameters: LIST_INT_INT,
+        result: LibraryType::Result,
+        fuel: FuelModel::ListStructural {
+            base: 1,
+            block_size: 64,
+            operation: ListOperation::Slice,
+        },
+    },
+];
+
+pub const LIST_V1: LibraryContract = LibraryContract {
+    name: "list",
+    version: 1,
+    operations: LIST_V1_OPERATIONS,
+};
+
+const TRUSTED_CONTRACTS: &[LibraryContract] = &[
+    TEXT_V1, TEXT_V2, MATH_V1, DIGEST_V1, JSON_V1, DECIMAL_V1, LIST_V1,
+];
 
 #[must_use]
 pub fn trusted_contract(name: &str, version: u16) -> Option<LibraryContract> {

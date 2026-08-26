@@ -290,18 +290,70 @@ scale 必须在 `0..=1024`。输入、输出、整数系数和 scale 越界会�
 
 可运行示例：[decimal@1 示例](/source/examples/libraries/decimal.yan.txt)
 
+## list@1
+
+语言内核已经有 `list-map`、`list-filter`、`list-fold` 和 `sum`；`list@1` 补的是不执行回调的不可变结构操作：
+
+| 函数 | 参数 | 结果 |
+| --- | --- | --- |
+| `list/reverse` | List | List |
+| `list/append` | List, List | List |
+| `list/contains?` | List, Any | Bool |
+| `list/get` | List, Int | `Result<Any, Map>` |
+| `list/take` | List, Int | `Result<List, Map>` |
+| `list/drop` | List, Int | `Result<List, Map>` |
+| `list/slice` | List, Int, Int | `Result<List, Map>` |
+
+### 组合列表
+
+`reverse` 和 `append` 直接返回新列表，原列表不会改变：
+
+```lisp
+(libraries (list 1))
+
+(list/reverse (list 1 2 3))
+; => (3 2 1)
+
+(list/append (list 1 2) (list 3 4))
+; => (1 2 3 4)
+
+(list/contains? (list (map "id" 1)) (map "id" 1))
+; => #t
+```
+
+`contains?` 比较完整 portable value 结构，不把值转成字符串，也不调用用户函数。
+
+### 索引错误是业务数据
+
+下标和范围可能来自请求参数，因此 `get`、`take`、`drop` 和 `slice` 返回 Result：
+
+```lisp
+(list/get (list "a" "b") 1)
+; => (ok "b")
+
+(list/slice (list 10 20 30 40) 1 3)
+; => (ok (20 30))
+
+(list/get (list "a") 5)
+; => (err (map "code" "LIST_INDEX_OUT_OF_BOUNDS" "length" 1))
+```
+
+`slice` 使用半开区间 `[start, end)`。`take` 和 `drop` 接受 `0..=length`；负数、巨大整数和越界不会打穿请求，而会返回 `LIST_INDEX_OUT_OF_BOUNDS`、`LIST_COUNT_OUT_OF_BOUNDS` 或 `LIST_RANGE_OUT_OF_BOUNDS`。
+
+可运行示例：[list@1 示例](/source/examples/libraries/list.yan.txt)
+
 ## 资源与失败边界
 
 标准库调用与普通表达式共享 guest fuel。每个操作的计费模型属于版本化契约；输入越长、输出越大或列表项越多，消耗越高。
 
-文本结果最多 1 MiB。split 结果还受 10,000 个 portable 节点上限约束。摘要按输入 UTF-8 字节数计费，输出固定为 64 或 128 个 ASCII 字符。JSON 输入、输出和单个字符串最多 1 MiB，最多 10,000 个节点、64 层和 65,536 位整数；解析与序列化都在昂贵工作前扣 fuel。Decimal scale 最多 1,024，文本最多 20,002 bytes，系数最多 65,536 bits；重标度按 scale 差值计费，并在乘以十的幂之前预检结果。后端在分配放大结果前检查上限，失败时返回稳定诊断或显式 Result，而不是继续占用宿主内存。
+文本结果最多 1 MiB。split 结果还受 10,000 个 portable 节点上限约束。摘要按输入 UTF-8 字节数计费，输出固定为 64 或 128 个 ASCII 字符。JSON 输入、输出和单个字符串最多 1 MiB，最多 10,000 个节点、64 层和 65,536 位整数；解析与序列化都在昂贵工作前扣 fuel。Decimal scale 最多 1,024，文本最多 20,002 bytes，系数最多 65,536 bits；重标度按 scale 差值计费，并在乘以十的幂之前预检结果。List 遍历和被复制的结果都进入 fuel，append 在分配前检查合并结果是否仍满足 portable value 包络。后端在分配放大结果前检查上限，失败时返回稳定诊断或显式 Result，而不是继续占用宿主内存。
 
 ## Library 与 capability
 
 | | Library | Capability |
 | --- | --- | --- |
 | 用途 | 纯文本、编码、确定性算法 | KV、clock、log 等外部效果 |
-| 声明 | `(libraries (text 2) (math 1) (digest 1) (json 1) (decimal 1))` | `(capabilities kv clock)` |
+| 声明 | `(libraries (text 2) (math 1) (digest 1) (json 1) (decimal 1) (list 1))` | `(capabilities kv clock)` |
 | 宿主状态 | 不接触 | 通过窄接口显式接触 |
 | 效果闭包 | 不进入 | 进入静态 capability 闭包 |
 

@@ -4,6 +4,11 @@ use std::collections::BTreeMap;
 
 use num_bigint::BigInt;
 
+pub const MAXIMUM_LIBRARY_VALUE_NODES: usize = 10_000;
+pub const MAXIMUM_LIBRARY_VALUE_DEPTH: usize = 64;
+pub const MAXIMUM_LIBRARY_VALUE_BYTES: usize = 1024 * 1024;
+pub const MAXIMUM_LIBRARY_INTEGER_BITS: u64 = 65_536;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LibraryKey {
     String(String),

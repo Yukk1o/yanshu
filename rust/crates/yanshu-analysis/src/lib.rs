@@ -456,5 +456,31 @@ mod tests {
         ));
         let diagnostic = require_error(analyze_program(&wrong_decimal));
         assert_eq!(diagnostic.code, "TYPE_MISMATCH");
+
+        let list = require(load_program_source(
+            r#"(program
+                (name list-v1-types)
+                (version 4)
+                (libraries (list 1))
+                (signature reverse (fn ((list integer)) (list integer)))
+                (def reverse (fn (values) (list/reverse values)))
+                (signature slice (fn ((list integer) integer integer) (result any any)))
+                (def slice (fn (values start end) (list/slice values start end)))
+                (export reverse slice))"#,
+        ));
+        let report = require(analyze_program(&list));
+        assert!(report.capability_closure.is_empty());
+
+        let wrong_list = require(load_program_source(
+            r#"(program
+                (name list-v1-wrong-type)
+                (version 4)
+                (libraries (list 1))
+                (signature run (fn (integer) (list integer)))
+                (def run (fn (value) (list/reverse value)))
+                (export run))"#,
+        ));
+        let diagnostic = require_error(analyze_program(&wrong_list));
+        assert_eq!(diagnostic.code, "TYPE_MISMATCH");
     }
 }

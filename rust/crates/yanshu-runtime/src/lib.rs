@@ -1385,6 +1385,18 @@ impl<'host, 'libraries, 'bytecode> Runtime<'host, 'libraries, 'bytecode> {
                 depth + 1,
                 node_count,
             )?))),
+            Value::Variant {
+                type_name,
+                variant,
+                fields,
+            } => Ok(Value::Variant {
+                type_name: type_name.clone(),
+                variant: variant.clone(),
+                fields: fields
+                    .iter()
+                    .map(|field| self.normalize_library_result(field, depth + 1, node_count))
+                    .collect::<YanshuResult<Vec<_>>>()?,
+            }),
             Value::Nil | Value::Bool(_) | Value::Int(_) | Value::Symbol(_) => Ok(value.clone()),
             _ => Err(Diagnostic::new(
                 "RUNTIME_LIBRARY_INVALID_RESULT",
@@ -2521,6 +2533,63 @@ mod tests {
             ],
             ExecutionOptions {
                 fuel: 10,
+                ..ExecutionOptions::default()
+            },
+        ));
+        assert_eq!(exhausted.code, "RUNTIME_FUEL_EXHAUSTED");
+    }
+
+    #[test]
+    fn list_v1_matches_compiled_execution_and_preserves_portable_variants() {
+        let program = require(load_program_source(
+            r#"(program
+                (name list-v1-runtime)
+                (version 4)
+                (libraries (list 1))
+                (signature select (fn ((list any) integer integer) (result any any)))
+                (def select (fn (values start end) (list/slice values start end)))
+                (export select))"#,
+        ));
+        let item = Value::Variant {
+            type_name: "example/item".to_owned(),
+            variant: "example/entry".to_owned(),
+            fields: vec![Value::Int(7.into())],
+        };
+        let arguments = vec![
+            Value::List(vec![
+                Value::Int(1.into()),
+                item.clone(),
+                Value::Int(3.into()),
+            ]),
+            Value::Int(1.into()),
+            Value::Int(2.into()),
+        ];
+        let interpreted = require(execute_export(
+            &program,
+            "select",
+            arguments.clone(),
+            ExecutionOptions::default(),
+        ));
+        let artifact = require(compile_bytecode(&program));
+        let compiled = require(execute_compiled_export(
+            &artifact,
+            "select",
+            arguments,
+            ExecutionOptions::default(),
+        ));
+        assert_eq!(compiled, interpreted);
+        assert_eq!(interpreted, Value::Ok(Box::new(Value::List(vec![item]))));
+
+        let exhausted = require_error(execute_export(
+            &program,
+            "select",
+            vec![
+                Value::List(vec![Value::Int(1.into())]),
+                Value::Int(0.into()),
+                Value::Int(1.into()),
+            ],
+            ExecutionOptions {
+                fuel: 1,
                 ..ExecutionOptions::default()
             },
         ));
