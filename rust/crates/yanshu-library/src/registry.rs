@@ -10,7 +10,8 @@ use yanshu_diagnostic::{Diagnostic, YanshuResult};
 
 use crate::{
     LibraryBackend, LibraryContract, LibraryValue, RustDecimalBackend, RustDigestBackend,
-    RustJsonBackend, RustMathBackend, RustTextBackend, RustTextV2Backend, trusted_contract,
+    RustJsonBackend, RustListBackend, RustMathBackend, RustTextBackend, RustTextV2Backend,
+    trusted_contract,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,6 +82,13 @@ impl LibraryRegistry {
             RegisteredBackend {
                 provider: "rust-std".to_owned(),
                 backend: Box::<RustDecimalBackend>::default(),
+            },
+        );
+        registry.backends.insert(
+            ("list".to_owned(), 1),
+            RegisteredBackend {
+                provider: "rust-std".to_owned(),
+                backend: Box::<RustListBackend>::default(),
             },
         );
         registry

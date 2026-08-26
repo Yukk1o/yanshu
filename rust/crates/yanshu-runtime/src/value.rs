@@ -5,12 +5,16 @@ use std::{collections::BTreeMap, str::FromStr};
 use num_bigint::BigInt;
 use serde_json::{Map, Value as JsonValue, json};
 use yanshu_diagnostic::{Diagnostic, YanshuResult};
+use yanshu_library::{
+    MAXIMUM_LIBRARY_INTEGER_BITS, MAXIMUM_LIBRARY_VALUE_BYTES, MAXIMUM_LIBRARY_VALUE_DEPTH,
+    MAXIMUM_LIBRARY_VALUE_NODES,
+};
 use yanshu_syntax::{Datum, DatumKind, SchemaKind};
 
-pub const MAXIMUM_VALUE_NODES: usize = 10_000;
-pub const MAXIMUM_VALUE_DEPTH: usize = 64;
-pub const MAXIMUM_VALUE_BYTES: usize = 1024 * 1024;
-pub const MAXIMUM_INTEGER_BITS: u64 = 65_536;
+pub const MAXIMUM_VALUE_NODES: usize = MAXIMUM_LIBRARY_VALUE_NODES;
+pub const MAXIMUM_VALUE_DEPTH: usize = MAXIMUM_LIBRARY_VALUE_DEPTH;
+pub const MAXIMUM_VALUE_BYTES: usize = MAXIMUM_LIBRARY_VALUE_BYTES;
+pub const MAXIMUM_INTEGER_BITS: u64 = MAXIMUM_LIBRARY_INTEGER_BITS;
 pub const MAXIMUM_INTEGER_DECIMAL_DIGITS: usize = 20_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

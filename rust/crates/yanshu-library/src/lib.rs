@@ -4,6 +4,7 @@ mod contract;
 mod decimal;
 mod digest;
 mod json;
+mod list;
 mod math;
 mod registry;
 mod text;
@@ -12,7 +13,7 @@ mod value;
 use yanshu_diagnostic::YanshuResult;
 
 pub use contract::{
-    DECIMAL_V1, DIGEST_V1, FuelModel, JSON_V1, LibraryContract, LibraryType, MATH_V1,
+    DECIMAL_V1, DIGEST_V1, FuelModel, JSON_V1, LIST_V1, LibraryContract, LibraryType, MATH_V1,
     OperationContract, TEXT_V1, TEXT_V2, is_trusted_operation_name, trusted_contract,
 };
 pub use decimal::{
@@ -24,10 +25,14 @@ pub use json::{
     MAXIMUM_JSON_DEPTH, MAXIMUM_JSON_INPUT_BYTES, MAXIMUM_JSON_INTEGER_BITS, MAXIMUM_JSON_NODES,
     MAXIMUM_JSON_OUTPUT_BYTES, MAXIMUM_JSON_STRING_BYTES, RustJsonBackend,
 };
+pub use list::{ListOperation, RustListBackend};
 pub use math::{MAXIMUM_MATH_INTEGER_BITS, RustMathBackend};
 pub use registry::{BackendDescriptor, LibraryInvocation, LibraryRegistry};
 pub use text::{RustTextBackend, RustTextV2Backend};
-pub use value::{LibraryKey, LibraryValue};
+pub use value::{
+    LibraryKey, LibraryValue, MAXIMUM_LIBRARY_INTEGER_BITS, MAXIMUM_LIBRARY_VALUE_BYTES,
+    MAXIMUM_LIBRARY_VALUE_DEPTH, MAXIMUM_LIBRARY_VALUE_NODES,
+};
 
 pub trait LibraryBackend: Send {
     fn descriptor(&self) -> BackendDescriptor;

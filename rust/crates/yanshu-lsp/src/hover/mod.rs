@@ -343,6 +343,11 @@ fn fuel_description(model: FuelModel) -> String {
         FuelModel::DecimalRescale { base, block_size } => {
             format!("{base} + ceil(integer magnitude and scale delta work / {block_size})")
         }
+        FuelModel::ListStructural {
+            base, block_size, ..
+        } => format!(
+            "{base} + ceil(portable input traversal and selected output clone work / {block_size})"
+        ),
     }
 }
 
@@ -396,6 +401,13 @@ fn library_summary(library: &str, operation: &str) -> &'static str {
         ("decimal", "rescale") => {
             "Changes a coefficient scale using one explicit deterministic rounding mode."
         }
+        ("list", "reverse") => "Returns a new list with the elements in reverse order.",
+        ("list", "append") => "Returns a new list containing both inputs in order.",
+        ("list", "contains?") => "Tests portable values with structural equality.",
+        ("list", "get") => "Returns Ok(element) or a bounded index error.",
+        ("list", "take") => "Returns Ok(prefix) for a count inside the list bounds.",
+        ("list", "drop") => "Returns Ok(suffix) for a count inside the list bounds.",
+        ("list", "slice") => "Returns an Ok list for the half-open range [start, end).",
         _ => "Invokes one operation from a trusted versioned Library Backend contract.",
     }
 }
@@ -638,6 +650,23 @@ mod tests {
         assert!(hover.contains("library: decimal@1 (declared)"));
         assert!(hover.contains("explicit deterministic rounding"));
         assert!(hover.contains("scale delta work"));
+    }
+
+    #[test]
+    fn renders_list_v1_recoverable_range_contract() {
+        let source = r#"(program
+          (name hover-list-v1)
+          (version 4)
+          (libraries (list 1))
+          (signature run (fn ((list integer) integer integer) (result any any)))
+          (def run (fn (values start end) (list/slice values start end)))
+          (export run))"#;
+        let hover = text_at(source, marker(source, "list/slice"))
+            .unwrap_or_else(|| panic!("list@1 hover missing"));
+        assert!(hover.contains("type: fn(List, Int, Int) -> Result"));
+        assert!(hover.contains("library: list@1 (declared)"));
+        assert!(hover.contains("half-open range"));
+        assert!(hover.contains("selected output clone work"));
     }
 
     #[test]

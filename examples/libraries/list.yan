@@ -1,0 +1,20 @@
+; Immutable list structure with bounded, recoverable range handling.
+(program
+  (name list-library-example)
+  (version 4)
+  (capabilities)
+  (libraries (list 1))
+
+  (signature page (fn ((list any) integer integer) (result any any)))
+
+  (def page (fn (items start end) (list/slice items start end)))
+
+  (signature combine (fn ((list any) (list any)) (list any)))
+
+  (def combine (fn (left right) (list/append left right)))
+
+  (signature includes? (fn ((list any) any) boolean))
+
+  (def includes? (fn (items target) (list/contains? items target)))
+
+  (export page combine includes?))

@@ -514,6 +514,11 @@ fn fuel_description(model: FuelModel) -> String {
         FuelModel::DecimalRescale { base, block_size } => {
             format!("{base} + ceil(integer magnitude and scale delta work / {block_size})")
         }
+        FuelModel::ListStructural {
+            base, block_size, ..
+        } => format!(
+            "{base} + ceil(portable input traversal and selected output clone work / {block_size})"
+        ),
     }
 }
 
@@ -774,6 +779,30 @@ mod tests {
         );
         assert!(candidate.detail.contains("decimal@1"));
         assert!(candidate.documentation.contains("scale delta work"));
+    }
+
+    #[test]
+    fn completion_uses_the_declared_list_contract() {
+        let source = r#"(program
+          (name completion-list-v1)
+          (version 4)
+          (libraries (list 1))
+          (signature run (fn ((list integer) integer integer) (result any any)))
+          (def run (fn (values start end) (list/sli values start end)))
+          (export run))"#;
+        let result = result_at(source, "list/sli", "list/sli".len());
+        assert_eq!(labels(&result), ["list/slice"]);
+        let candidate = result
+            .candidates
+            .first()
+            .unwrap_or_else(|| panic!("list@1 completion missing"));
+        assert!(candidate.detail.contains("fn(List, Int, Int) -> Result"));
+        assert!(candidate.detail.contains("list@1"));
+        assert!(
+            candidate
+                .documentation
+                .contains("selected output clone work")
+        );
     }
 
     #[test]
