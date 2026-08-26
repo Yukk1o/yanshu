@@ -348,6 +348,11 @@ fn fuel_description(model: FuelModel) -> String {
         } => format!(
             "{base} + ceil(portable input traversal and selected output clone work / {block_size})"
         ),
+        FuelModel::MapStructural {
+            base, block_size, ..
+        } => format!(
+            "{base} + ceil(portable map traversal and selected output clone work / {block_size})"
+        ),
     }
 }
 
@@ -408,6 +413,17 @@ fn library_summary(library: &str, operation: &str) -> &'static str {
         ("list", "take") => "Returns Ok(prefix) for a count inside the list bounds.",
         ("list", "drop") => "Returns Ok(suffix) for a count inside the list bounds.",
         ("list", "slice") => "Returns an Ok list for the half-open range [start, end).",
+        ("map", "size") => "Returns the number of key-value entries.",
+        ("map", "keys") => "Returns keys in deterministic String-then-Symbol order.",
+        ("map", "values") => "Returns values aligned with deterministic key order.",
+        ("map", "entries") => "Returns deterministic two-element [key, value] entry lists.",
+        ("map", "contains-value?") => "Tests values with portable structural equality.",
+        ("map", "remove") => "Returns an Ok map without the requested String or Symbol key.",
+        ("map", "merge-disjoint") => {
+            "Returns Ok only when the maps have no shared keys; conflicts are recoverable."
+        }
+        ("map", "merge-left") => "Merges maps while keeping the left value for shared keys.",
+        ("map", "merge-right") => "Merges maps while keeping the right value for shared keys.",
         _ => "Invokes one operation from a trusted versioned Library Backend contract.",
     }
 }
@@ -667,6 +683,23 @@ mod tests {
         assert!(hover.contains("library: list@1 (declared)"));
         assert!(hover.contains("half-open range"));
         assert!(hover.contains("selected output clone work"));
+    }
+
+    #[test]
+    fn renders_map_v1_explicit_merge_contract() {
+        let source = r#"(program
+          (name hover-map-v1)
+          (version 4)
+          (libraries (map 1))
+          (signature run (fn (map map) (result any any)))
+          (def run (fn (left right) (map/merge-disjoint left right)))
+          (export run))"#;
+        let hover = text_at(source, marker(source, "map/merge-disjoint"))
+            .unwrap_or_else(|| panic!("map@1 hover missing"));
+        assert!(hover.contains("type: fn(Map, Map) -> Result"));
+        assert!(hover.contains("library: map@1 (declared)"));
+        assert!(hover.contains("no shared keys"));
+        assert!(hover.contains("portable map traversal"));
     }
 
     #[test]

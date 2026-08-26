@@ -342,18 +342,77 @@ scale 必须在 `0..=1024`。输入、输出、整数系数和 scale 越界会�
 
 可运行示例：[list@1 示例](/source/examples/libraries/list.yan.txt)
 
+## map@1
+
+内核已经提供 `map`、`get`、`get-or`、`has-key?` 和 `assoc`。`map@1` 补的是遍历、删除和合并：
+
+| 函数 | 参数 | 结果 |
+| --- | --- | --- |
+| `map/size` | Map | Int |
+| `map/keys` | Map | List |
+| `map/values` | Map | List |
+| `map/entries` | Map | List |
+| `map/contains-value?` | Map, Any | Bool |
+| `map/remove` | Map, Any | `Result<Map, Map>` |
+| `map/merge-disjoint` | Map, Map | `Result<Map, Map>` |
+| `map/merge-left` | Map, Map | Map |
+| `map/merge-right` | Map, Map | Map |
+
+### 确定性遍历
+
+`keys`、`values` 和 `entries` 永远使用同一顺序：String 键在前，Symbol 键在后，同类键按字典序排列。
+
+```lisp
+(libraries (map 1))
+
+(map/keys (map "b" 2 "a" 1))
+; => ("a" "b")
+
+(map/entries (map "b" 2 "a" 1))
+; => (("a" 1) ("b" 2))
+```
+
+每个 entry 都是固定两个元素的列表。声明 `(list 1)` 后可以用 `list/get` 读取，也可以用内核 `list-fold` 继续处理。空 Map 的投影返回空列表。
+
+### 在名字里写明冲突策略
+
+配置覆盖通常保留右侧，默认值合并通常保留左侧；互不重名的数据则应拒绝冲突：
+
+```lisp
+(map/merge-right
+  (map "timeout" 1000 "retries" 2)
+  (map "timeout" 3000))
+; => (map "retries" 2 "timeout" 3000)
+
+(map/merge-disjoint
+  (map "id" 1)
+  (map "id" 2))
+; => (err (map "code" "MAP_KEY_CONFLICT" "conflicts" 1))
+```
+
+`merge-left` 和 `merge-right` 直接返回 Map。`merge-disjoint` 返回 Result，因为冲突是调用者可以处理的业务数据。错误只报告冲突数量，不回显可能敏感的键。
+
+`remove` 对不存在的 String/Symbol 键是幂等的；非键类型返回 `MAP_INVALID_KEY`：
+
+```lisp
+(map/remove (map "a" 1 "b" 2) "a")
+; => (ok (map "b" 2))
+```
+
+可运行示例：[map@1 示例](/source/examples/libraries/map.yan.txt)
+
 ## 资源与失败边界
 
-标准库调用与普通表达式共享 guest fuel。每个操作的计费模型属于版本化契约；输入越长、输出越大或列表项越多，消耗越高。
+标准库调用与普通表达式共享 guest fuel。每个操作的计费模型属于版本化契约；输入越长、输出越大或集合项越多，消耗越高。
 
-文本结果最多 1 MiB。split 结果还受 10,000 个 portable 节点上限约束。摘要按输入 UTF-8 字节数计费，输出固定为 64 或 128 个 ASCII 字符。JSON 输入、输出和单个字符串最多 1 MiB，最多 10,000 个节点、64 层和 65,536 位整数；解析与序列化都在昂贵工作前扣 fuel。Decimal scale 最多 1,024，文本最多 20,002 bytes，系数最多 65,536 bits；重标度按 scale 差值计费，并在乘以十的幂之前预检结果。List 遍历和被复制的结果都进入 fuel，append 在分配前检查合并结果是否仍满足 portable value 包络。后端在分配放大结果前检查上限，失败时返回稳定诊断或显式 Result，而不是继续占用宿主内存。
+文本结果最多 1 MiB。split 结果还受 10,000 个 portable 节点上限约束。摘要按输入 UTF-8 字节数计费，输出固定为 64 或 128 个 ASCII 字符。JSON 输入、输出和单个字符串最多 1 MiB，最多 10,000 个节点、64 层和 65,536 位整数；解析与序列化都在昂贵工作前扣 fuel。Decimal scale 最多 1,024，文本最多 20,002 bytes，系数最多 65,536 bits；重标度按 scale 差值计费，并在乘以十的幂之前预检结果。List 与 Map 的遍历和被复制结果都进入 fuel；append、entries 与 merge 在分配前检查结果是否仍满足 portable value 包络。后端在分配放大结果前检查上限，失败时返回稳定诊断或显式 Result，而不是继续占用宿主内存。
 
 ## Library 与 capability
 
 | | Library | Capability |
 | --- | --- | --- |
 | 用途 | 纯文本、编码、确定性算法 | KV、clock、log 等外部效果 |
-| 声明 | `(libraries (text 2) (math 1) (digest 1) (json 1) (decimal 1) (list 1))` | `(capabilities kv clock)` |
+| 声明 | `(libraries (text 2) (math 1) (digest 1) (json 1) (decimal 1) (list 1) (map 1))` | `(capabilities kv clock)` |
 | 宿主状态 | 不接触 | 通过窄接口显式接触 |
 | 效果闭包 | 不进入 | 进入静态 capability 闭包 |
 

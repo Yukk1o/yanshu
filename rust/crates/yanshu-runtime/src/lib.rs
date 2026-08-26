@@ -2596,6 +2596,60 @@ mod tests {
         assert_eq!(exhausted.code, "RUNTIME_FUEL_EXHAUSTED");
     }
 
+    #[test]
+    fn map_v1_matches_compiled_execution_and_has_explicit_conflict_policy() {
+        let program = require(load_program_source(
+            r#"(program
+                (name map-v1-runtime)
+                (version 4)
+                (libraries (map 1))
+                (signature merge (fn (map map) map))
+                (def merge (fn (left right) (map/merge-right left right)))
+                (export merge))"#,
+        ));
+        let left = Value::Map(BTreeMap::from([
+            (MapKey::String("left".to_owned()), Value::Int(1.into())),
+            (MapKey::String("shared".to_owned()), Value::Int(10.into())),
+        ]));
+        let right = Value::Map(BTreeMap::from([
+            (MapKey::String("right".to_owned()), Value::Int(2.into())),
+            (MapKey::String("shared".to_owned()), Value::Int(20.into())),
+        ]));
+        let interpreted = require(execute_export(
+            &program,
+            "merge",
+            vec![left.clone(), right.clone()],
+            ExecutionOptions::default(),
+        ));
+        let artifact = require(compile_bytecode(&program));
+        let compiled = require(execute_compiled_export(
+            &artifact,
+            "merge",
+            vec![left.clone(), right.clone()],
+            ExecutionOptions::default(),
+        ));
+        assert_eq!(compiled, interpreted);
+        assert_eq!(
+            interpreted,
+            Value::Map(BTreeMap::from([
+                (MapKey::String("left".to_owned()), Value::Int(1.into())),
+                (MapKey::String("right".to_owned()), Value::Int(2.into())),
+                (MapKey::String("shared".to_owned()), Value::Int(20.into()),),
+            ]))
+        );
+
+        let exhausted = require_error(execute_export(
+            &program,
+            "merge",
+            vec![left, right],
+            ExecutionOptions {
+                fuel: 1,
+                ..ExecutionOptions::default()
+            },
+        ));
+        assert_eq!(exhausted.code, "RUNTIME_FUEL_EXHAUSTED");
+    }
+
     struct CountingTextBackend {
         calls: Arc<AtomicUsize>,
     }

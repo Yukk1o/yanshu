@@ -519,6 +519,11 @@ fn fuel_description(model: FuelModel) -> String {
         } => format!(
             "{base} + ceil(portable input traversal and selected output clone work / {block_size})"
         ),
+        FuelModel::MapStructural {
+            base, block_size, ..
+        } => format!(
+            "{base} + ceil(portable map traversal and selected output clone work / {block_size})"
+        ),
     }
 }
 
@@ -803,6 +808,26 @@ mod tests {
                 .documentation
                 .contains("selected output clone work")
         );
+    }
+
+    #[test]
+    fn completion_uses_the_declared_map_contract() {
+        let source = r#"(program
+          (name completion-map-v1)
+          (version 4)
+          (libraries (map 1))
+          (signature run (fn (map map) (result any any)))
+          (def run (fn (left right) (map/merge-d left right)))
+          (export run))"#;
+        let result = result_at(source, "map/merge-d", "map/merge-d".len());
+        assert_eq!(labels(&result), ["map/merge-disjoint"]);
+        let candidate = result
+            .candidates
+            .first()
+            .unwrap_or_else(|| panic!("map@1 completion missing"));
+        assert!(candidate.detail.contains("fn(Map, Map) -> Result"));
+        assert!(candidate.detail.contains("map@1"));
+        assert!(candidate.documentation.contains("portable map traversal"));
     }
 
     #[test]

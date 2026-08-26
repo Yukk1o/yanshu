@@ -61,6 +61,7 @@ Yanshu 的值系统刻意保持小而可移植。值既要能被解释器执行�
 - List v1：`list`、`empty?`、`length`、`first`、`rest`；
 - List v2：`list-map`、`list-filter`、`list-fold`、`sum`；每访问一个元素都额外消耗 fuel，回调继续按正常表达式计费；
 - `list@1` Library：`reverse`、`append`、`contains?`，以及返回 Result 的 `get`、`take`、`drop`、`slice`；
+- `map@1` Library：`size`、`keys`、`values`、`entries`、`contains-value?`、可恢复 `remove`，以及显式冲突策略的三种 `merge-*`。
 - Map：`map`、`get`、`get-or`、`has-key?`、`assoc`；
 - 类型判断：`integer?`、`boolean?`、`string?`、`list?`、`map?`。
 

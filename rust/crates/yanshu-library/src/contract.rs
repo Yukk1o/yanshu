@@ -7,6 +7,7 @@ use crate::LibraryValue;
 use crate::decimal::{format_fuel_work, parse_fuel_work, rescale_fuel_work};
 use crate::json::stringify_fuel_work;
 use crate::list::{ListOperation, list_fuel_work};
+use crate::map::{MapOperation, map_fuel_work};
 use crate::math::{checked_clamp_bounds, checked_integer_bits};
 use crate::text::{
     checked_case_output_bytes, checked_join_output_bytes, checked_replace_output_bytes,
@@ -138,6 +139,11 @@ pub enum FuelModel {
         base: u64,
         block_size: u64,
         operation: ListOperation,
+    },
+    MapStructural {
+        base: u64,
+        block_size: u64,
+        operation: MapOperation,
     },
 }
 
@@ -339,6 +345,11 @@ impl FuelModel {
                 block_size,
                 operation,
             } => scaled_cost(base, block_size, list_fuel_work(operation, arguments)?),
+            Self::MapStructural {
+                base,
+                block_size,
+                operation,
+            } => scaled_cost(base, block_size, map_fuel_work(operation, arguments)?),
         }
     }
 }
@@ -486,6 +497,9 @@ const LIST_LIST: &[LibraryType] = &[LibraryType::List, LibraryType::List];
 const LIST_ANY: &[LibraryType] = &[LibraryType::List, LibraryType::Any];
 const LIST_INT: &[LibraryType] = &[LibraryType::List, LibraryType::Int];
 const LIST_INT_INT: &[LibraryType] = &[LibraryType::List, LibraryType::Int, LibraryType::Int];
+const MAP: &[LibraryType] = &[LibraryType::Map];
+const MAP_ANY: &[LibraryType] = &[LibraryType::Map, LibraryType::Any];
+const MAP_MAP: &[LibraryType] = &[LibraryType::Map, LibraryType::Map];
 
 const TEXT_OPERATIONS: &[OperationContract] = &[
     OperationContract {
@@ -883,8 +897,107 @@ pub const LIST_V1: LibraryContract = LibraryContract {
     operations: LIST_V1_OPERATIONS,
 };
 
+const MAP_V1_OPERATIONS: &[OperationContract] = &[
+    OperationContract {
+        name: "size",
+        parameters: MAP,
+        result: LibraryType::Int,
+        fuel: FuelModel::MapStructural {
+            base: 1,
+            block_size: 64,
+            operation: MapOperation::Size,
+        },
+    },
+    OperationContract {
+        name: "keys",
+        parameters: MAP,
+        result: LibraryType::List,
+        fuel: FuelModel::MapStructural {
+            base: 1,
+            block_size: 64,
+            operation: MapOperation::Keys,
+        },
+    },
+    OperationContract {
+        name: "values",
+        parameters: MAP,
+        result: LibraryType::List,
+        fuel: FuelModel::MapStructural {
+            base: 1,
+            block_size: 64,
+            operation: MapOperation::Values,
+        },
+    },
+    OperationContract {
+        name: "entries",
+        parameters: MAP,
+        result: LibraryType::List,
+        fuel: FuelModel::MapStructural {
+            base: 1,
+            block_size: 64,
+            operation: MapOperation::Entries,
+        },
+    },
+    OperationContract {
+        name: "contains-value?",
+        parameters: MAP_ANY,
+        result: LibraryType::Bool,
+        fuel: FuelModel::MapStructural {
+            base: 1,
+            block_size: 64,
+            operation: MapOperation::ContainsValue,
+        },
+    },
+    OperationContract {
+        name: "remove",
+        parameters: MAP_ANY,
+        result: LibraryType::Result,
+        fuel: FuelModel::MapStructural {
+            base: 1,
+            block_size: 64,
+            operation: MapOperation::Remove,
+        },
+    },
+    OperationContract {
+        name: "merge-disjoint",
+        parameters: MAP_MAP,
+        result: LibraryType::Result,
+        fuel: FuelModel::MapStructural {
+            base: 1,
+            block_size: 64,
+            operation: MapOperation::MergeDisjoint,
+        },
+    },
+    OperationContract {
+        name: "merge-left",
+        parameters: MAP_MAP,
+        result: LibraryType::Map,
+        fuel: FuelModel::MapStructural {
+            base: 1,
+            block_size: 64,
+            operation: MapOperation::MergeLeft,
+        },
+    },
+    OperationContract {
+        name: "merge-right",
+        parameters: MAP_MAP,
+        result: LibraryType::Map,
+        fuel: FuelModel::MapStructural {
+            base: 1,
+            block_size: 64,
+            operation: MapOperation::MergeRight,
+        },
+    },
+];
+
+pub const MAP_V1: LibraryContract = LibraryContract {
+    name: "map",
+    version: 1,
+    operations: MAP_V1_OPERATIONS,
+};
+
 const TRUSTED_CONTRACTS: &[LibraryContract] = &[
-    TEXT_V1, TEXT_V2, MATH_V1, DIGEST_V1, JSON_V1, DECIMAL_V1, LIST_V1,
+    TEXT_V1, TEXT_V2, MATH_V1, DIGEST_V1, JSON_V1, DECIMAL_V1, LIST_V1, MAP_V1,
 ];
 
 #[must_use]

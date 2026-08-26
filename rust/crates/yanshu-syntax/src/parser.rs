@@ -2161,6 +2161,7 @@ mod tests {
             "json/parse",
             "decimal/parse-scaled",
             "list/reverse",
+            "map/merge-disjoint",
         ] {
             let source = format!(
                 "(program (name reserved) (version 1) (def {name} (fn () 1)) (export {name}))"

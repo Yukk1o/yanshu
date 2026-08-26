@@ -9,24 +9,29 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy, Default)]
-pub(super) struct Metrics {
+pub(crate) struct Metrics {
     nodes: usize,
     scalar_bytes: usize,
     integer_bits: u64,
 }
 
 impl Metrics {
-    pub(super) fn single_node() -> Self {
+    pub(crate) fn single_node() -> Self {
         Self {
             nodes: 1,
             ..Self::default()
         }
     }
 
-    fn add(&mut self, other: Self, context: LimitContext) -> YanshuResult<()> {
+    pub(crate) fn add(&mut self, other: Self, context: LimitContext) -> YanshuResult<()> {
         self.nodes = self.nodes.saturating_add(other.nodes);
         self.scalar_bytes = self.scalar_bytes.saturating_add(other.scalar_bytes);
         self.integer_bits = self.integer_bits.saturating_add(other.integer_bits);
+        self.check(context)
+    }
+
+    fn add_scalar_bytes(&mut self, bytes: usize, context: LimitContext) -> YanshuResult<()> {
+        self.scalar_bytes = self.scalar_bytes.saturating_add(bytes);
         self.check(context)
     }
 
@@ -50,7 +55,7 @@ impl Metrics {
         Ok(())
     }
 
-    pub(super) fn work(self) -> u64 {
+    pub(crate) fn work(self) -> u64 {
         u64::try_from(self.nodes)
             .unwrap_or(u64::MAX)
             .saturating_add(u64::try_from(self.scalar_bytes).unwrap_or(u64::MAX))
@@ -59,12 +64,12 @@ impl Metrics {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(super) enum LimitContext {
+pub(crate) enum LimitContext {
     Argument,
     Result,
 }
 
-pub(super) fn measure_arguments(
+pub(crate) fn measure_arguments(
     arguments: &[LibraryValue],
     context: LimitContext,
 ) -> YanshuResult<Metrics> {
@@ -78,7 +83,7 @@ pub(super) fn measure_arguments(
     Ok(total)
 }
 
-pub(super) fn measure_ok_value(
+pub(crate) fn measure_ok_value(
     value: &LibraryValue,
     context: LimitContext,
 ) -> YanshuResult<Metrics> {
@@ -87,7 +92,7 @@ pub(super) fn measure_ok_value(
     Ok(metrics)
 }
 
-pub(super) fn measure_ok_list(
+pub(crate) fn measure_ok_list(
     values: &[LibraryValue],
     context: LimitContext,
 ) -> YanshuResult<Metrics> {
@@ -96,7 +101,7 @@ pub(super) fn measure_ok_list(
     Ok(metrics)
 }
 
-pub(super) fn measure_list(
+pub(crate) fn measure_list(
     values: &[LibraryValue],
     depth: usize,
     context: LimitContext,
@@ -104,21 +109,13 @@ pub(super) fn measure_list(
     measure_list_iter(values.iter(), values.len(), depth, context)
 }
 
-pub(super) fn measure_list_iter<'a>(
+pub(crate) fn measure_list_iter<'a>(
     values: impl Iterator<Item = &'a LibraryValue>,
     length: usize,
     depth: usize,
     context: LimitContext,
 ) -> YanshuResult<Metrics> {
-    check_depth(depth, context)?;
-    if length > MAXIMUM_LIBRARY_VALUE_NODES {
-        return Err(limit_error(
-            context,
-            "collectionItems",
-            MAXIMUM_LIBRARY_VALUE_NODES,
-            length,
-        ));
-    }
+    check_collection(depth, length, context)?;
     let mut metrics = Metrics::single_node();
     for value in values {
         metrics.add(measure_value(value, depth + 1, context)?, context)?;
@@ -126,7 +123,33 @@ pub(super) fn measure_list_iter<'a>(
     Ok(metrics)
 }
 
-pub(super) fn measure_value(
+pub(crate) fn measure_map_iter<'a>(
+    values: impl Iterator<Item = (&'a LibraryKey, &'a LibraryValue)>,
+    length: usize,
+    depth: usize,
+    context: LimitContext,
+) -> YanshuResult<Metrics> {
+    check_collection(depth, length, context)?;
+    let mut metrics = Metrics::single_node();
+    for (key, value) in values {
+        metrics.add_scalar_bytes(key_text(key).len(), context)?;
+        metrics.add(measure_value(value, depth + 1, context)?, context)?;
+    }
+    Ok(metrics)
+}
+
+pub(crate) fn measure_key_value(
+    key: &LibraryKey,
+    depth: usize,
+    context: LimitContext,
+) -> YanshuResult<Metrics> {
+    check_depth(depth, context)?;
+    let mut metrics = Metrics::single_node();
+    metrics.add_scalar_bytes(key_text(key).len(), context)?;
+    Ok(metrics)
+}
+
+pub(crate) fn measure_value(
     value: &LibraryValue,
     depth: usize,
     context: LimitContext,
@@ -153,21 +176,7 @@ pub(super) fn measure_value(
         }
         LibraryValue::List(values) => return measure_list(values, depth, context),
         LibraryValue::Map(values) => {
-            if values.len() > MAXIMUM_LIBRARY_VALUE_NODES {
-                return Err(limit_error(
-                    context,
-                    "collectionItems",
-                    MAXIMUM_LIBRARY_VALUE_NODES,
-                    values.len(),
-                ));
-            }
-            for (key, value) in values {
-                let key_bytes = match key {
-                    LibraryKey::String(value) | LibraryKey::Symbol(value) => value.len(),
-                };
-                metrics.scalar_bytes = metrics.scalar_bytes.saturating_add(key_bytes);
-                metrics.add(measure_value(value, depth + 1, context)?, context)?;
-            }
+            return measure_map_iter(values.iter(), values.len(), depth, context);
         }
         LibraryValue::Ok(value) | LibraryValue::Err(value) => {
             metrics.add(measure_value(value, depth + 1, context)?, context)?;
@@ -177,18 +186,8 @@ pub(super) fn measure_value(
             variant,
             fields,
         } => {
-            if fields.len() > MAXIMUM_LIBRARY_VALUE_NODES {
-                return Err(limit_error(
-                    context,
-                    "collectionItems",
-                    MAXIMUM_LIBRARY_VALUE_NODES,
-                    fields.len(),
-                ));
-            }
-            metrics.scalar_bytes = metrics
-                .scalar_bytes
-                .saturating_add(type_name.len())
-                .saturating_add(variant.len());
+            check_collection(depth, fields.len(), context)?;
+            metrics.add_scalar_bytes(type_name.len().saturating_add(variant.len()), context)?;
             for field in fields {
                 metrics.add(measure_value(field, depth + 1, context)?, context)?;
             }
@@ -196,6 +195,20 @@ pub(super) fn measure_value(
     }
     metrics.check(context)?;
     Ok(metrics)
+}
+
+fn check_collection(depth: usize, length: usize, context: LimitContext) -> YanshuResult<()> {
+    check_depth(depth, context)?;
+    if length > MAXIMUM_LIBRARY_VALUE_NODES {
+        Err(limit_error(
+            context,
+            "collectionItems",
+            MAXIMUM_LIBRARY_VALUE_NODES,
+            length,
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 fn check_depth(depth: usize, context: LimitContext) -> YanshuResult<()> {
@@ -208,6 +221,12 @@ fn check_depth(depth: usize, context: LimitContext) -> YanshuResult<()> {
         ))
     } else {
         Ok(())
+    }
+}
+
+fn key_text(key: &LibraryKey) -> &str {
+    match key {
+        LibraryKey::String(value) | LibraryKey::Symbol(value) => value,
     }
 }
 
@@ -243,11 +262,11 @@ fn limit_identity(context: LimitContext) -> (&'static str, &'static str) {
     match context {
         LimitContext::Argument => (
             "RUNTIME_LIBRARY_ARGUMENT",
-            "list operation argument exceeds the portable value envelope",
+            "library operation argument exceeds the portable value envelope",
         ),
         LimitContext::Result => (
             "RUNTIME_LIBRARY_RESULT_LIMIT",
-            "list operation result exceeds the portable value envelope",
+            "library operation result exceeds the portable value envelope",
         ),
     }
 }
