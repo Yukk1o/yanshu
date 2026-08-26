@@ -534,6 +534,114 @@
           "shared": {"$int": "10"}
         }
       }
+    },
+    {
+      "name": "v4-encoding-v1-reference-base64-encode",
+      "phase": "run",
+      "source": "programs/encoding-v1.yan",
+      "entry": "base64-encode",
+      "args": ["衍术🦀"],
+      "expect": {
+        "kind": "value",
+        "value": {"$ok": "6KGN5pyv8J+mgA=="}
+      }
+    },
+    {
+      "name": "v4-encoding-v1-bytecode-base64-decode",
+      "phase": "run-compiled",
+      "source": "programs/encoding-v1.yan",
+      "entry": "base64-decode",
+      "args": ["6KGN5pyv8J+mgA=="],
+      "expect": {
+        "kind": "value",
+        "value": {"$ok": "衍术🦀"}
+      }
+    },
+    {
+      "name": "v4-encoding-v1-bytecode-hex-encode-is-lowercase",
+      "phase": "run-compiled",
+      "source": "programs/encoding-v1.yan",
+      "entry": "hex-encode",
+      "args": ["衍术🦀"],
+      "expect": {
+        "kind": "value",
+        "value": {"$ok": "e8a18de69caff09fa680"}
+      }
+    },
+    {
+      "name": "v4-encoding-v1-reference-hex-decode-accepts-uppercase",
+      "phase": "run",
+      "source": "programs/encoding-v1.yan",
+      "entry": "hex-decode",
+      "args": ["E8A18DE69CAFF09FA680"],
+      "expect": {
+        "kind": "value",
+        "value": {"$ok": "衍术🦀"}
+      }
+    },
+    {
+      "name": "v4-encoding-v1-base64-padding-is-required",
+      "phase": "run",
+      "source": "programs/encoding-v1.yan",
+      "entry": "base64-decode",
+      "args": ["Zg"],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "$err": {
+            "code": "ENCODING_INVALID_BASE64",
+            "offset": {"$int": "2"}
+          }
+        }
+      }
+    },
+    {
+      "name": "v4-encoding-v1-base64-tail-bits-must-be-canonical",
+      "phase": "run-compiled",
+      "source": "programs/encoding-v1.yan",
+      "entry": "base64-decode",
+      "args": ["Zh=="],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "$err": {
+            "code": "ENCODING_INVALID_BASE64",
+            "offset": {"$int": "2"}
+          }
+        }
+      }
+    },
+    {
+      "name": "v4-encoding-v1-invalid-hex-is-recoverable",
+      "phase": "run-compiled",
+      "source": "programs/encoding-v1.yan",
+      "entry": "hex-decode",
+      "args": ["0g"],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "$err": {
+            "code": "ENCODING_INVALID_HEX",
+            "offset": {"$int": "1"}
+          }
+        }
+      }
+    },
+    {
+      "name": "v4-encoding-v1-decoded-bytes-must-be-utf8",
+      "phase": "run",
+      "source": "programs/encoding-v1.yan",
+      "entry": "base64-decode",
+      "args": ["/w=="],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "$err": {
+            "code": "ENCODING_INVALID_UTF8",
+            "offset": {"$int": "0"}
+          }
+        }
+      }
     }
   ]
 }

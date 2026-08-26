@@ -5,6 +5,7 @@ use yanshu_diagnostic::{Diagnostic, YanshuResult};
 
 use crate::LibraryValue;
 use crate::decimal::{format_fuel_work, parse_fuel_work, rescale_fuel_work};
+use crate::encoding::{EncodingOperation, encoding_fuel_work};
 use crate::json::stringify_fuel_work;
 use crate::list::{ListOperation, list_fuel_work};
 use crate::map::{MapOperation, map_fuel_work};
@@ -144,6 +145,11 @@ pub enum FuelModel {
         base: u64,
         block_size: u64,
         operation: MapOperation,
+    },
+    Encoding {
+        base: u64,
+        block_size: u64,
+        operation: EncodingOperation,
     },
 }
 
@@ -350,6 +356,11 @@ impl FuelModel {
                 block_size,
                 operation,
             } => scaled_cost(base, block_size, map_fuel_work(operation, arguments)?),
+            Self::Encoding {
+                base,
+                block_size,
+                operation,
+            } => scaled_cost(base, block_size, encoding_fuel_work(operation, arguments)),
         }
     }
 }
@@ -996,8 +1007,65 @@ pub const MAP_V1: LibraryContract = LibraryContract {
     operations: MAP_V1_OPERATIONS,
 };
 
+const ENCODING_V1_OPERATIONS: &[OperationContract] = &[
+    OperationContract {
+        name: "base64-encode-text",
+        parameters: STRING,
+        result: LibraryType::Result,
+        fuel: FuelModel::Encoding {
+            base: 1,
+            block_size: 64,
+            operation: EncodingOperation::Base64EncodeText,
+        },
+    },
+    OperationContract {
+        name: "base64-decode-text",
+        parameters: STRING,
+        result: LibraryType::Result,
+        fuel: FuelModel::Encoding {
+            base: 1,
+            block_size: 64,
+            operation: EncodingOperation::Base64DecodeText,
+        },
+    },
+    OperationContract {
+        name: "hex-encode-text",
+        parameters: STRING,
+        result: LibraryType::Result,
+        fuel: FuelModel::Encoding {
+            base: 1,
+            block_size: 64,
+            operation: EncodingOperation::HexEncodeText,
+        },
+    },
+    OperationContract {
+        name: "hex-decode-text",
+        parameters: STRING,
+        result: LibraryType::Result,
+        fuel: FuelModel::Encoding {
+            base: 1,
+            block_size: 64,
+            operation: EncodingOperation::HexDecodeText,
+        },
+    },
+];
+
+pub const ENCODING_V1: LibraryContract = LibraryContract {
+    name: "encoding",
+    version: 1,
+    operations: ENCODING_V1_OPERATIONS,
+};
+
 const TRUSTED_CONTRACTS: &[LibraryContract] = &[
-    TEXT_V1, TEXT_V2, MATH_V1, DIGEST_V1, JSON_V1, DECIMAL_V1, LIST_V1, MAP_V1,
+    TEXT_V1,
+    TEXT_V2,
+    MATH_V1,
+    DIGEST_V1,
+    JSON_V1,
+    DECIMAL_V1,
+    LIST_V1,
+    MAP_V1,
+    ENCODING_V1,
 ];
 
 #[must_use]

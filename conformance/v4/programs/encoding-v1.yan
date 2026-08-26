@@ -1,0 +1,24 @@
+; Strict deterministic Base64 and hexadecimal conversion for UTF-8 text.
+(program
+  (name encoding-v1-conformance)
+  (version 4)
+  (capabilities)
+  (libraries (encoding 1))
+
+  (signature base64-encode (fn (string) (result any any)))
+  (def base64-encode
+    (fn (value) (encoding/base64-encode-text value)))
+
+  (signature base64-decode (fn (string) (result any any)))
+  (def base64-decode
+    (fn (value) (encoding/base64-decode-text value)))
+
+  (signature hex-encode (fn (string) (result any any)))
+  (def hex-encode
+    (fn (value) (encoding/hex-encode-text value)))
+
+  (signature hex-decode (fn (string) (result any any)))
+  (def hex-decode
+    (fn (value) (encoding/hex-decode-text value)))
+
+  (export base64-encode base64-decode hex-encode hex-decode))

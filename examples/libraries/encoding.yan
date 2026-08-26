@@ -1,0 +1,26 @@
+; Strict Base64 and hexadecimal conversion for UTF-8 text.
+(program
+  (name encoding-library-example)
+  (version 4)
+  (capabilities)
+  (libraries (encoding 1))
+
+  (signature encode (fn (string) map))
+
+  (def encode
+    (fn (value)
+      (map
+        "base64" (encoding/base64-encode-text value)
+        "hex" (encoding/hex-encode-text value))))
+
+  (signature decode-base64 (fn (string) (result any any)))
+
+  (def decode-base64
+    (fn (value) (encoding/base64-decode-text value)))
+
+  (signature decode-hex (fn (string) (result any any)))
+
+  (def decode-hex
+    (fn (value) (encoding/hex-decode-text value)))
+
+  (export encode decode-base64 decode-hex))

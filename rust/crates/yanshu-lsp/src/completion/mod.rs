@@ -524,6 +524,9 @@ fn fuel_description(model: FuelModel) -> String {
         } => format!(
             "{base} + ceil(portable map traversal and selected output clone work / {block_size})"
         ),
+        FuelModel::Encoding {
+            base, block_size, ..
+        } => format!("{base} + ceil(encoding input and predicted output bytes / {block_size})"),
     }
 }
 
@@ -828,6 +831,26 @@ mod tests {
         assert!(candidate.detail.contains("fn(Map, Map) -> Result"));
         assert!(candidate.detail.contains("map@1"));
         assert!(candidate.documentation.contains("portable map traversal"));
+    }
+
+    #[test]
+    fn completion_uses_the_declared_encoding_contract() {
+        let source = r#"(program
+          (name completion-encoding-v1)
+          (version 4)
+          (libraries (encoding 1))
+          (signature run (fn (string) (result any any)))
+          (def run (fn (value) (encoding/base64-enc value)))
+          (export run))"#;
+        let result = result_at(source, "encoding/base64-enc", "encoding/base64-enc".len());
+        assert_eq!(labels(&result), ["encoding/base64-encode-text"]);
+        let candidate = result
+            .candidates
+            .first()
+            .unwrap_or_else(|| panic!("encoding@1 completion missing"));
+        assert!(candidate.detail.contains("fn(String) -> Result"));
+        assert!(candidate.detail.contains("encoding@1"));
+        assert!(candidate.documentation.contains("predicted output bytes"));
     }
 
     #[test]

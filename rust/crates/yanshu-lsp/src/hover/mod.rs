@@ -353,6 +353,9 @@ fn fuel_description(model: FuelModel) -> String {
         } => format!(
             "{base} + ceil(portable map traversal and selected output clone work / {block_size})"
         ),
+        FuelModel::Encoding {
+            base, block_size, ..
+        } => format!("{base} + ceil(encoding input and predicted output bytes / {block_size})"),
     }
 }
 
@@ -424,6 +427,18 @@ fn library_summary(library: &str, operation: &str) -> &'static str {
         }
         ("map", "merge-left") => "Merges maps while keeping the left value for shared keys.",
         ("map", "merge-right") => "Merges maps while keeping the right value for shared keys.",
+        ("encoding", "base64-encode-text") => {
+            "Encodes UTF-8 text with the padded RFC 4648 standard Base64 alphabet."
+        }
+        ("encoding", "base64-decode-text") => {
+            "Strictly decodes padded canonical Base64 and returns UTF-8 text or a recoverable error."
+        }
+        ("encoding", "hex-encode-text") => {
+            "Encodes UTF-8 text as deterministic lowercase hexadecimal."
+        }
+        ("encoding", "hex-decode-text") => {
+            "Decodes hexadecimal into UTF-8 text or returns a recoverable error."
+        }
         _ => "Invokes one operation from a trusted versioned Library Backend contract.",
     }
 }
@@ -700,6 +715,23 @@ mod tests {
         assert!(hover.contains("library: map@1 (declared)"));
         assert!(hover.contains("no shared keys"));
         assert!(hover.contains("portable map traversal"));
+    }
+
+    #[test]
+    fn renders_encoding_v1_strict_text_contract() {
+        let source = r#"(program
+          (name hover-encoding-v1)
+          (version 4)
+          (libraries (encoding 1))
+          (signature run (fn (string) (result any any)))
+          (def run (fn (value) (encoding/base64-decode-text value)))
+          (export run))"#;
+        let hover = text_at(source, marker(source, "encoding/base64-decode-text"))
+            .unwrap_or_else(|| panic!("encoding@1 hover missing"));
+        assert!(hover.contains("type: fn(String) -> Result"));
+        assert!(hover.contains("library: encoding@1 (declared)"));
+        assert!(hover.contains("canonical Base64"));
+        assert!(hover.contains("predicted output bytes"));
     }
 
     #[test]
