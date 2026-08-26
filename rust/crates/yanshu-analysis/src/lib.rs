@@ -482,5 +482,31 @@ mod tests {
         ));
         let diagnostic = require_error(analyze_program(&wrong_list));
         assert_eq!(diagnostic.code, "TYPE_MISMATCH");
+
+        let map = require(load_program_source(
+            r#"(program
+                (name map-v1-types)
+                (version 4)
+                (libraries (map 1))
+                (signature keys (fn (map) (list any)))
+                (def keys (fn (value) (map/keys value)))
+                (signature merge (fn (map map) (result any any)))
+                (def merge (fn (left right) (map/merge-disjoint left right)))
+                (export keys merge))"#,
+        ));
+        let report = require(analyze_program(&map));
+        assert!(report.capability_closure.is_empty());
+
+        let wrong_map = require(load_program_source(
+            r#"(program
+                (name map-v1-wrong-type)
+                (version 4)
+                (libraries (map 1))
+                (signature run (fn (integer) integer))
+                (def run (fn (value) (map/size value)))
+                (export run))"#,
+        ));
+        let diagnostic = require_error(analyze_program(&wrong_map));
+        assert_eq!(diagnostic.code, "TYPE_MISMATCH");
     }
 }

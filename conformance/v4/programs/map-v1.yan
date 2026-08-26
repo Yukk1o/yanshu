@@ -1,0 +1,42 @@
+; Deterministic immutable Map views and explicit conflict policies.
+(program
+  (name map-v1-conformance)
+  (version 4)
+  (capabilities)
+  (libraries (map 1))
+
+  (signature inspect (fn (map) map))
+
+  (def inspect
+    (fn (value)
+      (map
+        "size" (map/size value)
+        "keys" (map/keys value)
+        "values" (map/values value)
+        "entries" (map/entries value)
+        "contains" (map/contains-value? value 2))))
+
+  (signature mixed-keys (fn () (list any)))
+
+  (def mixed-keys
+    (fn ()
+      (map/keys (map 'z 3 "b" 2 "a" 1))))
+
+  (signature remove-key (fn (map any) (result any any)))
+
+  (def remove-key (fn (value key) (map/remove value key)))
+
+  (signature merge-disjoint (fn (map map) (result any any)))
+
+  (def merge-disjoint
+    (fn (left right) (map/merge-disjoint left right)))
+
+  (signature merge-left (fn (map map) map))
+
+  (def merge-left (fn (left right) (map/merge-left left right)))
+
+  (signature merge-right (fn (map map) map))
+
+  (def merge-right (fn (left right) (map/merge-right left right)))
+
+  (export inspect mixed-keys remove-key merge-disjoint merge-left merge-right))

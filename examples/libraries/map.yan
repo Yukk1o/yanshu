@@ -1,0 +1,29 @@
+; Deterministic immutable Map views and explicit merge policies.
+(program
+  (name map-library-example)
+  (version 4)
+  (capabilities)
+  (libraries (map 1))
+
+  (signature summarize (fn (map) map))
+
+  (def summarize
+    (fn (value)
+      (map
+        "size" (map/size value)
+        "keys" (map/keys value)
+        "entries" (map/entries value))))
+
+  (signature merge-config (fn (map map) map))
+
+  (def merge-config
+    (fn (defaults overrides)
+      (map/merge-right defaults overrides)))
+
+  (signature combine-disjoint (fn (map map) (result any any)))
+
+  (def combine-disjoint
+    (fn (left right)
+      (map/merge-disjoint left right)))
+
+  (export summarize merge-config combine-disjoint))

@@ -406,6 +406,134 @@
           }
         }
       }
+    },
+    {
+      "name": "v4-map-v1-reference-deterministic-views",
+      "phase": "run",
+      "source": "programs/map-v1.yan",
+      "entry": "inspect",
+      "args": [{"b": {"$int": "2"}, "a": {"$int": "1"}}],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "size": {"$int": "2"},
+          "keys": ["a", "b"],
+          "values": [{"$int": "1"}, {"$int": "2"}],
+          "entries": [
+            ["a", {"$int": "1"}],
+            ["b", {"$int": "2"}]
+          ],
+          "contains": true
+        }
+      }
+    },
+    {
+      "name": "v4-map-v1-bytecode-matches-deterministic-views",
+      "phase": "run-compiled",
+      "source": "programs/map-v1.yan",
+      "entry": "inspect",
+      "args": [{"b": {"$int": "2"}, "a": {"$int": "1"}}],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "size": {"$int": "2"},
+          "keys": ["a", "b"],
+          "values": [{"$int": "1"}, {"$int": "2"}],
+          "entries": [
+            ["a", {"$int": "1"}],
+            ["b", {"$int": "2"}]
+          ],
+          "contains": true
+        }
+      }
+    },
+    {
+      "name": "v4-map-v1-mixed-key-kinds-have-stable-order",
+      "phase": "run-compiled",
+      "source": "programs/map-v1.yan",
+      "entry": "mixed-keys",
+      "args": [],
+      "expect": {
+        "kind": "value",
+        "value": ["a", "b", {"$symbol": "z"}]
+      }
+    },
+    {
+      "name": "v4-map-v1-remove-is-idempotent",
+      "phase": "run-compiled",
+      "source": "programs/map-v1.yan",
+      "entry": "remove-key",
+      "args": [{"a": {"$int": "1"}}, "missing"],
+      "expect": {
+        "kind": "value",
+        "value": {"$ok": {"a": {"$int": "1"}}}
+      }
+    },
+    {
+      "name": "v4-map-v1-invalid-key-is-recoverable",
+      "phase": "run",
+      "source": "programs/map-v1.yan",
+      "entry": "remove-key",
+      "args": [{}, {"$int": "1"}],
+      "expect": {
+        "kind": "value",
+        "value": {"$err": {"code": "MAP_INVALID_KEY"}}
+      }
+    },
+    {
+      "name": "v4-map-v1-disjoint-conflict-is-recoverable",
+      "phase": "run",
+      "source": "programs/map-v1.yan",
+      "entry": "merge-disjoint",
+      "args": [
+        {"shared": {"$int": "1"}},
+        {"shared": {"$int": "2"}}
+      ],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "$err": {
+            "code": "MAP_KEY_CONFLICT",
+            "conflicts": {"$int": "1"}
+          }
+        }
+      }
+    },
+    {
+      "name": "v4-map-v1-right-merge-is-explicit",
+      "phase": "run-compiled",
+      "source": "programs/map-v1.yan",
+      "entry": "merge-right",
+      "args": [
+        {"a": {"$int": "1"}, "shared": {"$int": "10"}},
+        {"b": {"$int": "2"}, "shared": {"$int": "20"}}
+      ],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "a": {"$int": "1"},
+          "b": {"$int": "2"},
+          "shared": {"$int": "20"}
+        }
+      }
+    },
+    {
+      "name": "v4-map-v1-left-merge-is-explicit",
+      "phase": "run",
+      "source": "programs/map-v1.yan",
+      "entry": "merge-left",
+      "args": [
+        {"a": {"$int": "1"}, "shared": {"$int": "10"}},
+        {"b": {"$int": "2"}, "shared": {"$int": "20"}}
+      ],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "a": {"$int": "1"},
+          "b": {"$int": "2"},
+          "shared": {"$int": "10"}
+        }
+      }
     }
   ]
 }

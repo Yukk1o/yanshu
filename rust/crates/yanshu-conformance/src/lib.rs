@@ -338,6 +338,6 @@ mod tests {
             );
             total = total.saturating_add(report.get("total").and_then(Value::as_u64).unwrap_or(0));
         }
-        assert_eq!(total, 52);
+        assert_eq!(total, 60);
     }
 }
