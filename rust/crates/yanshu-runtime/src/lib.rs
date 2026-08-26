@@ -2650,6 +2650,54 @@ mod tests {
         assert_eq!(exhausted.code, "RUNTIME_FUEL_EXHAUSTED");
     }
 
+    #[test]
+    fn encoding_v1_matches_compiled_execution_and_is_metered() {
+        let program = require(load_program_source(
+            r#"(program
+                (name encoding-v1-runtime)
+                (version 4)
+                (libraries (encoding 1))
+                (signature roundtrip (fn (string) (result any any)))
+                (def roundtrip
+                  (fn (value)
+                    (let ((encoded (encoding/base64-encode-text value)))
+                      (if (ok? encoded)
+                          (encoding/base64-decode-text (result-value encoded))
+                          encoded))))
+                (export roundtrip))"#,
+        ));
+        let argument = Value::String("衍术🦀".to_owned());
+        let interpreted = require(execute_export(
+            &program,
+            "roundtrip",
+            vec![argument.clone()],
+            ExecutionOptions::default(),
+        ));
+        let artifact = require(compile_bytecode(&program));
+        let compiled = require(execute_compiled_export(
+            &artifact,
+            "roundtrip",
+            vec![argument.clone()],
+            ExecutionOptions::default(),
+        ));
+        assert_eq!(compiled, interpreted);
+        assert_eq!(
+            interpreted,
+            Value::Ok(Box::new(Value::String("衍术🦀".to_owned())))
+        );
+
+        let exhausted = require_error(execute_export(
+            &program,
+            "roundtrip",
+            vec![argument],
+            ExecutionOptions {
+                fuel: 1,
+                ..ExecutionOptions::default()
+            },
+        ));
+        assert_eq!(exhausted.code, "RUNTIME_FUEL_EXHAUSTED");
+    }
+
     struct CountingTextBackend {
         calls: Arc<AtomicUsize>,
     }

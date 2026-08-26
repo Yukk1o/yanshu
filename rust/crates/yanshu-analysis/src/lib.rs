@@ -508,5 +508,29 @@ mod tests {
         ));
         let diagnostic = require_error(analyze_program(&wrong_map));
         assert_eq!(diagnostic.code, "TYPE_MISMATCH");
+
+        let encoding = require(load_program_source(
+            r#"(program
+                (name encoding-v1-types)
+                (version 4)
+                (libraries (encoding 1))
+                (signature decode (fn (string) (result any any)))
+                (def decode (fn (value) (encoding/base64-decode-text value)))
+                (export decode))"#,
+        ));
+        let report = require(analyze_program(&encoding));
+        assert!(report.capability_closure.is_empty());
+
+        let wrong_encoding = require(load_program_source(
+            r#"(program
+                (name encoding-v1-wrong-type)
+                (version 4)
+                (libraries (encoding 1))
+                (signature run (fn (integer) (result any any)))
+                (def run (fn (value) (encoding/hex-encode-text value)))
+                (export run))"#,
+        ));
+        let diagnostic = require_error(analyze_program(&wrong_encoding));
+        assert_eq!(diagnostic.code, "TYPE_MISMATCH");
     }
 }
