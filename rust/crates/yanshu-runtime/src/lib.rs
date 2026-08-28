@@ -2698,6 +2698,54 @@ mod tests {
         assert_eq!(exhausted.code, "RUNTIME_FUEL_EXHAUSTED");
     }
 
+    #[test]
+    fn integer_v1_matches_compiled_execution_and_is_metered() {
+        let program = require(load_program_source(
+            r#"(program
+                (name integer-v1-runtime)
+                (version 4)
+                (libraries (integer 1))
+                (signature convert (fn (string) (result any any)))
+                (def convert
+                  (fn (value)
+                    (let ((parsed (integer/parse-radix value 16)))
+                      (if (ok? parsed)
+                          (integer/format-radix (result-value parsed) 2)
+                          parsed))))
+                (export convert))"#,
+        ));
+        let argument = Value::String("ff".to_owned());
+        let interpreted = require(execute_export(
+            &program,
+            "convert",
+            vec![argument.clone()],
+            ExecutionOptions::default(),
+        ));
+        let artifact = require(compile_bytecode(&program));
+        let compiled = require(execute_compiled_export(
+            &artifact,
+            "convert",
+            vec![argument.clone()],
+            ExecutionOptions::default(),
+        ));
+        assert_eq!(compiled, interpreted);
+        assert_eq!(
+            interpreted,
+            Value::Ok(Box::new(Value::String("11111111".to_owned())))
+        );
+
+        let exhausted = require_error(execute_export(
+            &program,
+            "convert",
+            vec![argument],
+            ExecutionOptions {
+                fuel: 1,
+                ..ExecutionOptions::default()
+            },
+        ));
+        assert_eq!(exhausted.code, "RUNTIME_FUEL_EXHAUSTED");
+    }
+
     struct CountingTextBackend {
         calls: Arc<AtomicUsize>,
     }

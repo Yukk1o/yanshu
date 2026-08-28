@@ -642,6 +642,72 @@
           }
         }
       }
+    },
+    {
+      "name": "v4-integer-v1-reference-decimal-beyond-json-safe-range",
+      "phase": "run",
+      "source": "programs/integer-v1.yan",
+      "entry": "parse-decimal",
+      "args": ["9007199254740993"],
+      "expect": {
+        "kind": "value",
+        "value": {"$ok": {"$int": "9007199254740993"}}
+      }
+    },
+    {
+      "name": "v4-integer-v1-bytecode-uppercase-radix-parse",
+      "phase": "run-compiled",
+      "source": "programs/integer-v1.yan",
+      "entry": "parse-radix",
+      "args": ["-FF", {"$int": "16"}],
+      "expect": {
+        "kind": "value",
+        "value": {"$ok": {"$int": "-255"}}
+      }
+    },
+    {
+      "name": "v4-integer-v1-bytecode-format-is-canonical-lowercase",
+      "phase": "run-compiled",
+      "source": "programs/integer-v1.yan",
+      "entry": "format-radix",
+      "args": [{"$int": "-255"}, {"$int": "16"}],
+      "expect": {
+        "kind": "value",
+        "value": {"$ok": "-ff"}
+      }
+    },
+    {
+      "name": "v4-integer-v1-prefix-is-not-guessed",
+      "phase": "run",
+      "source": "programs/integer-v1.yan",
+      "entry": "parse-radix",
+      "args": ["0x10", {"$int": "16"}],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "$err": {
+            "code": "INTEGER_INVALID_SYNTAX",
+            "offset": {"$int": "1"}
+          }
+        }
+      }
+    },
+    {
+      "name": "v4-integer-v1-invalid-radix-is-recoverable",
+      "phase": "run-compiled",
+      "source": "programs/integer-v1.yan",
+      "entry": "parse-radix",
+      "args": ["10", {"$int": "37"}],
+      "expect": {
+        "kind": "value",
+        "value": {
+          "$err": {
+            "code": "INTEGER_INVALID_RADIX",
+            "minimum": {"$int": "2"},
+            "maximum": {"$int": "36"}
+          }
+        }
+      }
     }
   ]
 }

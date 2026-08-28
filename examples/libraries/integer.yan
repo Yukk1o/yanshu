@@ -1,0 +1,20 @@
+; Strict integer parsing and formatting without locale or guessed prefixes.
+(program
+  (name integer-library-example)
+  (version 4)
+  (capabilities)
+  (libraries (integer 1))
+
+  (signature parse-user-id (fn (string) (result any any)))
+  (def parse-user-id
+    (fn (value) (integer/parse-decimal value)))
+
+  (signature parse-hex (fn (string) (result any any)))
+  (def parse-hex
+    (fn (value) (integer/parse-radix value 16)))
+
+  (signature format-hex (fn (integer) (result any any)))
+  (def format-hex
+    (fn (value) (integer/format-radix value 16)))
+
+  (export parse-user-id parse-hex format-hex))

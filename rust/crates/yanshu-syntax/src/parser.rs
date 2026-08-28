@@ -2163,6 +2163,7 @@ mod tests {
             "list/reverse",
             "map/merge-disjoint",
             "encoding/base64-encode-text",
+            "integer/parse-decimal",
         ] {
             let source = format!(
                 "(program (name reserved) (version 1) (def {name} (fn () 1)) (export {name}))"

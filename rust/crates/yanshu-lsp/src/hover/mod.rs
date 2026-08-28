@@ -356,6 +356,9 @@ fn fuel_description(model: FuelModel) -> String {
         FuelModel::Encoding {
             base, block_size, ..
         } => format!("{base} + ceil(encoding input and predicted output bytes / {block_size})"),
+        FuelModel::IntegerText {
+            base, block_size, ..
+        } => format!("{base} + ceil(integer text and magnitude work / {block_size})"),
     }
 }
 
@@ -438,6 +441,15 @@ fn library_summary(library: &str, operation: &str) -> &'static str {
         }
         ("encoding", "hex-decode-text") => {
             "Decodes hexadecimal into UTF-8 text or returns a recoverable error."
+        }
+        ("integer", "parse-decimal") => {
+            "Strictly parses signed decimal text without whitespace, prefixes, or separators."
+        }
+        ("integer", "parse-radix") => {
+            "Strictly parses signed text in an explicit radix from 2 through 36."
+        }
+        ("integer", "format-radix") => {
+            "Formats an integer in an explicit radix using canonical lowercase digits."
         }
         _ => "Invokes one operation from a trusted versioned Library Backend contract.",
     }
@@ -732,6 +744,23 @@ mod tests {
         assert!(hover.contains("library: encoding@1 (declared)"));
         assert!(hover.contains("canonical Base64"));
         assert!(hover.contains("predicted output bytes"));
+    }
+
+    #[test]
+    fn renders_integer_v1_strict_radix_contract() {
+        let source = r#"(program
+          (name hover-integer-v1)
+          (version 4)
+          (libraries (integer 1))
+          (signature run (fn (string integer) (result any any)))
+          (def run (fn (value radix) (integer/parse-radix value radix)))
+          (export run))"#;
+        let hover = text_at(source, marker(source, "integer/parse-radix"))
+            .unwrap_or_else(|| panic!("integer@1 hover missing"));
+        assert!(hover.contains("type: fn(String, Int) -> Result"));
+        assert!(hover.contains("library: integer@1 (declared)"));
+        assert!(hover.contains("explicit radix"));
+        assert!(hover.contains("integer text and magnitude work"));
     }
 
     #[test]

@@ -10,4 +10,4 @@
 - [`v0.11.md`](v0.11.md)：持续验证、fuzz 与发布证据链。
 - [`v0.11-audit-closure.md`](v0.11-audit-closure.md)：已关闭审计项、证据和仍未解决的边界。
 - [`v0.12.md`](v0.12.md)：formatter、稳定节点路径、LSP/MCP、VS Code/Tree-sitter 工具链与可验证平台 VSIX。
-- [`v0.13.md`](v0.13.md)：版本化确定性标准库；当前交付 `text@2`、纯整数 `math@1`、UTF-8 文本摘要 `digest@1`、严格规范 JSON `json@1`、精确固定点 `decimal@1`、不可变 `list@1` / `map@1` 结构操作，以及严格 UTF-8 文本 `encoding@1`。
+- [`v0.13.md`](v0.13.md)：版本化确定性标准库；当前交付 `text@2`、纯整数 `math@1`、UTF-8 文本摘要 `digest@1`、严格规范 JSON `json@1`、精确固定点 `decimal@1`、不可变 `list@1` / `map@1` 结构操作、严格 UTF-8 文本 `encoding@1`，以及显式进制 `integer@1`。

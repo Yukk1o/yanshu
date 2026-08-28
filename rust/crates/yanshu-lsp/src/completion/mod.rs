@@ -527,6 +527,9 @@ fn fuel_description(model: FuelModel) -> String {
         FuelModel::Encoding {
             base, block_size, ..
         } => format!("{base} + ceil(encoding input and predicted output bytes / {block_size})"),
+        FuelModel::IntegerText {
+            base, block_size, ..
+        } => format!("{base} + ceil(integer text and magnitude work / {block_size})"),
     }
 }
 
@@ -851,6 +854,30 @@ mod tests {
         assert!(candidate.detail.contains("fn(String) -> Result"));
         assert!(candidate.detail.contains("encoding@1"));
         assert!(candidate.documentation.contains("predicted output bytes"));
+    }
+
+    #[test]
+    fn completion_uses_the_declared_integer_contract() {
+        let source = r#"(program
+          (name completion-integer-v1)
+          (version 4)
+          (libraries (integer 1))
+          (signature run (fn (string integer) (result any any)))
+          (def run (fn (value radix) (integer/parse-r value radix)))
+          (export run))"#;
+        let result = result_at(source, "integer/parse-r", "integer/parse-r".len());
+        assert_eq!(labels(&result), ["integer/parse-radix"]);
+        let candidate = result
+            .candidates
+            .first()
+            .unwrap_or_else(|| panic!("integer@1 completion missing"));
+        assert!(candidate.detail.contains("fn(String, Int) -> Result"));
+        assert!(candidate.detail.contains("integer@1"));
+        assert!(
+            candidate
+                .documentation
+                .contains("integer text and magnitude work")
+        );
     }
 
     #[test]
