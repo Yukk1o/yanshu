@@ -1,0 +1,20 @@
+; Strict bounded integer text conversion with explicit radix.
+(program
+  (name integer-v1-conformance)
+  (version 4)
+  (capabilities)
+  (libraries (integer 1))
+
+  (signature parse-decimal (fn (string) (result any any)))
+  (def parse-decimal
+    (fn (value) (integer/parse-decimal value)))
+
+  (signature parse-radix (fn (string integer) (result any any)))
+  (def parse-radix
+    (fn (value radix) (integer/parse-radix value radix)))
+
+  (signature format-radix (fn (integer integer) (result any any)))
+  (def format-radix
+    (fn (value radix) (integer/format-radix value radix)))
+
+  (export parse-decimal parse-radix format-radix))

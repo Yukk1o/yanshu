@@ -6,6 +6,7 @@ use yanshu_diagnostic::{Diagnostic, YanshuResult};
 use crate::LibraryValue;
 use crate::decimal::{format_fuel_work, parse_fuel_work, rescale_fuel_work};
 use crate::encoding::{EncodingOperation, encoding_fuel_work};
+use crate::integer::{IntegerTextOperation, integer_text_fuel_work};
 use crate::json::stringify_fuel_work;
 use crate::list::{ListOperation, list_fuel_work};
 use crate::map::{MapOperation, map_fuel_work};
@@ -150,6 +151,11 @@ pub enum FuelModel {
         base: u64,
         block_size: u64,
         operation: EncodingOperation,
+    },
+    IntegerText {
+        base: u64,
+        block_size: u64,
+        operation: IntegerTextOperation,
     },
 }
 
@@ -361,6 +367,15 @@ impl FuelModel {
                 block_size,
                 operation,
             } => scaled_cost(base, block_size, encoding_fuel_work(operation, arguments)),
+            Self::IntegerText {
+                base,
+                block_size,
+                operation,
+            } => scaled_cost(
+                base,
+                block_size,
+                integer_text_fuel_work(operation, arguments),
+            ),
         }
     }
 }
@@ -1056,6 +1071,45 @@ pub const ENCODING_V1: LibraryContract = LibraryContract {
     operations: ENCODING_V1_OPERATIONS,
 };
 
+const INTEGER_V1_OPERATIONS: &[OperationContract] = &[
+    OperationContract {
+        name: "parse-decimal",
+        parameters: STRING,
+        result: LibraryType::Result,
+        fuel: FuelModel::IntegerText {
+            base: 1,
+            block_size: 64,
+            operation: IntegerTextOperation::ParseDecimal,
+        },
+    },
+    OperationContract {
+        name: "parse-radix",
+        parameters: STRING_INT,
+        result: LibraryType::Result,
+        fuel: FuelModel::IntegerText {
+            base: 1,
+            block_size: 64,
+            operation: IntegerTextOperation::ParseRadix,
+        },
+    },
+    OperationContract {
+        name: "format-radix",
+        parameters: INT_INT,
+        result: LibraryType::Result,
+        fuel: FuelModel::IntegerText {
+            base: 1,
+            block_size: 64,
+            operation: IntegerTextOperation::FormatRadix,
+        },
+    },
+];
+
+pub const INTEGER_V1: LibraryContract = LibraryContract {
+    name: "integer",
+    version: 1,
+    operations: INTEGER_V1_OPERATIONS,
+};
+
 const TRUSTED_CONTRACTS: &[LibraryContract] = &[
     TEXT_V1,
     TEXT_V2,
@@ -1066,6 +1120,7 @@ const TRUSTED_CONTRACTS: &[LibraryContract] = &[
     LIST_V1,
     MAP_V1,
     ENCODING_V1,
+    INTEGER_V1,
 ];
 
 #[must_use]

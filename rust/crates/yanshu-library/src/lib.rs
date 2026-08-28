@@ -4,6 +4,7 @@ mod contract;
 mod decimal;
 mod digest;
 mod encoding;
+mod integer;
 mod json;
 mod list;
 mod map;
@@ -16,8 +17,8 @@ mod value;
 use yanshu_diagnostic::YanshuResult;
 
 pub use contract::{
-    DECIMAL_V1, DIGEST_V1, ENCODING_V1, FuelModel, JSON_V1, LIST_V1, LibraryContract, LibraryType,
-    MAP_V1, MATH_V1, OperationContract, TEXT_V1, TEXT_V2, is_trusted_operation_name,
+    DECIMAL_V1, DIGEST_V1, ENCODING_V1, FuelModel, INTEGER_V1, JSON_V1, LIST_V1, LibraryContract,
+    LibraryType, MAP_V1, MATH_V1, OperationContract, TEXT_V1, TEXT_V2, is_trusted_operation_name,
     trusted_contract,
 };
 pub use decimal::{
@@ -28,6 +29,10 @@ pub use digest::RustDigestBackend;
 pub use encoding::{
     EncodingOperation, MAXIMUM_ENCODING_INPUT_BYTES, MAXIMUM_ENCODING_OUTPUT_BYTES,
     RustEncodingBackend,
+};
+pub use integer::{
+    IntegerTextOperation, MAXIMUM_INTEGER_RADIX, MAXIMUM_INTEGER_TEXT_BYTES, MINIMUM_INTEGER_RADIX,
+    RustIntegerBackend,
 };
 pub use json::{
     MAXIMUM_JSON_DEPTH, MAXIMUM_JSON_INPUT_BYTES, MAXIMUM_JSON_INTEGER_BITS, MAXIMUM_JSON_NODES,

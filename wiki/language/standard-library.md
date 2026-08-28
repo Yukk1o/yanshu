@@ -456,18 +456,61 @@ Hex 解码接受 `a..f` 和 `A..F`，但编码始终输出小写。Base64/Hex �
 
 可运行示例：[encoding@1 示例](/source/examples/libraries/encoding.yan.txt)
 
+## integer@1
+
+`integer@1` 用于处理来自配置、URL、文本协议或用户输入的整数文本。它不会读取 locale，也不会猜测进制：
+
+| 函数 | 参数 | 结果 |
+| --- | --- | --- |
+| `integer/parse-decimal` | String | `Result<Int, Map>` |
+| `integer/parse-radix` | String, Int | `Result<Int, Map>` |
+| `integer/format-radix` | Int, Int | `Result<String, Map>` |
+
+### 进制必须写明
+
+```lisp
+(libraries (integer 1))
+
+(integer/parse-decimal "9007199254740993")
+; => (ok 9007199254740993)
+
+(integer/parse-radix "FF" 16)
+; => (ok 255)
+
+(integer/format-radix -255 16)
+; => (ok "-ff")
+```
+
+进制范围是 2 至 36。解析接受可选的前导 `-`、ASCII 数字，以及当前进制允许的 `a..z` / `A..Z`；格式化始终使用小写字母。前导零可以存在，`-0` 会得到 Int `0`。
+
+解析故意不接受前后空白、`+`、下划线、千位分隔符或 `0x` / `0b` 前缀。外部格式应先由协议层明确整理，不能让基础函数猜测：
+
+```lisp
+(integer/parse-radix "0x10" 16)
+; => (err (map "code" "INTEGER_INVALID_SYNTAX" "offset" 1))
+
+(integer/parse-radix "10" 37)
+; => (err (map "code" "INTEGER_INVALID_RADIX"
+;              "minimum" 2
+;              "maximum" 36))
+```
+
+输入和输出最多 65,537 bytes，结果仍受 65,536 位 portable Int 上限约束。超限会返回 `INTEGER_INPUT_LIMIT`、`INTEGER_OUTPUT_LIMIT` 或 `INTEGER_VALUE_LIMIT`，不会回显原始输入。解析器会先按进制和有效数字数量拒绝必然越界的文本，再构造 BigInt。
+
+可运行示例：[integer@1 示例](/source/examples/libraries/integer.yan.txt)
+
 ## 资源与失败边界
 
 标准库调用与普通表达式共享 guest fuel。每个操作的计费模型属于版本化契约；输入越长、输出越大或集合项越多，消耗越高。
 
-文本结果最多 1 MiB。split 结果还受 10,000 个 portable 节点上限约束。摘要按输入 UTF-8 字节数计费，输出固定为 64 或 128 个 ASCII 字符。JSON 输入、输出和单个字符串最多 1 MiB，最多 10,000 个节点、64 层和 65,536 位整数；解析与序列化都在昂贵工作前扣 fuel。Decimal scale 最多 1,024，文本最多 20,002 bytes，系数最多 65,536 bits；重标度按 scale 差值计费，并在乘以十的幂之前预检结果。List 与 Map 的遍历和被复制结果都进入 fuel；append、entries 与 merge 在分配前检查结果是否仍满足 portable value 包络。Encoding 按输入和预测输出字节计费，并在 Base64/Hex 放大分配前检查 1 MiB 输出上限。后端在分配放大结果前检查上限，失败时返回稳定诊断或显式 Result，而不是继续占用宿主内存。
+文本结果最多 1 MiB。split 结果还受 10,000 个 portable 节点上限约束。摘要按输入 UTF-8 字节数计费，输出固定为 64 或 128 个 ASCII 字符。JSON 输入、输出和单个字符串最多 1 MiB，最多 10,000 个节点、64 层和 65,536 位整数；解析与序列化都在昂贵工作前扣 fuel。Decimal scale 最多 1,024，文本最多 20,002 bytes，系数最多 65,536 bits；重标度按 scale 差值计费，并在乘以十的幂之前预检结果。List 与 Map 的遍历和被复制结果都进入 fuel；append、entries 与 merge 在分配前检查结果是否仍满足 portable value 包络。Encoding 按输入和预测输出字节计费，并在 Base64/Hex 放大分配前检查 1 MiB 输出上限。Integer 按文本长度或整数 magnitude 计费，并在 BigInt 解析前预检显著位数。后端在分配放大结果前检查上限，失败时返回稳定诊断或显式 Result，而不是继续占用宿主内存。
 
 ## Library 与 capability
 
 | | Library | Capability |
 | --- | --- | --- |
 | 用途 | 纯文本、编码、确定性算法 | KV、clock、log 等外部效果 |
-| 声明 | `(libraries (text 2) (math 1) (digest 1) (json 1) (decimal 1) (list 1) (map 1) (encoding 1))` | `(capabilities kv clock)` |
+| 声明 | `(libraries (text 2) (math 1) (digest 1) (json 1) (decimal 1) (list 1) (map 1) (encoding 1) (integer 1))` | `(capabilities kv clock)` |
 | 宿主状态 | 不接触 | 通过窄接口显式接触 |
 | 效果闭包 | 不进入 | 进入静态 capability 闭包 |
 

@@ -532,5 +532,31 @@ mod tests {
         ));
         let diagnostic = require_error(analyze_program(&wrong_encoding));
         assert_eq!(diagnostic.code, "TYPE_MISMATCH");
+
+        let integer = require(load_program_source(
+            r#"(program
+                (name integer-v1-types)
+                (version 4)
+                (libraries (integer 1))
+                (signature parse (fn (string integer) (result any any)))
+                (def parse (fn (value radix) (integer/parse-radix value radix)))
+                (signature format (fn (integer integer) (result any any)))
+                (def format (fn (value radix) (integer/format-radix value radix)))
+                (export parse format))"#,
+        ));
+        let report = require(analyze_program(&integer));
+        assert!(report.capability_closure.is_empty());
+
+        let wrong_integer = require(load_program_source(
+            r#"(program
+                (name integer-v1-wrong-type)
+                (version 4)
+                (libraries (integer 1))
+                (signature run (fn (integer) (result any any)))
+                (def run (fn (value) (integer/parse-decimal value)))
+                (export run))"#,
+        ));
+        let diagnostic = require_error(analyze_program(&wrong_integer));
+        assert_eq!(diagnostic.code, "TYPE_MISMATCH");
     }
 }

@@ -54,6 +54,7 @@ const publishedFiles = [
   'examples/libraries/list.yan',
   'examples/libraries/map.yan',
   'examples/libraries/encoding.yan',
+  'examples/libraries/integer.yan',
   'examples/tasks/scenarios.json',
   'examples/tasks/service.yan',
   'examples/expenses/scenarios.json',
